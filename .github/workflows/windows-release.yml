@@ -12,6 +12,7 @@ concurrency:
 
 jobs:
   build-and-upload:
+    if: github.repository == 'stemdeckapp/stemdeck'
     # Runner must be windows/x64 with PowerShell, Docker, and rustup.
     runs-on: [self-hosted, windows, x64]
     timeout-minutes: 90

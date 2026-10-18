@@ -322,6 +322,8 @@ class Job:
     # app/pipeline/vocal_split.py) and is recorded in stems/vocal_split_error.txt,
     # not job.error_detail, since the job itself did not fail.
     vocal_split: Literal["none", "running", "done", "error"] = "none"
+    separation_profile: str = "standard"
+    separation_warnings: list[str] = field(default_factory=list)
     # When the user put this job in the Trash, or None if they have not.
     #
     # Server-side on purpose. The Trash used to live only in the browser's
@@ -367,11 +369,25 @@ class Job:
     # than directory mtime, which can be touched by unrelated FS events.
     created_at: float = field(default_factory=time.time)
 
+    @property
+    def progress_indeterminate(self) -> bool:
+        return (
+            self.separation_profile == "complete"
+            and self.status not in FINISHED_STATUSES
+            and self.stage_message
+            in {
+                "Separating lead and backing vocals...",
+                "Separating six drum pieces (CPU)...",
+                "Preserving reconstruction residues...",
+            }
+        )
+
     def to_state(self) -> dict[str, Any]:
         return {
             "job_id": self.id,
             "status": self.status,
             "progress": self.progress,
+            "progress_indeterminate": self.progress_indeterminate,
             "stage": self.stage_message,
             "title": self.title,
             "duration": self.duration_sec,
@@ -406,6 +422,8 @@ class Job:
             "gpu_fallback": self.gpu_fallback,
             "stage_timings": self.stage_timings,
             "vocal_split": self.vocal_split,
+            "separation_profile": self.separation_profile,
+            "separation_warnings": self.separation_warnings,
             "trashed_at": self.trashed_at,
             "favorite": self.favorite,
             "created_at": self.created_at,
@@ -419,6 +437,7 @@ class Job:
             "job_id": self.id,
             "status": self.status,
             "progress": self.progress,
+            "progress_indeterminate": self.progress_indeterminate,
             "stage": self.stage_message,
             "title": self.title,
             "thumbnail": self.thumbnail,

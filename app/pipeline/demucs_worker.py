@@ -89,6 +89,10 @@ def _run_one_job(model, device: str, req: dict) -> None:
 def main() -> None:
     device = sys.argv[1] if len(sys.argv) > 1 else "cpu"
     arm_parent_watchdog()
+    if device == "directml":
+        from app.core.amd_directml import configure_demucs
+
+        device = configure_demucs()
 
     from demucs.pretrained import get_model
 

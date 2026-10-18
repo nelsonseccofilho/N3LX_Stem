@@ -42,7 +42,7 @@ export function ordinal(n) {
  *  does not, rather than rendering "Separating 42% 42%". */
 export function runningLabel(job) {
   const stage = (job?.stage || t("job.working")).replace(/\.\.\.$/, "");
-  if (/\d\s*%/.test(stage)) return stage;
+  if (job?.progress_indeterminate || /\d\s*%/.test(stage)) return stage;
   const pct = Math.round((job?.progress || 0) * 100);
   return pct > 0 ? `${stage} ${pct}%` : stage;
 }

@@ -182,7 +182,7 @@ export function createAudioEngine(stems, { onTime, onEnded, context } = {}) {
     const hasPlaybackTrack = [...tracks.values()].some((track) => !track.visualOnly);
     if (!hasPlaybackTrack) {
       _loadError = undecodable
-        ? "This track's audio files are in a format StemDeck could not read."
+        ? "This track's audio files are in a format N3LX_Stem could not read."
         : unreachable
           ? "Could not load this track's audio files."
           : "This track has no stem files to play.";

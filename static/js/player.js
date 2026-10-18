@@ -8,7 +8,7 @@ import { showPlaybackError, clearPlaybackError, resolvePlaybackSuccess } from ".
 import {
   STEM_NAMES, TRACK_NAMES, EXTRA_STEM_NAMES, STEM_COLORS, PROGRESS_COLOR,
   LOOP_DEFAULT_START_FRAC, LOOP_DEFAULT_END_FRAC, LANE_VOLUME_MAX,
-  effectiveStemOrder,
+  effectiveStemOrder, applyStudioLayout, STEM_DISPLAY, DRUM_STEMS,
 } from "./constants.js";
 import {
   mixerEl, multitrackContainer, bpmChip, keyChip, stemsChip, timeEl,
@@ -111,7 +111,7 @@ function applyStemSelectionFilter(presentNames) {
     if (stem === "original") {
       el.classList.toggle("hidden", !presentNames.has(stem));
       el.classList.remove("unavailable");
-    } else if (isVocalFamily(stem)) {
+    } else if (stem !== "original") {
       const inOrder = order.includes(stem);
       el.classList.toggle("hidden", !inOrder);
       if (inOrder) el.classList.toggle("unavailable", !presentNames.has(stem));
@@ -182,7 +182,7 @@ function applyStemSelectionFilter(presentNames) {
     const stem = row.dataset.stem;
     const available = presentNames.has(stem);
     row.classList.toggle("unavailable", !available);
-    row.classList.toggle("hidden", isVocalFamily(stem) ? !order.includes(stem) : false);
+    row.classList.toggle("hidden", !order.includes(stem));
   }
   // Presence cards, top row of the track header. Only the vocals family moves:
   // the single "Global Vocals" card and the lead/backing pair are alternatives,
@@ -920,11 +920,45 @@ export function destroyPlayer() {
   updateFooterTrack({});
 }
 
+function renderAvailableLanes(stems, layout) {
+  const root = document.getElementById("availableLanes");
+  if (!root) return;
+  root.replaceChildren();
+  root.hidden = !stems.length;
+  if (!stems.length) return;
+  const heading = document.createElement("span");
+  heading.className = "available-lanes-label";
+  heading.textContent = `Pistas prontas · ${stems.length}`;
+  root.append(heading);
+  const order = effectiveStemOrder(new Set(stems.map((s) => s.name)));
+  for (const name of order.filter((n) => stems.some((s) => s.name === n))) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "available-lane";
+    chip.textContent = STEM_DISPLAY[name] || name;
+    chip.style.setProperty("--lane-color", STEM_COLORS[name] || "#a2b9db");
+    chip.addEventListener("click", () => {
+      const row = mixerEl.querySelector(`[data-stem="${name}"]`);
+      row?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      row?.querySelector("input")?.focus({ preventScroll: true });
+    });
+    root.append(chip);
+  }
+  if (layout?.notice) {
+    const note = document.createElement("span");
+    note.className = "available-lanes-notice";
+    note.textContent = layout.notice;
+    root.append(note);
+  }
+}
+
 export function renderEmptyShell() {
+  applyStudioLayout(null);
   document.querySelector(".app")?.classList.remove("is-import");
   document.querySelector(".app")?.classList.add("no-track");
   stopStemVuLoop();
   ensureMixerStateDefaults();
+  renderAvailableLanes([], null);
   mixerEl.innerHTML = "";
   // lead_vocals/backing_vocals (#275) get rows too, built once here like the
   // base 6 -- applyStemSelectionFilter (below) hides them by default since no
@@ -1069,16 +1103,24 @@ function _applyLaneHeight(count) {
   // So the row is the unit. Divide the panel by the row count, and give the
   // mixer and the waveform column exactly the same total.
   const rowH = panelH > 0 && count > 0
-    ? Math.max(WAVEFORM_LANE_HEIGHT + WAVEFORM_SEPARATOR_HEIGHT, Math.floor(panelH / count))
+    ? Math.max(count > 10 ? 22 : WAVEFORM_LANE_HEIGHT + WAVEFORM_SEPARATOR_HEIGHT, Math.floor((panelH - (count > 10 ? 12 : 0)) / count))
     : WAVEFORM_LANE_HEIGHT + WAVEFORM_SEPARATOR_HEIGHT;
   const appEl = document.querySelector(".app");
+  appEl?.classList.toggle("many-lanes", count > 10);
   appEl?.style.setProperty("--lane-h", `${rowH}px`);
   appEl?.style.setProperty("--wave-widget-track-stack-h", `${count * rowH}px`);
   // The drawable height inside a row, which is what the multitrack is given.
   return rowH - WAVEFORM_SEPARATOR_HEIGHT;
 }
 
-export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, title = "", peaksPromise = null, hasVideo = false, videoStatus = null) {
+export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, title = "", peaksPromise = null, hasVideo = false, videoStatus = null, studioLayout = null) {
+  applyStudioLayout(studioLayout);
+  mixerEl.replaceChildren();
+  for (const name of ["original", ...STEM_NAMES, ...EXTRA_STEM_NAMES]) {
+    const { row } = renderMixerRow({ name, url: "#" });
+    row.querySelector(".mx-name")?.setAttribute("title", STEM_DISPLAY[name] || name);
+    mixerEl.append(row);
+  }
   const rawStems = stems.filter((stem) => stem?.name && stem?.url);
   const app = document.querySelector(".app");
   app?.classList.remove("is-import");
@@ -1149,7 +1191,12 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
   const splitDone = rawPresent.has("lead_vocals") && rawPresent.has("backing_vocals");
   const wantsVocals = selectedStems.has("vocals");
   stems = stems.filter((s) => {
+    if (studioLayout?.profile === "complete") return studioLayout.active_names?.includes(s.name);
     if (s.name === "original") return true;
+    if (s.name.startsWith("studio_") || s.name === "reaper_master" || s.name.startsWith("residual_")) return true;
+    const drumsDone = DRUM_STEMS.every((n) => rawPresent.has(n));
+    if (s.name === "drums" && drumsDone) return false;
+    if (DRUM_STEMS.includes(s.name)) return selectedStems.has("drums") && drumsDone;
     if (s.name === "vocals") return wantsVocals && !splitDone;
     if (s.name === "lead_vocals" || s.name === "backing_vocals") return wantsVocals && splitDone;
     return selectedStems.has(s.name);
@@ -1166,6 +1213,7 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
   // genuinely has no video stream, which is not a fault and not news (#436).
   exportWrap?.classList.toggle("video-failed", videoStatus === "failed");
   applyStemSelectionFilter(new Set(stems.map((s) => s.name)));
+  renderAvailableLanes(stems, studioLayout);
   updateFooterTrack({ thumbnail, stemCount: stems.filter((s) => s.name !== "original").length });
 
   // Reset footer waveform state — will be re-populated below after peaks fetch.

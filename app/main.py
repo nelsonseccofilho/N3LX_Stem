@@ -69,6 +69,7 @@ from app.core.settings import (
     get_max_duration_sec,
     get_playlist_max_items,
     get_port,
+    get_separation_profile,
     get_separation_quality,
     get_transcribe_lyrics,
     get_video_max_height,
@@ -85,6 +86,7 @@ from app.core.settings import (
     set_max_duration_sec,
     set_playlist_max_items,
     set_port,
+    set_separation_profile,
     set_separation_quality,
     set_transcribe_lyrics,
     set_video_max_height,
@@ -278,7 +280,7 @@ def _is_mobile_ua(user_agent: str) -> bool:
 
 
 app = FastAPI(
-    title="StemDeck",
+    title="N3LX_Stem",
     description="Paste a YouTube URL or upload an audio file, get audio stems split into a DAW-style player.",
     version=app_version(),
     lifespan=lifespan,
@@ -311,6 +313,7 @@ def health_root() -> dict[str, object]:
 def health() -> dict[str, object]:
     return {
         "name": "StemDeck",
+        "product": "N3LX_Stem",
         "status": "ok",
         "version": app_version(),
         "ffmpeg_configured": FFMPEG_BIN.is_file(),
@@ -373,6 +376,7 @@ def _settings_payload() -> dict[str, object]:
         "video_max_height": get_video_max_height(),
         "export_sample_rate": get_export_sample_rate(),
         "separation_quality": get_separation_quality(),
+        "separation_profile": get_separation_profile(),
         # Whisper lyrics for a job no lookup found any for: "auto" (on a GPU
         # only) | "on" | "off".
         "transcribe_lyrics": get_transcribe_lyrics(),
@@ -517,6 +521,11 @@ async def update_settings(request: Request) -> dict[str, object]:
         except ValueError as e:
             # set_demucs_device's messages are safe, user-actionable strings
             # (invalid choice / device not available on this machine).
+            raise HTTPException(status_code=422, detail=str(e)) from None
+    if "separation_profile" in body:
+        try:
+            set_separation_profile(str(body["separation_profile"]))
+        except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e)) from None
     if "separation_quality" in body:
         try:

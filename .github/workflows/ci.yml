@@ -21,6 +21,7 @@ env:
 
 jobs:
   lint:
+    if: github.repository == 'stemdeckapp/stemdeck'
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
@@ -39,6 +40,7 @@ jobs:
       - run: bash -n run.sh
 
   test:
+    if: github.repository == 'stemdeckapp/stemdeck'
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
@@ -50,6 +52,7 @@ jobs:
       - run: uv run pytest tests/ -q
 
   js-syntax:
+    if: github.repository == 'stemdeckapp/stemdeck'
     runs-on: ubuntu-latest
     container:
       image: node:20-alpine
@@ -69,6 +72,7 @@ jobs:
   # fullyParallel is off, so tests that rely on order within a file still get
   # it. Free on a public repository; each shard pays its own setup.
   frontend-e2e:
+    if: github.repository == 'stemdeckapp/stemdeck'
     runs-on: ubuntu-latest
     strategy:
       # One failing shard must not cancel the others: the report is only
@@ -102,6 +106,7 @@ jobs:
   # would catch a regression in it. Runs on a real Linux image rather than the
   # macOS bash used during development.
   linux-installer:
+    if: github.repository == 'stemdeckapp/stemdeck'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1
@@ -111,6 +116,7 @@ jobs:
       - run: bash tests/linux/test_install_sh.sh
 
   sast-bandit:
+    if: github.repository == 'stemdeckapp/stemdeck'
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
@@ -120,6 +126,7 @@ jobs:
       - run: uv tool run bandit -r app/ -ll  # fail on medium+ severity
 
   deps-audit:
+    if: github.repository == 'stemdeckapp/stemdeck'
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
@@ -183,6 +190,7 @@ jobs:
             --ignore-vuln CVE-2025-3001
 
   trivy:
+    if: github.repository == 'stemdeckapp/stemdeck'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7.0.1

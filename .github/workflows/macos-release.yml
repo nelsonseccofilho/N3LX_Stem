@@ -12,6 +12,7 @@ concurrency:
 
 jobs:
   build-and-upload:
+    if: github.repository == 'stemdeckapp/stemdeck'
     # Runner must be darwin/arm64 with Rosetta 2, Xcode CLT, Homebrew, rustup, and zstd.
     runs-on: [self-hosted, macOS, ARM64]
     timeout-minutes: 120

@@ -53,8 +53,10 @@ from app.core.settings import (
     get_auto_sections,
     get_discogs_token,
     get_max_duration_sec,
+    get_separation_profile,
 )
 from app.core.stems_location import is_relocating
+from app.core.studio import read_layout
 from app.pipeline import discogs, jobqueue
 from app.pipeline.artist_lookup import tagged_artist_name
 from app.pipeline.audio_tags import probe_tags
@@ -204,6 +206,7 @@ def _job_state(job: Job) -> dict:
         if source is not None:
             job.source_format = source.suffix.lower().removeprefix(".")
     state = job.to_state()
+    state["studio_layout"] = read_layout(JOBS_DIR / job.id)
     if job.status == "done" and _job_files_missing(job):
         state["status"] = "unavailable"
     return state
@@ -252,12 +255,16 @@ async def _create_youtube_job(request: Request) -> dict[str, str]:
         raise HTTPException(status_code=422, detail=str(e)) from e
 
     selected = [s for s in payload.stems if s in STEM_NAMES] if payload.stems else list(STEM_NAMES)
+    profile = get_separation_profile()
+    if profile == "complete":
+        selected = list(STEM_NAMES)
     if not selected:
         selected = list(STEM_NAMES)
 
     job = Job(
         id=uuid.uuid4().hex[:12],
         selected_stems=selected,
+        separation_profile=profile,
         source_url=url,
         # Captured now, not when the sections stage is reached: that is the
         # last thing the pipeline does, and the toggle clears itself as soon
@@ -312,6 +319,9 @@ async def _create_local_job(request: Request) -> dict[str, str]:
     except (json.JSONDecodeError, ValueError):
         stems_list = []
     selected = [s for s in stems_list if s in STEM_NAMES] or list(STEM_NAMES)
+    profile = get_separation_profile()
+    if profile == "complete":
+        selected = list(STEM_NAMES)
 
     # Check actual file size (SpooledTemporaryFile is already buffered at this
     # point; seek/tell are fast and don't re-read the body).
@@ -356,6 +366,7 @@ async def _create_local_job(request: Request) -> dict[str, str]:
     job = Job(
         id=job_id,
         selected_stems=selected,
+        separation_profile=profile,
         title=title,
         duration_sec=duration,
         source_url=local_source_url,
@@ -645,6 +656,9 @@ async def resplit_job(job_id: str, body: ResplitBody) -> dict:
         raise HTTPException(status_code=409, detail="no source kept for this track")
 
     selected = [s for s in body.stems if s in STEM_NAMES] or list(STEM_NAMES)
+    profile = get_separation_profile()
+    if profile == "complete":
+        selected = list(STEM_NAMES)
 
     new_id = uuid.uuid4().hex[:12]
     new_dir = JOBS_DIR / new_id
@@ -661,6 +675,7 @@ async def resplit_job(job_id: str, body: ResplitBody) -> dict:
     new_job = Job(
         id=new_id,
         selected_stems=selected,
+        separation_profile=profile,
         title=job.title,
         duration_sec=job.duration_sec,
         # Still a local: source, so this job keeps its own copy and can be

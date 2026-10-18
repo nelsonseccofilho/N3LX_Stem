@@ -70,7 +70,7 @@
       ].join(";");
 
       const title = document.createElement("strong");
-      title.textContent = "StemDeck did not finish starting up.";
+      title.textContent = "N3LX_Stem did not finish starting up.";
       title.style.cssText = "display:block;font-size:14px;margin-bottom:6px";
 
       const lead = document.createElement("div");

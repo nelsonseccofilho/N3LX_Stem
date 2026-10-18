@@ -3,7 +3,7 @@
 // An AudioContext built with no options runs at whatever rate the operating
 // system's output device is set to, and every node downstream inherits it. That
 // is the right default up to a point, and past that point it is pure waste:
-// every stem StemDeck produces is 44.1 kHz (`-ar 44100` in the ffmpeg call in
+// every stem N3LX_Stem produces is 44.1 kHz (`-ar 44100` in the ffmpeg call in
 // app/pipeline/runner.py), so a 192 kHz context upsamples on decode and then
 // does several times the work on interpolated samples carrying nothing the
 // originals did not (#578).

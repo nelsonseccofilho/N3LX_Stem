@@ -1,3 +1,4 @@
+import { defaultSeparationProfile } from "./constants.js";
 import {
   form, urlInput, submitBtn, errorEl, jobBox, jobTitleEl, jobStageEl,
   jobDetailEl, jobCancelBtn, progressEl, titleEl, bpmChip, keyChip,
@@ -44,6 +45,7 @@ const splitAutoTriggered = new Set();
 // wasn't requested/needed/possible) -- callers use the return value rather
 // than assuming their own `state` is still current.
 export async function runVocalSplitIfWanted(state) {
+  if (state.separation_profile === "complete") return state;
   if (state.status !== "done" || splitAutoTriggered.has(state.job_id)) return state;
   const wantsSplit = jobVocalSplitModes.get(state.job_id) === "split";
   const hasVocals = (state.stems || []).some((s) => s.name === "vocals");
@@ -106,7 +108,7 @@ function setSubmitProcessing(processing) {
   // was emptied while the upload ran: an empty stems list is read by the
   // server as every stem. refreshStemChoiceVisuals applies the same two
   // conditions from the other side.
-  submitBtn.disabled = processing || selectedStems.size === 0;
+  submitBtn.disabled = processing || (defaultSeparationProfile !== "complete" && selectedStems.size === 0);
   submitBtn.classList.toggle("loading", processing);
   document.querySelector(".strip-sq-process")?.classList.toggle("loading", processing);
   const label = submitBtn.querySelector("span");
@@ -372,7 +374,13 @@ function applyStudioSummary(state) {
 // the already-done job. Best-effort: any failure just proceeds with the base
 // stems (the vocals lane), same as if the user had never asked for a split.
 async function finishDoneJob(state) {
-  const finalState = await runVocalSplitIfWanted(state);
+  let finalState = await runVocalSplitIfWanted(state);
+  if (finalState.separation_profile === "complete") {
+    try {
+      const res = await fetch(`/api/jobs/${finalState.job_id}`);
+      if (res.ok) finalState = await res.json();
+    } catch (error) { console.warn("[job] could not refresh detailed layout", error); }
+  }
   wireUpAudio(
     finalState.job_id,
     finalState.stems || [],
@@ -382,6 +390,8 @@ async function finishDoneJob(state) {
     finalState.title || "",
     null,
     finalState.has_video ?? false,
+    finalState.video_status ?? null,
+    finalState.studio_layout ?? null,
   );
   initSections(finalState.job_id, finalState.sections, finalState.duration || 0);
   // The card names the song and its band now, as it does when the track is
@@ -463,7 +473,8 @@ function applyState(state) {
   // overwrite it from each SSE tick. The truthful backend stage goes
   // to the small detail line instead.
   jobDetailEl.textContent = state.stage || "";
-  progressEl.value = Math.round((state.progress || 0) * 100);
+  if (state.progress_indeterminate) progressEl.removeAttribute("value");
+  else progressEl.value = Math.round((state.progress || 0) * 100);
 
   // Cancel button is visible exactly while the job is in a non-terminal state.
   const terminal = TERMINAL_STATUSES.has(state.status);

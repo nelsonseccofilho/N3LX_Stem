@@ -6,6 +6,8 @@ import shutil
 import sys
 from pathlib import Path
 
+from app.core.amd_directml import directml_available
+
 logger = logging.getLogger("stemdeck.config")
 
 
@@ -53,6 +55,8 @@ def available_torch_devices() -> list[str]:
             devices.append("cuda")
         if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
             devices.append("mps")
+        if directml_available():
+            devices.append("directml")
         _torch_load_error = None
     except ImportError:
         pass

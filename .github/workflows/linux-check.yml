@@ -34,6 +34,7 @@ concurrency:
 
 jobs:
   check:
+    if: github.repository == 'stemdeckapp/stemdeck'
     # GitHub-hosted and disposable, so a fork's build.rs or test body runs in a
     # container that is thrown away and holds no signing material. The fork
     # guard the other two check workflows carry exists because those run on the

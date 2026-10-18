@@ -1,3 +1,4 @@
+import { setDefaultSeparationProfile, defaultSeparationProfile } from "./constants.js";
 // catalog.js — library panel: folders, tracks, collapse, drag-and-drop
 import { STEM_NAMES } from "./constants.js";
 import { wireUpAudio, updateFooterTrack } from "./player.js";
@@ -769,6 +770,7 @@ function stateMetadataToTrack(state, fallbackTrack) {
     mixUrl: state.mix_url ?? fallbackTrack.mixUrl ?? null,
     hasVideo: state.has_video ?? fallbackTrack.hasVideo ?? false,
     videoStatus: state.video_status ?? fallbackTrack.videoStatus ?? null,
+    studioLayout: state.studio_layout ?? null,
     createdAt: fallbackTrack.createdAt ?? state.created_at,
     favorite: fallbackTrack.favorite ?? false,
     // The band (#699): the one saved on the track first, since a band chosen
@@ -1150,7 +1152,8 @@ async function loadTrackIntoStudio(trackId) {
   // button imports it again, which is what re-splitting one has always meant.
   // An upload has no URL, so the button acts on the track itself and the
   // server separates the source it kept beside it.
-  const resplittable = !importable && track.status === "done";
+  const resplittable = !importable && track.status === "done"
+    && !track.audioStems.some((s) => s.name.startsWith("studio_") || s.name === "reaper_master");
   const urlInput = document.getElementById("url");
   if (urlInput) {
     urlInput.value = importable ? track.sourceUrl : "";
@@ -1165,7 +1168,7 @@ async function loadTrackIntoStudio(trackId) {
   setResplitTarget(resplittable ? track : null);
 
   applyTrackInfoToPanel(track);
-  wireUpAudio(trackId, track.audioStems, track.duration || 0, track.thumb, track.mixUrl ?? null, track.title || "", peaksPromise, track.hasVideo ?? false, track.videoStatus ?? null);
+  wireUpAudio(trackId, track.audioStems, track.duration || 0, track.thumb, track.mixUrl ?? null, track.title || "", peaksPromise, track.hasVideo ?? false, track.videoStatus ?? null, track.studioLayout ?? null);
   initSections(trackId, track.sections, track.duration || 0);
   // Not awaited: the track is already loading, and the answer arrives as a
   // "tracktags" event.
@@ -2968,12 +2971,12 @@ function wireWidgets() {
 
 const FALLBACK_VERSION = "0.1.0";
 let currentVersion = FALLBACK_VERSION;
-const REPO_URL = "https://github.com/stemdeckapp/stemdeck";
-const RELEASES_URL = "https://github.com/stemdeckapp/stemdeck/releases";
+const REPO_URL = "https://github.com/nelsonseccofilho/N3LX_Stem";
+const RELEASES_URL = "https://github.com/nelsonseccofilho/N3LX_Stem/releases";
 // The releases LIST, not /releases/latest. GitHub defines "latest" as the most
 // recent NON-PRERELEASE release, so the moment a version ships with the
 // pre-release box ticked it becomes invisible here and nobody is ever told an
-// update exists. StemDeck has historically published even its alphas as normal
+// update exists. N3LX_Stem has historically published even its alphas as normal
 // releases, which is why that has not bitten yet -- this makes the check
 // correct either way rather than dependent on remembering not to tick a box.
 // The one release GitHub itself calls latest.
@@ -2990,7 +2993,7 @@ const RELEASES_URL = "https://github.com/stemdeckapp/stemdeck/releases";
 // It also 404s while every release is a pre-release, which is the correct
 // answer to "is there an update" at that moment.
 const RELEASES_API =
-  "https://api.github.com/repos/stemdeckapp/stemdeck/releases/latest";
+  "https://api.github.com/repos/nelsonseccofilho/N3LX_Stem/releases/latest";
 const DISMISSED_UPDATE_KEY = "stemdeck.dismissed_update";
 
 // The full GitHub release object from the last successful update check, used to
@@ -3189,11 +3192,11 @@ export async function getBuildTarget() {
 // infix for the CUDA variant.
 function assetNameFor(target) {
   if (target.os === "macos") {
-    return `StemDeck-macOS-${target.arch === "arm64" ? "arm64" : "x64"}.dmg`;
+    return `N3LX_Stem-macOS-${target.arch === "arm64" ? "arm64" : "x64"}.dmg`;
   }
   const variant = target.gpu === "nvidia" ? ".NVIDIA" : "";
-  if (target.os === "windows") return `StemDeck-Windows-x64${variant}.zip`;
-  return `StemDeck-Linux-x64${variant}.tar.gz`;
+  if (target.os === "windows") return `N3LX_Stem-Windows-x64${variant}.zip`;
+  return `N3LX_Stem-Linux-x64${variant}.tar.gz`;
 }
 
 function pickReleaseAsset(release, target) {
@@ -3229,10 +3232,10 @@ function findReleaseAsset(release, name) {
 // executable bit the relaunch depends on).
 function updaterAssetNames(target) {
   if (target.os === "windows") {
-    return { app: "StemDeck-Windows-x64-app.zip", runtimeId: "StemDeck-Windows-x64-runtime-version.json" };
+    return { app: "N3LX_Stem-Windows-x64-app.zip", runtimeId: "N3LX_Stem-Windows-x64-runtime-version.json" };
   }
   if (target.os === "linux") {
-    return { app: "StemDeck-Linux-x64-app.tar.gz", runtimeId: "StemDeck-Linux-x64-runtime-version.json" };
+    return { app: "N3LX_Stem-Linux-x64-app.tar.gz", runtimeId: "N3LX_Stem-Linux-x64-runtime-version.json" };
   }
   return null;
 }
@@ -3491,7 +3494,7 @@ async function checkForUpdate() {
   } catch (e) {
     console.warn("[catalog] update check failed:", e);
     // Only report a genuine failure, not "we are offline": an update check that
-    // cannot reach GitHub is not a StemDeck bug and must not file one.
+    // cannot reach GitHub is not a N3LX_Stem bug and must not file one.
     if (!(e instanceof TypeError)) {
       notifyFailure({
         kind: "update",
@@ -3929,7 +3932,7 @@ function renderLibraryRows(tbody) {
   }
 }
 
-// "Make StemDeck available on your network" toggle. The backend always binds
+// "Make N3LX_Stem available on your network" toggle. The backend always binds
 // all interfaces and gates LAN access on a runtime flag (GET/POST /api/settings)
 // — so this works live, no restart, identically in the desktop app and the
 // self-hosted server. Loopback is always allowed, so the owner can't lock
@@ -3939,9 +3942,9 @@ function networkSettingsHtml() {
     <div class="settings-section">
       <div class="settings-row">
         <div class="settings-row-text">
-          <div class="settings-row-title" data-i18n="settings.network.allowTitle">Make StemDeck available on your network</div>
-          <div class="settings-row-desc" data-i18n="settings.network.allowDesc">Let other devices (like your phone) open StemDeck at the address below.</div>
-          <div class="settings-row-desc settings-lock-note" data-i18n="settings.network.lockNote">Read-only when StemDeck is started in server mode — network access is then set by your server configuration.</div>
+          <div class="settings-row-title" data-i18n="settings.network.allowTitle">Make N3LX_Stem available on your network</div>
+          <div class="settings-row-desc" data-i18n="settings.network.allowDesc">Let other devices (like your phone) open N3LX_Stem at the address below.</div>
+          <div class="settings-row-desc settings-lock-note" data-i18n="settings.network.lockNote">Read-only when N3LX_Stem is started in server mode — network access is then set by your server configuration.</div>
         </div>
         <label class="settings-switch">
           <input type="checkbox" class="net-access-input" />
@@ -4273,6 +4276,7 @@ async function wireGeneralSettings(overlay) {
   const deviceSel = overlay.querySelector(".set-demucs-device");
   const deviceDesc = overlay.querySelector(".set-demucs-desc");
   const qualitySel = overlay.querySelector(".set-separation-quality");
+  const profileSel = overlay.querySelector(".set-separation-profile");
   const transcribeSel = overlay.querySelector(".set-transcribe-lyrics");
   const cookiesInput = overlay.querySelector(".set-cookies-file");
   const cookiesMsg = overlay.querySelector(".cookies-file-msg");
@@ -4309,6 +4313,10 @@ async function wireGeneralSettings(overlay) {
     if (sampleRateSel && d.export_sample_rate) sampleRateSel.value = String(d.export_sample_rate);
     if (portInput && d.port) portInput.value = String(d.port);
     if (qualitySel && d.separation_quality) qualitySel.value = d.separation_quality;
+    if (d.separation_profile) {
+      if (profileSel) profileSel.value = d.separation_profile;
+      setDefaultSeparationProfile(d.separation_profile);
+    }
     if (transcribeSel && d.transcribe_lyrics) transcribeSel.value = d.transcribe_lyrics;
     // Unset is the normal case, so read the key rather than truthiness --
     // clearing the field must survive the round trip and not be repopulated.
@@ -4441,6 +4449,13 @@ async function wireGeneralSettings(overlay) {
     const port = Math.max(1024, Math.min(65535, parseInt(portInput.value, 10) || 8000));
     post({ port });
   });
+  profileSel?.addEventListener("change", async () => {
+    const data = await post({ separation_profile: profileSel.value });
+    if (!data) {
+      profileSel.value = defaultSeparationProfile;
+      showError("Não foi possível salvar o modo de separação. Tente novamente.");
+    }
+  });
   qualitySel?.addEventListener("change", () => {
     post({ separation_quality: qualitySel.value });
   });
@@ -4518,7 +4533,7 @@ async function wireNetworkSetting(overlay) {
   if (serverMode) enabled = true;
 
   // QR codes: one per LAN address, each encodes the /mobile/ URL so the
-  // phone camera opens StemDeck directly. Cards start blurred so an open
+  // phone camera opens N3LX_Stem directly. Cards start blurred so an open
   // camera app on a nearby device doesn't scan them before you're ready.
   // Transpose is an AudioWorklet, which browsers hand out only on a secure
   // origin, so what this warning has to say depends on whether the addresses
@@ -4841,7 +4856,7 @@ function openLibraryEditor() {
           <div class="settings-row settings-row-stack">
             <div class="settings-row-text">
               <div class="settings-row-title" data-i18n="settings.cookies.title">YouTube cookies</div>
-              <div class="settings-row-desc" data-i18n="settings.cookies.desc">Optional. Path to a cookies.txt file, used only when YouTube asks StemDeck to confirm it is not a bot. Leave this empty unless imports are failing.</div>
+              <div class="settings-row-desc" data-i18n="settings.cookies.desc">Optional. Path to a cookies.txt file, used only when YouTube asks N3LX_Stem to confirm it is not a bot. Leave this empty unless imports are failing.</div>
             </div>
             <input type="text" class="settings-text-input set-cookies-file" spellcheck="false" autocomplete="off" placeholder="Path to cookies.txt" data-i18n-placeholder="settings.cookies.placeholder" aria-label="YouTube cookies" data-i18n-aria-label="settings.cookies.title" />
             <div class="cookies-file-msg" role="status" aria-live="polite"></div>
@@ -4860,7 +4875,7 @@ function openLibraryEditor() {
           <div class="settings-row settings-row-stack exports-location-row">
             <div class="settings-row-text">
               <div class="settings-row-title" data-i18n="settings.exportsLocation.title">Exports folder</div>
-              <div class="settings-row-desc" data-i18n="settings.exportsLocation.desc">Where audio goes when you drag a stem or a loop out of StemDeck. Nothing here is ever deleted automatically, because a project that references a dragged file needs it to stay put.</div>
+              <div class="settings-row-desc" data-i18n="settings.exportsLocation.desc">Where audio goes when you drag a stem or a loop out of N3LX_Stem. Nothing here is ever deleted automatically, because a project that references a dragged file needs it to stay put.</div>
             </div>
             <div class="stems-location">
               <code class="exports-location-path" title=""></code>
@@ -4896,6 +4911,7 @@ function openLibraryEditor() {
               <option value="auto" data-i18n="settings.device.auto">Auto</option>
               <option value="cuda">CUDA (NVIDIA)</option>
               <option value="mps">MPS (Apple Silicon)</option>
+              <option value="directml">DirectML (AMD Radeon)</option>
               <option value="cpu">CPU</option>
             </select>
           </div>
@@ -4909,6 +4925,18 @@ function openLibraryEditor() {
             <select class="settings-select settings-select-wide set-separation-quality" aria-label="Separation quality" data-i18n-aria-label="settings.quality.title">
               <option value="standard" data-i18n="settings.quality.standard">Standard</option>
               <option value="best" data-i18n="settings.quality.best">Best (2× slower)</option>
+            </select>
+          </div>
+        </div>
+        <div class="settings-section">
+          <div class="settings-row">
+            <div class="settings-row-text">
+              <div class="settings-row-title">Modo de separação</div>
+              <div class="settings-row-desc">Completo: até 15 pistas, com bateria em seis peças, voz principal, backing vocals e resíduos. A bateria detalhada usa CPU e demora mais. Guitarras ficam agrupadas; efeitos do REAPER não são aplicados.</div>
+            </div>
+            <select class="settings-select settings-select-wide set-separation-profile" aria-label="Modo de separação">
+              <option value="standard">Básico · 6 grupos</option>
+              <option value="complete">Completo · até 15 pistas</option>
             </select>
           </div>
         </div>
@@ -4995,7 +5023,7 @@ function openLibraryEditor() {
           <div class="settings-row">
             <div class="settings-row-text">
               <div class="settings-row-title" data-i18n="settings.network.port.title">Port</div>
-              <div class="settings-row-desc" data-i18n="settings.network.port.desc">Port StemDeck runs on. Restart to apply.</div>
+              <div class="settings-row-desc" data-i18n="settings.network.port.desc">Port N3LX_Stem runs on. Restart to apply.</div>
             </div>
             <input type="text" class="settings-num-input set-port" inputmode="numeric" maxlength="5" aria-label="Port" data-i18n-aria-label="settings.network.port.title" />
           </div>
@@ -5042,7 +5070,7 @@ function openLibraryEditor() {
           <div class="settings-row">
             <div class="settings-row-text">
               <div class="settings-row-title" data-i18n="settings.logs.location.title">Log location</div>
-              <div class="settings-row-desc" data-i18n="settings.logs.location.desc">Where StemDeck writes its logs on this machine. Read-only — open them in a file manager or use Export logs.</div>
+              <div class="settings-row-desc" data-i18n="settings.logs.location.desc">Where N3LX_Stem writes its logs on this machine. Read-only — open them in a file manager or use Export logs.</div>
             </div>
             <button class="settings-registry-refresh settings-logs-refresh" type="button" data-i18n="settings.logs.refresh">Refresh</button>
           </div>
@@ -5155,7 +5183,7 @@ function openLibraryEditor() {
   }
   // Reset app data (#312): originally a "session keeps coming back across
   // desktop reinstalls" fix (the real persisted state lives in
-  // ~/Documents/StemDeck, not the extracted package's own bundled data/
+  // ~/Documents/N3LX_Stem, not the extracted package's own bundled data/
   // folder), available in server mode too -- same network_gate trust
   // boundary as every other settings-mutating endpoint, enforced
   // server-side (not just hidden here). On a shared server this deletes
@@ -5268,7 +5296,7 @@ export async function initCatalog() {
   onJobSettled(completeSettledJob);
   startQueueStream();
 
-  loadCurrentVersion().finally(checkForUpdate);
+  loadCurrentVersion(); // N3LX source distribution: inherited binary updates disabled.
   syncWithServer();
   // A heart pressed on the phone (#734) shows here the next time this window
   // is looked at, rather than only after a reload. At most every 15 seconds,

@@ -1,5 +1,5 @@
 import {
-  STEM_NAMES, TRACK_NAMES, EXTRA_STEM_NAMES, STEM_COLORS, STEM_DISPLAY, LANE_VOLUME_MAX,
+  isPercussion, STEM_NAMES, TRACK_NAMES, EXTRA_STEM_NAMES, STEM_COLORS, STEM_DISPLAY, LANE_VOLUME_MAX,
 } from "./constants.js";
 
 // Every lane name this session might ever need mixer state for, including
@@ -87,7 +87,7 @@ export function nudgeAllLanePitches(delta) {
   if (!delta) return;
   for (const name of allTrackNames()) {
     const state = mixerState[name];
-    if (!state || name === "drums") continue;
+    if (!state || isPercussion(name)) continue;
     setLanePitch(name, state.pitch + delta);
   }
 }
@@ -109,7 +109,7 @@ export function resetAllLanePitches() {
  */
 export function setLanePitch(name, semitones) {
   const state = mixerState[name];
-  if (!state || name === "drums") return;
+  if (!state || isPercussion(name)) return;
   const next = clampPitch(semitones);
   if (state.pitch === next) return;
   state.pitch = next;
@@ -233,11 +233,14 @@ export function refreshMixerVisuals() {
     if (row) {
       const muteBtn = row.querySelector(".mute");
       const soloBtn = row.querySelector(".solo");
-      if (soloBtn) soloBtn.classList.toggle("active", state.soloed);
+      if (soloBtn) {
+        soloBtn.classList.toggle("active", state.soloed);
+        soloBtn.setAttribute("aria-pressed", String(state.soloed));
+      }
       const iconToggle = row.querySelector(".lane-icon-toggle");
       if (iconToggle) {
         iconToggle.classList.toggle("active", !state.muted);
-        iconToggle.setAttribute("aria-pressed", String(!state.muted));
+        iconToggle.setAttribute("aria-pressed", String(state.muted));
       }
       row.classList.toggle("muted", state.muted);
       const knob = row.querySelector(".lane-knob");
@@ -631,7 +634,7 @@ function makeLaneKey(stemName, display) {
   // Plus above, the reading, minus below.
   wrap.append(up, valueEl, down);
 
-  if (stemName === "drums") {
+  if (isPercussion(stemName)) {
     wrap.classList.add("locked");
     wrap.title = t("mixer.key.drumsLocked");
     up.disabled = true;

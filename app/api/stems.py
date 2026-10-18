@@ -29,6 +29,7 @@ from app.core.config import (
 )
 from app.core.registry import get as registry_get
 from app.core.settings import get_export_sample_rate
+from app.core.studio import DRUM_STEMS, STUDIO_NAMES, read_layout
 from app.pipeline.audio_stats import vocal_envelope
 from app.pipeline.click_render import cache_key as click_cache_key
 from app.pipeline.click_render import count_in_beats, render_click_wav, render_count_in_wav
@@ -42,14 +43,21 @@ router = APIRouter(tags=["stems"])
 # (#275, EXTRA_STEM_NAMES) when a job has requested it. "original" is the
 # re-encoded source song (added when the user picked a strict subset), "mix"
 # is the ffmpeg amix of the user's selected stems.
-_ALLOWED_NAMES = frozenset(STEM_NAMES) | frozenset(EXTRA_STEM_NAMES) | {"original", "mix"}
+_ALLOWED_NAMES = (
+    frozenset(STEM_NAMES)
+    | frozenset(EXTRA_STEM_NAMES)
+    | frozenset(STUDIO_NAMES)
+    | {"original", "mix"}
+)
 
 # Lanes the dynamic mixdown may sum: the 6 stems plus "original" (the complement
 # track shown when the user picked a subset) plus lead/backing vocals when a
 # job has split them. "mix" is excluded -- it is the static pre-render this
 # endpoint replaces. Gains are linear; the studio caps a lane at 2.0, so this
 # generous bound just rejects abusive values.
-_MIXDOWN_NAMES = frozenset(STEM_NAMES) | frozenset(EXTRA_STEM_NAMES) | {"original"}
+_MIXDOWN_NAMES = (
+    frozenset(STEM_NAMES) | frozenset(EXTRA_STEM_NAMES) | frozenset(STUDIO_NAMES) | {"original"}
+)
 _MIXDOWN_MAX_GAIN = 4.0
 # lead_vocals/backing_vocals are a decomposition of vocals, not an independent
 # signal -- summing vocals alongside either would double-count the vocal
@@ -459,7 +467,7 @@ def effective_pitch(name: str, semitones: int) -> int:
     refuses this too, so honouring a drums pitch here would export something the
     studio will not play.
     """
-    if name == "drums":
+    if name in ("drums", "residual_drums", "residual_mix") or name in DRUM_STEMS:
         return 0
     return max(PITCH_MIN, min(PITCH_MAX, int(semitones)))
 
@@ -521,6 +529,12 @@ def _parse_lane_gains(stems: str, gains: str) -> tuple[list[str], list[float]]:
             status_code=422,
             detail="vocals cannot be combined with lead_vocals/backing_vocals (same signal)",
         )
+    if "drums" in names and set(DRUM_STEMS) & set(names):
+        raise HTTPException(
+            status_code=422, detail="drums cannot be combined with its detailed lanes"
+        )
+    if "reaper_master" in names and len(names) > 1:
+        raise HTTPException(status_code=422, detail="master reference must play on its own")
     return names, parsed_gains
 
 
@@ -561,7 +575,12 @@ def _expand_render_lanes(
     if {"lead_vocals", "backing_vocals"} <= selected:
         selected.add("vocals")
 
+    percussion = (read_layout(JOBS_DIR / job_id) or {}).get("percussion_names", [])
+    if set(DRUM_STEMS) <= selected:
+        selected.add("drums")
     for name, gain, pitch in zip(names, gains, pitches, strict=True):
+        if name in percussion:
+            pitch = 0
         # Validate first, always. Whether a lane exists is a property of the
         # job, not of the request: without this an "original" lane the job
         # never produced would 404 untransposed and be synthesised from
@@ -1463,7 +1482,7 @@ async def get_all_stems_zip(
         raise HTTPException(status_code=404, detail="job not ready")
 
     # Resolve the requested subset (whitelisted) or fall back to all stems.
-    all_names = (*STEM_NAMES, *EXTRA_STEM_NAMES)
+    all_names = (*STEM_NAMES, *EXTRA_STEM_NAMES, *STUDIO_NAMES)
     if stems:
         requested = {s for s in stems.split(",") if s}
         if not requested <= set(all_names):
@@ -1476,6 +1495,9 @@ async def get_all_stems_zip(
         wanted = [name for name in all_names if name in requested]
     else:
         wanted = list(all_names)
+        layout = read_layout(JOBS_DIR / job_id) or {}
+        if layout.get("profile") == "complete" and layout.get("active_names"):
+            wanted = layout["active_names"]
 
     jobs_root = JOBS_DIR.resolve()
     stems_dir = (JOBS_DIR / job_id / "stems").resolve()
@@ -1486,7 +1508,9 @@ async def get_all_stems_zip(
     for name in wanted:
         p = (stems_dir / f"{name}.wav").resolve()
         if p.is_file() and p.is_relative_to(jobs_root):
-            sources.append((name, p))
+            label = (read_layout(JOBS_DIR / job_id) or {}).get("labels", {}).get(name)
+            archive_name = f"{name}_{_title_slug(label)}" if label else name
+            sources.append((archive_name, p))
     if not sources:
         raise HTTPException(status_code=404, detail="no stems found")
 

@@ -77,7 +77,7 @@ export function installOption(target, isDesktop) {
 function technicalBlock(record, diag) {
   const ctx = record.context || {};
   const rows = [
-    ["StemDeck", diag.version ? `v${diag.version}` : "(unknown)"],
+    ["N3LX_Stem", diag.version ? `v${diag.version}` : "(unknown)"],
     ["Failure", `${record.kind}${record.cause ? ` / ${record.cause}` : ""}`],
     ["Stage", ctx.stage],
     ["Device", ctx.device && ctx.gpuFallback ? `${ctx.device} (fell back to CPU)` : ctx.device],
@@ -142,9 +142,9 @@ export function buildReportUrl(record, diag = {}) {
   const title = `[Bug]: ${label}${record.cause ? ` - ${record.cause}` : ""}`;
 
   const what = [
-    `${label} in StemDeck.`,
+    `${label} in N3LX_Stem.`,
     "",
-    `**StemDeck said:** ${record.message || "(no message)"}`,
+    `**N3LX_Stem said:** ${record.message || "(no message)"}`,
     record.detail ? `**Detail:** ${record.detail}` : null,
     "",
     "<!-- Anything else worth knowing? What were you working on? -->",
@@ -152,7 +152,7 @@ export function buildReportUrl(record, diag = {}) {
 
   const steps = [
     "1. <!-- what were you doing? -->",
-    record.context?.stage ? `2. StemDeck failed at: ${record.context.stage}` : "2. It failed.",
+    record.context?.stage ? `2. N3LX_Stem failed at: ${record.context.stage}` : "2. It failed.",
   ].join("\n");
 
   const base = {

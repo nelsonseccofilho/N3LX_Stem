@@ -527,12 +527,12 @@ def set_export_sample_rate(value: int) -> int:
 # it. Read live per job (app/pipeline/separate.py), so changes apply to the
 # NEXT separation without a restart. STEMDECK_DEMUCS_DEVICE seeds the default
 # so existing env-based deployments keep their forced device.
-_DEVICE_CHOICES = ("auto", "cuda", "mps", "cpu")
+_DEVICE_CHOICES = ("auto", "cuda", "mps", "directml", "cpu")
 
 
 def _default_demucs_device() -> str:
     env = os.environ.get("STEMDECK_DEMUCS_DEVICE", "").strip().lower()
-    return env if env in ("cuda", "mps", "cpu") else "auto"
+    return env if env in ("cuda", "mps", "directml", "cpu") else "auto"
 
 
 def get_demucs_device_choice() -> str:
@@ -558,7 +558,7 @@ def set_demucs_device(value: str) -> str:
     choice = (value or "").strip().lower()
     if choice not in _DEVICE_CHOICES:
         raise ValueError("demucs_device must be one of: " + ", ".join(_DEVICE_CHOICES))
-    if choice in ("cuda", "mps") and choice not in available_torch_devices():
+    if choice in ("cuda", "mps", "directml") and choice not in available_torch_devices():
         raise ValueError(f"{choice} is not available on this machine")
     with _LOCK:
         _ensure()["demucs_device"] = choice
@@ -747,3 +747,22 @@ def discogs_token_hint() -> str | None:
     """The last two characters of the token, for the Settings field, or None."""
     token = get_discogs_token()
     return token[-DISCOGS_TOKEN_HINT_CHARS:] if token else None
+
+
+# Additional decomposition passes for new imports. Existing jobs keep their snapshot.
+def get_separation_profile() -> str:
+    with _LOCK:
+        default = os.environ.get("STEMDECK_SEPARATION_PROFILE", "standard").strip().lower()
+        if default not in ("standard", "complete"):
+            default = "standard"
+        value = _ensure().get("separation_profile", default)
+        return value if value in ("standard", "complete") else default
+
+
+def set_separation_profile(value: str) -> str:
+    if value not in ("standard", "complete"):
+        raise ValueError("separation_profile must be standard or complete")
+    with _LOCK:
+        _ensure()["separation_profile"] = value
+        _save()
+    return value

@@ -38,8 +38,8 @@ jobs:
     # trivial merged PR is enough to unlock this for a later one. Fork PRs get a
     # maintainer-triggered workflow_dispatch run instead.
     if: >-
-      github.event_name != 'pull_request' ||
-      github.event.pull_request.head.repo.full_name == github.repository
+      github.repository == 'stemdeckapp/stemdeck' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     # Runner must be darwin/arm64 with Xcode CLT and rustup (same requirements
     # as macos-release.yml, which this intentionally does not replace -- this
     # only builds/checks, never signs, packages, or uploads anything).

@@ -11,11 +11,28 @@ export let TRACK_NAMES = ["original", ...STEM_NAMES];
 // swapped in for "vocals", via effectiveStemOrder() below.
 export let EXTRA_STEM_NAMES = ["lead_vocals", "backing_vocals"];
 
+let laneLabels = {};
+let importedLabels = {};
+let importedActiveNames = [];
+export let defaultSeparationProfile = "standard";
+export function setDefaultSeparationProfile(profile) {
+  defaultSeparationProfile = profile === "complete" ? "complete" : "standard";
+  if (typeof document !== "undefined") document.dispatchEvent(new CustomEvent("separationprofilechange"));
+}
+let importedPercussion = [];
+export const DRUM_STEMS = ["drum_kick", "drum_snare", "drum_toms", "drum_hh", "drum_ride", "drum_crash"];
+export function applyStudioLayout(layout) { importedLabels = layout?.labels || {}; importedActiveNames = layout?.profile === "complete" ? (layout.active_names || []) : []; importedPercussion = layout?.percussion_names || []; }
+export function isPercussion(name) { return name === "drums" || name === "residual_drums" || name === "residual_mix" || DRUM_STEMS.includes(name) || importedPercussion.includes(name); }
 export async function syncStemNamesFromAPI() {
   try {
     const res = await fetch("/api/config");
     if (!res.ok) return;
     const data = await res.json();
+    laneLabels = data.stem_labels || {};
+    setDefaultSeparationProfile(data.separation_profile);
+    for (const name of data.extra_stem_names || []) {
+      STEM_COLORS[name] ||= name.startsWith("drum_") ? "#e89048" : name.startsWith("residual_") ? "#88a8c8" : "#a2b9db";
+    }
     if (Array.isArray(data.stem_names) && data.stem_names.length > 0) {
       STEM_NAMES = data.stem_names;
       TRACK_NAMES = ["original", ...STEM_NAMES];
@@ -34,8 +51,18 @@ export async function syncStemNamesFromAPI() {
 // has (typically from job.stems). Order matters -- callers use this both to
 // decide what to render and in what sequence (waveform stacking, mixer rows).
 export function effectiveStemOrder(presentNames) {
+  if (importedActiveNames.length) return importedActiveNames.filter((n) => presentNames.has(n));
   const splitDone = presentNames.has("lead_vocals") && presentNames.has("backing_vocals");
-  return STEM_NAMES.flatMap((n) => (n === "vocals" && splitDone ? EXTRA_STEM_NAMES : [n]));
+  const imported = EXTRA_STEM_NAMES.filter((n) => n.startsWith("studio_") && presentNames.has(n));
+  if (imported.length) return imported;
+  if (presentNames.has("reaper_master")) return ["reaper_master"];
+  const drumsDone = DRUM_STEMS.every((n) => presentNames.has(n));
+  const order = STEM_NAMES.flatMap((n) => {
+    if (n === "vocals" && splitDone) return ["lead_vocals", "backing_vocals"];
+    if (n === "drums" && drumsDone) return DRUM_STEMS;
+    return [n];
+  });
+  return [...order, ...EXTRA_STEM_NAMES.filter((n) => n.startsWith("residual_") && presentNames.has(n))];
 }
 
 // A Proxy, not a plain object, so every lookup resolves through the CURRENT
@@ -48,6 +75,8 @@ export function effectiveStemOrder(presentNames) {
 export const STEM_DISPLAY = new Proxy({}, {
   get(_target, prop) {
     if (typeof prop !== "string") return undefined;
+    if (importedLabels[prop]) return importedLabels[prop];
+    if (laneLabels[prop]) return laneLabels[prop];
     const key = `stem.${prop}`;
     return key in TRANSLATIONS.en ? t(key) : undefined;
   },

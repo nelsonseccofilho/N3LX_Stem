@@ -90,3 +90,17 @@ Thumbs.db
 
 # Imported design references (kept local, not shipped)
 design/
+
+# N3LX private runtimes, media and session exports
+.venv-*/
+outputs/
+*.rpp
+*.rpp-bak
+*.wav
+*.mp3
+*.flac
+*.onnx
+*.ckpt
+*.safetensors
+*.pt
+cookies*.txt

@@ -11,6 +11,7 @@ from pathlib import Path
 
 from app.core.config import DEMUCS_MODEL, EXTRA_STEM_NAMES, JOB_ID_RE, LYRICS_FILE, STEM_NAMES
 from app.core.models import Job, clean_artist, clean_audio_tags, clean_identity, clean_work
+from app.core.studio import STUDIO_NAMES
 
 logger = logging.getLogger("stemdeck.registry")
 
@@ -369,7 +370,7 @@ def _recover_done_job(job_dir: Path) -> Job | None:
         return None
     stems = [
         {"name": name, "url": f"/api/jobs/{job_dir.name}/stems/{name}.wav"}
-        for name in ("original", *STEM_NAMES, *EXTRA_STEM_NAMES)
+        for name in ("original", *STEM_NAMES, *EXTRA_STEM_NAMES, *STUDIO_NAMES)
         if (stems_dir / f"{name}.wav").is_file()
     ]
     if not stems:
@@ -412,6 +413,8 @@ def _recover_done_job(job_dir: Path) -> Job | None:
         mix_url=mix_url,
         created_at=job_dir.stat().st_mtime,
         title=meta.get("title"),
+        separation_profile=meta.get("separation_profile", "standard"),
+        separation_warnings=meta.get("separation_warnings", []),
         thumbnail=meta.get("thumbnail"),
         duration_sec=meta.get("duration_sec"),
         bpm=meta.get("bpm"),

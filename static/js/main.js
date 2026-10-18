@@ -92,7 +92,7 @@ function wireVocalModeToggle() {
 // ─── Experimental song-structure extraction ───
 //
 // The server owns this flag, not the browser: the pipeline reads it per job,
-// so a phone and a laptop pointed at the same StemDeck must not disagree about
+// so a phone and a laptop pointed at the same N3LX_Stem must not disagree about
 // whether the next import pays for an inference pass. The button therefore
 // reflects the server's answer and writes back, rather than keeping its own
 // local state.
@@ -418,7 +418,8 @@ function wireAllButton() {
 // static/index.html always ships pre-rendered in English).
 const i18nReady = initI18n().then(() => applyTranslations(document));
 
-syncStemNamesFromAPI().then(() => buildStripStems());
+document.addEventListener("separationprofilechange", refreshStemChoiceVisuals);
+const stemNamesReady = syncStemNamesFromAPI().then(() => buildStripStems());
 wireJobForm();
 // Live search on the topbar box. Picking a result fills the box and stops
 // there: extraction is minutes of work, so it stays behind the deliberate
@@ -470,7 +471,7 @@ onLanguageChange(refitFooter);
 onLanguageChange(fitStemChips);
 
 (async () => {
-  await i18nReady;
+  await Promise.all([i18nReady, stemNamesReady]);
   // Waits for the language to be resolved: the empty shell's stem labels
   // (STEM_DISPLAY) are a one-time textContent snapshot, not a live binding,
   // so rendering it before i18n is ready would freeze it in English

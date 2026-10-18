@@ -1,5 +1,5 @@
-// StemDeck mobile — vanilla port of the Claude Design prototype
-// (design/mobile/StemDeck-Mobile.dc.html). No framework, no build step,
+// N3LX_Stem mobile — vanilla port of the Claude Design prototype
+// (design/mobile/N3LX_Stem-Mobile.dc.html). No framework, no build step,
 // to match the rest of static/. Library + Mixer are wired to the real API
 // (GET /api/jobs, /api/jobs/{id}, the Web Audio engine, mixdown export).
 // Extract is still mock pending the SSE/upload wiring (next step).
@@ -882,7 +882,7 @@ async function deleteTrack(id) {
     // DELETE removes the stems from disk for good. The desktop has always
     // moved tracks to a Trash folder instead; now that the Trash lives on the
     // server, this screen can do the same thing rather than being the one
-    // place in StemDeck where a stray thumb destroys a separation.
+    // place in N3LX_Stem where a stray thumb destroys a separation.
     await fetch(`/api/jobs/${encodeURIComponent(id)}/trash`, { method: "POST" });
   } catch (e) {
     console.warn("[mobile] could not move track to trash:", e);

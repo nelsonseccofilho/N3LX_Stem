@@ -21,6 +21,7 @@ from app.core.models import Job, JobCancelled, _set, settle_cancelled
 from app.core.redact import redact
 from app.core.registry import is_upload
 from app.core.registry import persist as persist_registry
+from app.core.studio import DRUM_STEMS
 from app.pipeline.analyze import analyze, refine_key_from_stems
 from app.pipeline.beatgrid import compute_beat_grid
 from app.pipeline.cancel import check_cancel as _check_cancel
@@ -33,6 +34,7 @@ from app.pipeline.collect import (
     make_selected_mix,
     remove_job_dir,
 )
+from app.pipeline.complete_multitrack import complete_multitrack
 from app.pipeline.download import download
 from app.pipeline.errors import classify_failure
 from app.pipeline.identify import IdentifyLookup, release_source
@@ -181,6 +183,8 @@ def _run_common(job: Job, source: Path, job_dir: Path) -> None:
     mark = _lap(job, "separate", mark)
     found = collect(job, stems_root, job_dir)
     stems_dir = job_dir / "stems"
+    if job.separation_profile == "complete":
+        complete_multitrack(job, source, stems_dir)
     # Deleting the source is the bulk of disk reclaim per job, and it happens
     # before the ffmpeg amix steps below in case scratch space is tight. But
     # only a job that can fetch its source again is allowed to give it up.
@@ -195,6 +199,12 @@ def _run_common(job: Job, source: Path, job_dir: Path) -> None:
         release_source(job.id)
         cleanup_source(job_dir)
     job.stems = [{"name": name, "url": f"/api/jobs/{job.id}/stems/{name}.wav"} for name in found]
+    if job.separation_profile == "complete":
+        from app.core.studio import STUDIO_NAMES
+
+        for name in ("lead_vocals", "backing_vocals", *STUDIO_NAMES):
+            if (stems_dir / f"{name}.wav").is_file():
+                job.stems.append({"name": name, "url": f"/api/jobs/{job.id}/stems/{name}.wav"})
     _check_cancel(job)
     # The key was first estimated from the mix, before separation. The stems
     # are better evidence, the bass line above all (#726). Keeps the first
@@ -226,7 +236,15 @@ def _run_common(job: Job, source: Path, job_dir: Path) -> None:
     # two-pass behavior.
     rms_values = compute_stem_peaks(stems_dir, all_stem_names)
     job.stem_presence = _presence_from_rms(
-        {name: rms for name, rms in rms_values.items() if name in found}
+        {
+            name: rms
+            for name, rms in rms_values.items()
+            if name in found
+            or (
+                job.separation_profile == "complete"
+                and name in (*DRUM_STEMS, "lead_vocals", "backing_vocals")
+            )
+        }
     )
     mark = _lap(job, "post", mark)
 
@@ -356,6 +374,8 @@ def _write_metadata(job: Job, job_dir: Path) -> None:
         "compute_device": job.compute_device,
         "gpu_fallback": job.gpu_fallback,
         "stage_timings": job.stage_timings,
+        "separation_profile": job.separation_profile,
+        "separation_warnings": job.separation_warnings,
     }
     try:
         (job_dir / "metadata.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")

@@ -36,7 +36,16 @@ def _spawn_worker_cmd(device: str) -> list[str]:
     """Build the persistent-worker invocation. Module-level seam so tests can
     swap in a stub executable without touching the process-management
     machinery (mirrors the old _demucs_cmd seam)."""
-    return [sys.executable, "-m", "app.pipeline.demucs_worker", device]
+    from app.core.amd_directml import directml_python
+
+    python = directml_python() if device == "directml" else sys.executable
+    if not python:
+        raise RuntimeError("STEMDECK_DIRECTML_PYTHON is not configured")
+    if device == "directml":
+        from app.core import amd_directml
+
+        return [python, str(Path(amd_directml.__file__).resolve()), "--worker"]
+    return [python, "-m", "app.pipeline.demucs_worker", device]
 
 
 def _kill_worker() -> None:

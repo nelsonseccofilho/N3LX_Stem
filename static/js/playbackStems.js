@@ -9,6 +9,8 @@ function playable(stem) {
   return !!stem?.name && !!stem?.url;
 }
 
+import { DRUM_STEMS, isPercussion } from "./constants.js";
+
 function sourceSpec(stem, controlName = stem.name, pitched = stem.name !== "drums") {
   return {
     name: stem.name,
@@ -16,7 +18,7 @@ function sourceSpec(stem, controlName = stem.name, pitched = stem.name !== "drum
     controlName,
     // Never allow the drums stem onto the pitched bus, even if a future caller
     // supplies a mistaken override.
-    pitched: stem.name !== "drums" && pitched !== false,
+    pitched: !isPercussion(stem.name) && pitched !== false,
   };
 }
 
@@ -41,6 +43,8 @@ export function buildPlaybackStems(rawStems, visibleStems, baseStemNames) {
   if (dedicatedNames.has("lead_vocals") && dedicatedNames.has("backing_vocals")) {
     dedicatedNames.add("vocals");
   }
+
+  if (DRUM_STEMS.every((n) => dedicatedNames.has(n))) dedicatedNames.add("drums");
 
   const complementNames = baseStemNames.filter((name) => !dedicatedNames.has(name));
   if (complementNames.length === 0) return result;

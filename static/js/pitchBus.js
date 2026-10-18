@@ -6,6 +6,8 @@
 // audio engines have to agree on that mapping exactly, which is why it lives
 // here rather than twice.
 
+import { isPercussion } from "./constants.js";
+
 export const PITCH_MIN = -6;
 export const PITCH_MAX = 6;
 export const INPUT_COUNT = PITCH_MAX - PITCH_MIN + 1;
@@ -32,7 +34,7 @@ export function clampPitch(semitones) {
  * that still has drums mixed into it.
  */
 export function effectivePitch(name, semitones, pitchable) {
-  if (name === "drums" || pitchable === false) return 0;
+  if (isPercussion(name) || pitchable === false) return 0;
   return clampPitch(semitones);
 }
 
@@ -50,7 +52,7 @@ export function inputForPitch(semitones) {
  *
  * AudioWorklet is a secure-context API. A browser on http://<lan-ip> is never
  * given it, so the SoundTouch stage cannot be built at all -- which is the
- * common case by far, StemDeck hosted on the network and opened from another
+ * common case by far, N3LX_Stem hosted on the network and opened from another
  * machine. "Needs Web Audio" sent those people looking for a missing browser
  * feature when Web Audio was working fine and the origin was the problem
  * (#552). Only on an already-secure origin is a genuine worklet failure the

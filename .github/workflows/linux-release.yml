@@ -21,6 +21,7 @@ concurrency:
 
 jobs:
   build-and-upload:
+    if: github.repository == 'stemdeckapp/stemdeck'
     # Runner must be linux/x64 with rustup, Node.js, Docker, and sudo apt access.
     runs-on: [self-hosted, linux, x64]
     timeout-minutes: 90

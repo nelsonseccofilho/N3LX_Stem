@@ -20,7 +20,7 @@
 // into main.js; a shared module is what lets the two of them agree without a
 // cycle.
 import { selectedStems, vocalSplitMode } from "./state.js";
-import { STEM_NAMES } from "./constants.js";
+import { STEM_NAMES, defaultSeparationProfile } from "./constants.js";
 
 /**
  * Point every control in the Extract row at the current selection.
@@ -29,8 +29,14 @@ import { STEM_NAMES } from "./constants.js";
  * optional, so an early call is a no-op rather than a throw.
  */
 export function refreshStemChoiceVisuals() {
+  const complete = defaultSeparationProfile === "complete";
+  const badge = document.getElementById("separationProfileBadge");
+  if (badge) { badge.textContent = complete ? "Completo · até 15 pistas" : "Básico · 6 grupos"; badge.hidden = false; }
+  const allBtn = document.getElementById("stemAllBtn");
+  if (allBtn) allBtn.disabled = complete;
   for (const btn of document.querySelectorAll(".stem-choice[data-stem]")) {
-    btn.setAttribute("aria-pressed", String(selectedStems.has(btn.dataset.stem)));
+    btn.setAttribute("aria-pressed", String(complete || selectedStems.has(btn.dataset.stem)));
+    btn.disabled = complete;
   }
 
   // Derived, never stored: All is pressed when every stem is, and that is the
@@ -38,7 +44,7 @@ export function refreshStemChoiceVisuals() {
   // what stops it drifting from the chips beside it.
   document
     .getElementById("stemAllBtn")
-    ?.setAttribute("aria-pressed", String(selectedStems.size === STEM_NAMES.length));
+    ?.setAttribute("aria-pressed", String(complete || selectedStems.size === STEM_NAMES.length));
 
   // Nothing selected is a real state the row can be left in, and the server
   // reads an empty list as "all of them" (app/api/jobs.py). Submitting from
@@ -52,7 +58,7 @@ export function refreshStemChoiceVisuals() {
   // the record of which of the two reasons applies.
   const submit = document.getElementById("submit");
   if (submit) {
-    submit.disabled = selectedStems.size === 0 || submit.classList.contains("loading");
+    submit.disabled = (!complete && selectedStems.size === 0) || submit.classList.contains("loading");
   }
 
   // Combined / Lead + Backing carries the whole of the vocals decision, so
@@ -64,11 +70,12 @@ export function refreshStemChoiceVisuals() {
   // vocals back on returns to the way they were last asked for.
   const wrap = document.getElementById("vocalModeToggle");
   if (!wrap) return;
-  const hasVocals = selectedStems.has("vocals");
+  const hasVocals = complete || selectedStems.has("vocals");
   for (const btn of wrap.querySelectorAll(".vocal-mode-btn")) {
+    btn.disabled = complete;
     btn.setAttribute(
       "aria-pressed",
-      String(hasVocals && btn.dataset.mode === vocalSplitMode),
+      String(hasVocals && btn.dataset.mode === (complete ? "split" : vocalSplitMode)),
     );
   }
 }

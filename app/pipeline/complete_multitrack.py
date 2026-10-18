@@ -16,7 +16,9 @@ import soundfile as sf
 
 from app.core.config import STEM_NAMES, TIMEOUT_FFMPEG, ffmpeg_executable
 from app.core.models import Job, JobCancelled, _set
+from app.core.processing_progress import begin_step, clear_fraction, warn_step
 from app.core.studio import DETAIL_LABELS, DRUM_STEMS
+from app.core.worker_progress import run_progress_worker
 from app.pipeline.cancel import check_cancel, run_registered
 from app.pipeline.vocal_split import split_vocals
 
@@ -27,6 +29,7 @@ BLOCK = 262144
 
 
 def _warn(job: Job, text: str, error: Exception) -> None:
+    warn_step(job)
     logger.warning("[%s] %s: %s", job.id, text, error, exc_info=True)
     _set(job, separation_warnings=[*job.separation_warnings, text])
 
@@ -110,7 +113,7 @@ def _publish_group(
 def _split_drums(job: Job, stems: Path, scratch: Path) -> None:
     check_cancel(job)
     timeout = max(1800, int((job.duration_sec or 0) * 12) + 600)
-    result = run_registered(
+    result = run_progress_worker(
         job,
         [
             sys.executable,
@@ -149,7 +152,7 @@ def _manifest(job: Job, stems: Path) -> None:
     }
     names = active_names(stems)
     notice = (
-        f"Completo · {len(names)} pistas. Guitarras permanecem agrupadas; sem os efeitos do REAPER."
+        f"Completo · {len(names)} pistas. Guitarras permanecem agrupadas."
     )
     if job.separation_warnings:
         notice += " Atenção: " + " ".join(job.separation_warnings)
@@ -177,12 +180,14 @@ def complete_multitrack(job: Job, source: Path, stems: Path) -> None:
         drum_dir = scratch / "drums"
         drum_dir.mkdir()
         started = time.monotonic()
+        begin_step(job, "vocals")
         _set(job, stage="Separating lead and backing vocals...", vocal_split="running")
         try:
             shutil.copy2(stems / "vocals.wav", voice_dir / "vocals.wav")
             check_cancel(job)
             split_vocals(job, voice_dir)
             check_cancel(job)
+            clear_fraction(job)
             _publish_group(job, voice_dir, VOICE_STEMS, "vocals", "residual_vocals", stems)
             _set(job, vocal_split="done")
         except JobCancelled:
@@ -196,9 +201,11 @@ def complete_multitrack(job: Job, source: Path, stems: Path) -> None:
             "vocal_split_auto": time.monotonic() - started,
         }
         started = time.monotonic()
+        begin_step(job, "drums")
         _set(job, stage="Separating six drum pieces (CPU)...")
         try:
             _split_drums(job, stems, drum_dir)
+            clear_fraction(job)
             _publish_group(job, drum_dir, DRUM_STEMS, "drums", "residual_drums", stems)
         except JobCancelled:
             raise
@@ -209,6 +216,7 @@ def complete_multitrack(job: Job, source: Path, stems: Path) -> None:
             **(job.stage_timings or {}),
             "drum_split_cpu": time.monotonic() - started,
         }
+        begin_step(job, "reconstruct")
         _set(job, stage="Preserving reconstruction residues...")
         try:
             info = sf.info(stems / "drums.wav")

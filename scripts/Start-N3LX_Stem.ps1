@@ -1,4 +1,4 @@
-param([switch]$NoBrowser, [int]$Port = 8000, [string]$Adapter = 'RX 6600M')
+param([switch]$NoBrowser, [switch]$Browser, [int]$Port = 8000, [string]$Adapter = 'RX 6600M')
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $repo
@@ -36,4 +36,13 @@ $settings = Invoke-RestMethod "$url/api/settings" -TimeoutSec 60
 if ($settings.demucs_devices_available -notcontains 'directml') { throw 'A RX6600M nao passou no teste DirectML. Consulte data\logs.' }
 Invoke-RestMethod "$url/api/settings" -Method Post -ContentType 'application/json' -Body '{"demucs_device":"directml"}' | Out-Null
 Write-Output "N3LX_Stem pronto: $url - AMD / DirectML"
-if (-not $NoBrowser) { Start-Process $url }
+if (-not $NoBrowser) {
+    if ($Browser) { Start-Process $url }
+    else {
+        $desktopDir = Join-Path $repo 'desktop-app'
+        $electron = Join-Path $desktopDir 'node_modules\electron\dist\electron.exe'
+        if (-not (Test-Path -LiteralPath $electron)) { throw 'Execute Setup-N3LX_Stem.cmd -DesktopOnly para preparar o aplicativo.' }
+        Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue
+        Start-Process -FilePath $electron -WorkingDirectory $repo -ArgumentList @(('"' + $desktopDir + '"'), "--port=$Port")
+    }
+}

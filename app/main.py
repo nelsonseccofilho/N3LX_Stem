@@ -304,6 +304,34 @@ def index(request: Request) -> FileResponse:
     return FileResponse(STATIC_DIR / page)
 
 
+@app.get("/api/ui-store", tags=["settings"])
+async def get_ui_store(request: Request) -> dict:
+    if not _is_host_request(request.client.host if request.client else None):
+        raise HTTPException(status_code=403, detail="Local preferences only")
+    from app.core.ui_store import read_values
+
+    return {"values": read_values()}
+
+
+@app.post("/api/ui-store", tags=["settings"])
+async def update_ui_store(request: Request) -> dict:
+    if not _is_host_request(request.client.host if request.client else None):
+        raise HTTPException(status_code=403, detail="Local preferences only")
+    from app.core.ui_store import update_values
+
+    raw = await request.body()
+    if len(raw) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Preferences too large")
+    try:
+        body = json.loads(raw)
+        if not isinstance(body, dict):
+            raise ValueError("Expected an object")
+        update_values(body.get("values"), backup=body.get("migration") is True)
+    except (ValueError, TypeError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return {"ok": True}
+
+
 @app.get("/health", include_in_schema=False)
 def health_root() -> dict[str, object]:
     return health()

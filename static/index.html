@@ -286,6 +286,15 @@
       </div>
 
       <!-- ══ BODY ══ -->
+      <section id="processingPanel" class="processing-panel" hidden aria-label="Progresso da extração">
+        <div class="processing-heading">
+          <div><div class="processing-title"></div><div class="processing-current" role="status" aria-live="polite"></div></div>
+          <div class="processing-actions"><span class="processing-time"></span><button class="processing-cancel" type="button">Cancelar extração</button><button class="processing-close" type="button" hidden>Fechar aviso</button></div>
+        </div>
+        <ol class="processing-steps" aria-label="Etapas da extração"></ol>
+        <div class="processing-bottom"><span class="processing-completed"></span><progress max="100" aria-label="Processamento da etapa atual"></progress><span class="processing-note"></span></div>
+      </section>
+
       <div class="daw-body">
 
         <!-- ── Sidebar / Catalog ── -->

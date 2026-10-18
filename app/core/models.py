@@ -200,6 +200,8 @@ def _set(job: Job, **fields: object) -> None:
     a snapshot taken mid-call (torn read) sees a version that doesn't match
     the version read before serializing, so the SSE loop discards it and
     re-serializes once this call has fully landed."""
+    if fields.get("status") in FINISHED_STATUSES and job.processing:
+        job.processing = {**job.processing, "finished_at": time.time()}
     for k, v in fields.items():
         if k == "stage":
             job.stage_message = v  # type: ignore[assignment]
@@ -228,6 +230,7 @@ class Job:
     status: JobStatus = "queued"
     progress: float = 0.0
     stage_message: str = "Queued"
+    processing: dict[str, Any] = field(default_factory=dict)
     title: str | None = None
     duration_sec: float | None = None
     thumbnail: str | None = None
@@ -371,6 +374,8 @@ class Job:
 
     @property
     def progress_indeterminate(self) -> bool:
+        if self.processing and self.status not in FINISHED_STATUSES:
+            return self.processing.get("fraction") is None
         return (
             self.separation_profile == "complete"
             and self.status not in FINISHED_STATUSES
@@ -383,7 +388,10 @@ class Job:
         )
 
     def to_state(self) -> dict[str, Any]:
+        from app.core.processing_progress import snapshot
+
         return {
+            "processing": snapshot(self),
             "job_id": self.id,
             "status": self.status,
             "progress": self.progress,
@@ -433,7 +441,10 @@ class Job:
         """The compact record the queue view needs. Deliberately not to_state():
         the queue stream carries every waiting job several times a second, and
         stems/sections/analysis are only meaningful once a job is done."""
+        from app.core.processing_progress import snapshot
+
         return {
+            "processing": snapshot(self),
             "job_id": self.id,
             "status": self.status,
             "progress": self.progress,

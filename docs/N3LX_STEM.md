@@ -6,6 +6,7 @@
 - Worker AMD: `.venv-directml`, Torch 2.4.1, DirectML 0.2.5.dev240914, dependências em `scripts/requirements-directml.txt`.
 - FFT e operações complexas ficam na CPU; as camadas reais da rede HTDemucs usam DirectML. Esta adaptação foi validada com RX 6600M, sem prometer suporte a toda GPU AMD.
 - `Start-N3LX_Stem.cmd` usa caminhos relativos, biblioteca em `data`, servidor restrito ao endereço local e log/PID em `data/logs`. Não reinstala dependências a cada abertura.
+- Janela desktop: Electron 44.3.0 em `desktop-app`, Node.js 22.12+ para instalar, perfil local em `data/desktop`. Não depende do N3LX_Voice nem do navegador padrão. O atalho do menu Iniciar abre diretamente esta janela e o aplicativo prepara o servidor quando necessário.
 - Para outro adaptador já compatível, execute `scripts/Start-N3LX_Stem.ps1 -Adapter 'nome do adaptador'`. Para outra porta, use `-Port 8001`.
 
 `Setup-N3LX_Stem.cmd` instala a aplicação pelo lock e o worker pelos pins, verifica FFmpeg/FFprobe e baixa os modelos especializados. `-VerifyOnly` verifica os ambientes existentes sem instalar. `-SkipDependencies` mantém os ambientes existentes e permite preparar os modelos. A instalação limpa ainda precisa de validação em outra máquina; a verificação local reutilizou os ambientes funcionais existentes.
@@ -32,8 +33,17 @@ O layout `studio.json` também permite carregar pistas renderizadas externamente
 
 Teste musical de 12 segundos: 15 pistas, estéreo, 44.1 kHz, 529200 quadros, sem avisos, DirectML na etapa principal. Soma das pistas com erro máximo 0.0 contra a referência decodificada nesse teste, ZIP com 15 entradas e integridade aprovada. Isso demonstra alinhamento e preservação, não isolamento perfeito. Áudio e dados da sessão permanecem privados no computador.
 
-Testes: `python -m pytest tests/test_directml_local.py tests/test_studio_local.py tests/test_complete_multitrack_local.py`; frontend: `node tests/js/studio-lanes.test.mjs`. Testes gerais herdados também podem ser executados, mas não equivalem a validação de hardware.
+Testes: `python -m pytest tests/test_directml_local.py tests/test_studio_local.py tests/test_complete_multitrack_local.py tests/test_processing_progress.py tests/test_ui_store.py`; frontend: `node tests/js/studio-lanes.test.mjs`. Testes gerais herdados também podem ser executados, mas não equivalem a validação de hardware.
 
 ## Distribuição
 
-Esta versão é distribuída como código-fonte para o fluxo Windows acima. Scripts, shells nativos, Docker e empacotamento herdados permanecem para referência e evolução, sem validação dos novos recursos nesses formatos. Os workflows herdados só executam no repositório original; o workflow N3LX executa verificações focadas sem publicar binários ou containers. Atualizações binárias automáticas foram desativadas para não substituir o worker AMD por uma distribuição incompatível. Para atualizar o código, revise as alterações locais antes de usar Git.
+Esta versão é distribuída como código-fonte para o fluxo Windows acima. O novo shell Electron foi validado localmente no Windows. Scripts, shell Tauri, Docker e empacotamento herdados permanecem para referência e evolução, sem validação dos novos recursos nesses formatos. Os workflows herdados só executam no repositório original; o workflow N3LX executa verificações focadas sem publicar binários ou containers. Atualizações binárias automáticas foram desativadas para não substituir o worker AMD por uma distribuição incompatível. Para atualizar o código, revise as alterações locais antes de usar Git.
+
+
+## Progresso e continuidade
+
+O modo Completo tem sete etapas; o Básico tem quatro. A fila e a API do trabalho expõem `processing` com etapa atual, total, estados, timestamps e fração medida quando disponível. Os contadores vêm dos iteradores dos modelos: Demucs considera modelos e shifts, Karaoke considera as duas passagens MDX, DrumSep conta seus batches. O percentual representa o processamento do modelo; leitura e gravação das pistas podem continuar sem percentual. Falhas opcionais mantêm aviso na etapa e preservam o grupo original.
+
+A janela e o navegador compartilham preferências próprias do aplicativo em `data/ui-store.json`, incluindo organização, lixeira e mixagens. Credenciais e perfis do navegador não são copiados. Para migrar explicitamente a organização de uma sessão antiga do navegador, abra nela `http://127.0.0.1:8000/?migrate-ui=1` uma vez e reabra o aplicativo. O parâmetro desaparece ao terminar; preferências anteriores do servidor recebem uma cópia de segurança. Somente chaves permitidas do N3LX_Stem são lidas e o destino é o servidor local.
+
+A extração de teste de 12 segundos foi concluída após a mudança, com os sete estados, contadores intermediários nos três modelos, DirectML sem fallback, 15 pistas alinhadas, erro máximo de reconstrução 0.0 e ZIP íntegro. Isso não é um benchmark de tempo nem prova de isolamento perfeito dos instrumentos.

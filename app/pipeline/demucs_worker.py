@@ -59,17 +59,23 @@ def _run_one_job(model, device: str, req: dict) -> None:
     ref = wav.mean(0)
     wav = wav - ref.mean()
     wav = wav / ref.std()
-    sources = apply_model(
-        model,
-        wav[None],
-        device=device,
-        shifts=shifts,
-        split=True,
-        overlap=0.25,
-        progress=True,
-        num_workers=0,
-        segment=None,
-    )[0]
+    import demucs.apply
+
+    from app.core.worker_progress import report_iterations
+
+    passes = max(1, shifts) * len(getattr(model, "models", [model]))
+    with report_iterations(demucs.apply.tqdm, passes=passes):
+        sources = apply_model(
+            model,
+            wav[None],
+            device=device,
+            shifts=shifts,
+            split=True,
+            overlap=0.25,
+            progress=True,
+            num_workers=0,
+            segment=None,
+        )[0]
     sources = sources * ref.std()
     sources = sources + ref.mean()
 

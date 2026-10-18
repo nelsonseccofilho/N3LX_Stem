@@ -59,10 +59,15 @@ def _run(device: str, vocals_path: str, out_dir: str) -> None:
     # the input that wasn't lead vocal -- since the input here is already an
     # isolated vocals stem, that's the backing vocals/harmonies). Renaming at
     # the library boundary avoids depending on its default filename format.
-    separator.separate(
-        vocals_path,
-        {"Vocals": "lead_vocals", "Instrumental": "backing_vocals"},
-    )
+    from audio_separator.separator.architectures import mdx_separator
+
+    from app.core.worker_progress import report_iterations
+
+    with report_iterations(mdx_separator, passes=2):
+        separator.separate(
+            vocals_path,
+            {"Vocals": "lead_vocals", "Instrumental": "backing_vocals"},
+        )
 
 
 def main() -> None:

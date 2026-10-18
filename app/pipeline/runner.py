@@ -176,15 +176,21 @@ def _run_common(job: Job, source: Path, job_dir: Path) -> None:
     upload pipelines after their respective source acquisition steps."""
     _check_cancel(job)
     mark = time.monotonic()
+    from app.core.processing_progress import begin_step, clear_fraction
+
+    begin_step(job, "analyze")
     analyze(job, source)
     mark = _lap(job, "analyze", mark)
     _check_cancel(job)
+    begin_step(job, "separate")
     stems_root = separate(job, source, job_dir)
+    clear_fraction(job)
     mark = _lap(job, "separate", mark)
     found = collect(job, stems_root, job_dir)
     stems_dir = job_dir / "stems"
     if job.separation_profile == "complete":
         complete_multitrack(job, source, stems_dir)
+    begin_step(job, "finalize")
     # Deleting the source is the bulk of disk reclaim per job, and it happens
     # before the ffmpeg amix steps below in case scratch space is tight. But
     # only a job that can fetch its source again is allowed to give it up.
@@ -474,6 +480,9 @@ async def _run_async(
     thread, then handles success / cancel / error outcomes uniformly."""
     try:
         async with _pipeline_lock:
+            from app.core.processing_progress import begin_step
+
+            begin_step(job, "prepare")
             await asyncio.to_thread(blocking_fn, job, *fn_args, job_dir)
     except Exception as e:
         if not isinstance(e, JobCancelled) and not job.cancel_requested:

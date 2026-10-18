@@ -109,6 +109,8 @@ def test_payload_is_compact(client):
         "job_id",
         "status",
         "progress",
+        "progress_indeterminate",
+        "processing",
         "stage",
         "title",
         "thumbnail",
@@ -116,6 +118,8 @@ def test_payload_is_compact(client):
         "error",
         "position",
     }
+
+    assert rec["processing"] is None
 
 
 # ── GET /api/queue/events ────────────────────────────────────────────────────

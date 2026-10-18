@@ -1,3 +1,5 @@
+import { sharedGet, sharedSet } from "./sharedUiStore.js";
+
 // ─── Persistent store (tauri-plugin-store via custom commands) ───
 //
 // Falls back to localStorage when running outside Tauri (browser dev mode).
@@ -12,6 +14,8 @@ export async function storeGet(key, fallback = null) {
     } catch (e) { console.warn("[store] get failed for", key, e); return fallback; }
   }
   try {
+    const shared = await sharedGet(key);
+    if (shared !== undefined) return shared;
     const raw = localStorage.getItem(key);
     return raw !== null ? JSON.parse(raw) : fallback;
   } catch (e) { console.warn("[store] localStorage get failed for", key, e); return fallback; }
@@ -24,7 +28,7 @@ export async function storeSet(key, value) {
     } catch (e) { console.warn("[store] set failed for", key, e); }
     return;
   }
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { console.warn("[store] localStorage set failed", e); }
+  try { localStorage.setItem(key, JSON.stringify(value)); await sharedSet(key, value); } catch (e) { console.warn("[store] localStorage set failed", e); }
 }
 
 // Debounced variant — coalesces rapid writes (e.g. mixer slider moves) into

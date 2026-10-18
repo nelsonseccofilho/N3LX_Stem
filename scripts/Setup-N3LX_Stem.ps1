@@ -1,7 +1,19 @@
-param([switch]$VerifyOnly, [switch]$SkipDependencies, [switch]$SkipModelDownload)
+param([switch]$DesktopOnly, [switch]$VerifyOnly, [switch]$SkipDependencies, [switch]$SkipModelDownload)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $repo
+function Install-Desktop {
+    Get-Command npm.cmd -ErrorAction Stop | Out-Null
+    Push-Location (Join-Path $repo 'desktop-app')
+    try {
+        & npm.cmd ci
+        if ($LASTEXITCODE -ne 0) { throw 'Could not install the desktop dependencies.' }
+        & node (Join-Path (Get-Location) 'node_modules\electron\install.js')
+        if ($LASTEXITCODE -ne 0) { throw 'Could not download the Electron runtime.' }
+    } finally { Pop-Location }
+    & (Join-Path $PSScriptRoot 'Create-Shortcut.ps1')
+}
+if ($DesktopOnly) { Install-Desktop; exit 0 }
 $python = Join-Path $repo '.venv\Scripts\python.exe'
 $dmlPython = Join-Path $repo '.venv-directml\Scripts\python.exe'
 $env:STEMDECK_DATA_DIR = Join-Path $repo 'data'
@@ -40,4 +52,5 @@ if (-not $VerifyOnly -and -not $SkipModelDownload) {
     & $python (Join-Path $PSScriptRoot 'download-complete-models.py')
     if ($LASTEXITCODE -ne 0) { throw 'Could not download the detailed separation models.' }
 }
+if (-not $VerifyOnly) { Install-Desktop }
 Write-Output 'N3LX_Stem ready. Open Start-N3LX_Stem.cmd.'

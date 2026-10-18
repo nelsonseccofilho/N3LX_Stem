@@ -41,7 +41,12 @@ def main() -> None:
     if not (MODELS_DIR / "audio-separator" / MODEL).is_file():
         raise RuntimeError("DrumSep model missing from the local model cache")
     separator.load_model(model_filename=MODEL)
-    separator.separate(sys.argv[1], {n: "drum_" + n for n in PIECES})
+    from audio_separator.separator.architectures import mdxc_separator
+
+    from app.core.worker_progress import report_iterations
+
+    with report_iterations(mdxc_separator):
+        separator.separate(sys.argv[1], {n: "drum_" + n for n in PIECES})
     if not all((Path(sys.argv[2]) / ("drum_" + n + ".wav")).is_file() for n in PIECES):
         raise RuntimeError("DrumSep did not produce all six pieces")
     print("DrumSep complete (CPU)", file=sys.stderr, flush=True)

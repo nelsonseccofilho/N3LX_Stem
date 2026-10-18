@@ -200,6 +200,17 @@ def _run_demucs(job: Job, source: Path, job_dir: Path, device: str) -> tuple[int
                     tail.append(str(msg))
                     job_ok = False
                     break
+                from app.core.processing_progress import consume_progress
+
+                if consume_progress(job, line):
+                    if not startup_recorded:
+                        startup_recorded = True
+                        if job.stage_timings is None:
+                            job.stage_timings = {}
+                        job.stage_timings["separate_startup"] = round(
+                            time.monotonic() - spawn_at, 1
+                        )
+                    continue
                 m = _PCT_RE.search(line)
                 if m:
                     if not startup_recorded:

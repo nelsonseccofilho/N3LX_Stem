@@ -118,6 +118,10 @@ def split_vocals(job: Job, stems_dir: Path) -> list[str]:
             line = raw_line.strip()
             if not line:
                 continue
+            from app.core.processing_progress import consume_progress
+
+            if consume_progress(job, line):
+                continue
             if line == "@@DONE@@":
                 job_ok = True
                 break

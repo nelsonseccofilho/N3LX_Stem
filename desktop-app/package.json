@@ -1,0 +1,15 @@
+{
+  "name": "n3lx-stem-desktop",
+  "productName": "N3LX_Stem",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "Native desktop window for N3LX_Stem",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "44.3.0"
+  }
+}

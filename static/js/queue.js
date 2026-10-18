@@ -8,7 +8,7 @@
 // This module owns no DOM. It holds the latest snapshot and tells subscribers
 // when it changes; catalog.js decides what that looks like.
 
-import { t } from "./i18n.js";
+import { t, getLanguage } from "./i18n.js";
 
 const POLL_MS = 2000;
 const MAX_SSE_ATTEMPTS = 6;
@@ -41,6 +41,13 @@ export function ordinal(n) {
  *  percentage during separation ("Separating 42%"), so only append one when it
  *  does not, rather than rendering "Separating 42% 42%". */
 export function runningLabel(job) {
+  if (job?.processing) {
+    const p = job.processing;
+    const names = { prepare:"Preparar áudio", analyze:"Analisar música", separate:"Separar instrumentos", vocals:"Separar vozes", drums:"Detalhar bateria", reconstruct:"Preservar resíduos", finalize:"Finalizar pistas" };
+    const pt = getLanguage().startsWith("pt");
+    const english = { prepare:"Prepare audio", analyze:"Analyze song", separate:"Separate instruments", vocals:"Separate vocals", drums:"Detail drums", reconstruct:"Preserve residues", finalize:"Finalize tracks" };
+    return `${pt ? "Etapa" : "Step"} ${p.step_number}/${p.total_steps} · ${(pt ? names : english)[p.step] || p.step}${p.fraction == null ? "" : ` · ${Math.floor(p.fraction * 100)}%`}`;
+  }
   const stage = (job?.stage || t("job.working")).replace(/\.\.\.$/, "");
   if (job?.progress_indeterminate || /\d\s*%/.test(stage)) return stage;
   const pct = Math.round((job?.progress || 0) * 100);
@@ -68,7 +75,8 @@ export function queueRowStates(snap = snapshot) {
     rows.set(snap.running.job_id, {
       state: "running",
       label: runningLabel(snap.running),
-      progress: snap.running.progress || 0,
+      progress: snap.running.processing?.fraction ?? snap.running.progress ?? 0,
+      indeterminate: snap.running.processing ? snap.running.processing.fraction == null : !!snap.running.progress_indeterminate,
       position: 1,
     });
   }

@@ -472,9 +472,9 @@ function applyState(state) {
   // Stage label is owned by the phrase-rotation timer below; we don't
   // overwrite it from each SSE tick. The truthful backend stage goes
   // to the small detail line instead.
-  jobDetailEl.textContent = state.stage || "";
+  jobDetailEl.textContent = state.processing ? `Etapa ${state.processing.step_number} de ${state.processing.total_steps}` : state.stage || "";
   if (state.progress_indeterminate) progressEl.removeAttribute("value");
-  else progressEl.value = Math.round((state.progress || 0) * 100);
+  else progressEl.value = Math.round((state.processing?.fraction ?? state.progress ?? 0) * 100);
 
   // Cancel button is visible exactly while the job is in a non-terminal state.
   const terminal = TERMINAL_STATUSES.has(state.status);

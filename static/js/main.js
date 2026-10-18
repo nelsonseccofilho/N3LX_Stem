@@ -21,6 +21,7 @@ import { initI18n, applyTranslations, t, plural, onLanguageChange } from "./i18n
 import { initFooterFit, refitFooter } from "./footerFit.js";
 import { initArtistInfo } from "./artistInfo.js";
 import { initLyrics } from "./lyrics.js";
+import { initProcessingProgress } from "./processingProgress.js";
 import { initHelpMode } from "./helpMode.js";
 
 // ─── Stem choice toggles on the import page ───
@@ -488,6 +489,7 @@ onLanguageChange(fitStemChips);
   // collectDiagnostics is injected rather than imported by notifications.js,
   // which would make the two modules import each other.
   await initNotifications({ diagnostics: collectDiagnostics });
+  initProcessingProgress();
   await initCatalog();
 })().catch(console.error);
 

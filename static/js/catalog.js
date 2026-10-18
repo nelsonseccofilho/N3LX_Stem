@@ -2439,6 +2439,7 @@ function decorateRow(el, rowState) {
     sub.insertAdjacentHTML("afterend", progressBarHtml());
     bar = el.querySelector(".cat-progress");
   }
+  bar?.classList.toggle("indeterminate", !!rowState.indeterminate);
   const fill = bar?.querySelector(".cat-progress-fill");
   if (fill) fill.style.width = `${Math.round(rowState.progress * 100)}%`;
 }
@@ -2729,7 +2730,8 @@ function updateQueueRows(snap = getQueueSnapshot()) {
     const labelEl = el.querySelector(".cat-queue-label");
     if (labelEl && labelEl.textContent !== label) labelEl.textContent = label;
     const fill = el.querySelector(".cat-progress-fill");
-    if (fill) fill.style.width = `${Math.round((entry.job.progress || 0) * 100)}%`;
+    fill?.parentElement.classList.toggle("indeterminate", entry.job.processing ? entry.job.processing.fraction == null : !!entry.job.progress_indeterminate);
+    if (fill) fill.style.width = `${Math.round((entry.job.processing?.fraction ?? entry.job.progress ?? 0) * 100)}%`;
   });
 }
 

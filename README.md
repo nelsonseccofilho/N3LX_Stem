@@ -4,7 +4,7 @@ Separação local de músicas em até **15 pistas alinhadas**, com bateria detal
 
 ## Usar no Windows
 
-1. Instale **Python 3.12 de 64 bits**, com o inicializador `py`, **Git** e **FFmpeg/FFprobe** disponíveis no PATH. Mantenha o driver AMD atualizado.
+1. Instale **Python 3.12 de 64 bits**, com o inicializador `py`, **Node.js 22.12 ou superior** (com npm), **Git** e **FFmpeg/FFprobe** disponíveis no PATH. Mantenha o driver AMD atualizado.
 2. Clone este repositório em uma pasta com permissão de escrita:
 
    ```powershell
@@ -15,7 +15,7 @@ Separação local de músicas em até **15 pistas alinhadas**, com bateria detal
 
 3. Abra **Start-N3LX_Stem.cmd**, carregue seu áudio e clique em **Extrair stems**. Depois exporte as pistas em ZIP. Para encerrar o servidor e seus processos, use **Stop-N3LX_Stem.cmd**.
 
-O endereço local padrão é `http://127.0.0.1:8000`. A primeira instalação baixa dependências e modelos e pode demorar. O Demucs baixa seu modelo na primeira extração. Não há instalador binário próprio publicado neste momento.
+O atalho abre uma janela própria do **N3LX_Stem**, sem abas ou barra de endereço. O aplicativo usa Electron, instalado separadamente dos modelos e do worker AMD. O endereço do serviço local continua sendo `http://127.0.0.1:8000`. A primeira instalação baixa dependências e modelos e pode demorar. O Demucs baixa seu modelo na primeira extração. A distribuição é por código-fonte e scripts; o runtime Electron é baixado na instalação. Para atualizar apenas a janela em uma instalação existente, execute `Setup-N3LX_Stem.cmd -DesktopOnly`.
 
 ## Padrão completo
 
@@ -27,6 +27,12 @@ O endereço local padrão é `http://127.0.0.1:8000`. A primeira instalação ba
 O inicializador usa **Completo + Best** como padrão de uma instalação nova. Preferências já salvas continuam sendo respeitadas; altere em Configurações → Geral. A separação principal usa DirectML; os modelos especializados de voz e bateria usam CPU. Se uma etapa adicional falhar, o grupo original permanece disponível e um aviso é mostrado.
 
 As pistas efetivas aparecem no mixer e na área de pistas prontas. O ZIP completo evita duplicar os grupos de voz e bateria que já foram subdivididos. O aplicativo mantém fila, biblioteca persistente, controles de mixagem e configurações do projeto original.
+
+## Acompanhar a extração
+
+O painel mostra **7 etapas** no modo Completo: preparar áudio, analisar música, separar instrumentos, separar vozes, detalhar bateria, preservar resíduos e finalizar pistas. Os três modelos informam percentuais medidos pelos trechos processados, incluindo todas as passagens configuradas. As demais partes mostram atividade e tempo decorrido, sem percentual ou previsão inventados. A contagem de etapas concluídas não é uma estimativa do tempo restante.
+
+Fechar a janela mantém o processamento local. Você pode reabrir o aplicativo para acompanhar a fila; use **Stop-N3LX_Stem.cmd** para encerrar o serviço e os workers.
 
 ## Limites
 

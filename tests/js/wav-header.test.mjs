@@ -63,6 +63,7 @@ function buildWav({ pre = [], fmt = fmtPlain(), bits = BITS, dataSizeOverride = 
   const audio = Buffer.alloc(FRAMES * bytesPerFrame);
   for (let i = 0; i < FRAMES; i++) {
     if (bits === 16) audio.writeInt16LE(((i % 100) - 50) * 100, i * bytesPerFrame);
+    else if (bits === 24) audio.writeIntLE(((i % 100) - 50) * 10000, i * bytesPerFrame, 3);
     else audio.writeFloatLE(0.1, i * bytesPerFrame);
   }
   const dataHdr = Buffer.alloc(8);
@@ -152,12 +153,10 @@ const cases = [
   // that it reads as 0xfffe and is rejected here.
   ["float32",                         buildWav({ fmt: fmtPlain(3, 32), bits: 32 }),     true],
   ["EXTENSIBLE float32",              buildWav({ fmt: fmtExtensible(3, 32), bits: 32 }), true],
-  // Rejections.
-  // Neither depth can be turned into samples, and accepting them was worse than
-  // rejecting: the header measured fine, so every chunk came back empty and the
-  // scheduler re-fetched the same range on every frame. Rejected, they fall
-  // through to the full-decode engine, whose decoder handles both.
-  ["24-bit PCM",                      buildWav({ fmt: fmtPlain(1, 24), bits: 24 }),     false],
+  ["24-bit PCM",                      buildWav({ fmt: fmtPlain(1, 24), bits: 24 }),     true],
+  ["EXTENSIBLE pcm24",                buildWav({ fmt: fmtExtensible(1, 24), bits: 24 }), true],
+  // Unsupported depths/encodings must fall through to full decode.
+  ["non-PCM 16-bit encoding",          buildWav({ fmt: fmtPlain(6, 16) }),              false],
   ["32-bit integer PCM",              buildWav({ fmt: fmtPlain(1, 32), bits: 32 }),     false],
   ["not a RIFF file",                 Buffer.alloc(4096, 0x41),                         false],
   ["chunk size runs past EOF",        (() => { const w = buildWav({ pre: [junk(64)] });

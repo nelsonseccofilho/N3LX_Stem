@@ -109,8 +109,9 @@ function _parseWavHeader(buf, fileSize = 0) {
   // empty, _scheduledTo never advances, and because an empty result is treated
   // as a transient failure and evicted from the cache, the scheduler re-fetches
   // the same range on every animation frame. Rejecting hands the file to the
-  // full-decode fallback, whose decoder handles 24-bit and integer formats.
-  if (!(bitsPerSample === 16 || (audioFormat === 3 && bitsPerSample === 32))) {
+  // full-decode fallback for other formats the browser decoder may support.
+  if (!((audioFormat === 1 && (bitsPerSample === 16 || bitsPerSample === 24))
+      || (audioFormat === 3 && bitsPerSample === 32))) {
     return { invalid: true };
   }
 
@@ -153,6 +154,18 @@ function _pcmToAudioBuffer(ctx, pcmData, header) {
       for (let ch = 0; ch < channels; ch++) {
         const out = ab.getChannelData(ch);
         for (let i = 0; i < totalSamples; i++) out[i] = src[i * channels + ch] * scale;
+      }
+    }
+  } else if (audioFormat === 1 && bitsPerSample === 24) {
+    // Detailed drums and vocals are exported as packed signed PCM24. Decode
+    // directly so these lanes stay in the same streaming clock as PCM16 bases
+    // and float32 reconstruction residues, without a full-track RAM fallback.
+    const src = new Uint8Array(pcmData);
+    for (let ch = 0; ch < channels; ch++) {
+      const out = ab.getChannelData(ch);
+      for (let i = 0, j = ch * 3; i < totalSamples; i++, j += channels * 3) {
+        const packed = src[j] | (src[j + 1] << 8) | (src[j + 2] << 16);
+        out[i] = ((packed << 8) >> 8) / 8388608;
       }
     }
   } else if (audioFormat === 3 && bitsPerSample === 32) {
@@ -785,7 +798,9 @@ export function createChunkedAudioEngine(stems, { onTime, onEnded, context } = {
     for (const stem of stemMap.values()) {
       if (stem.header) _duration = Math.max(_duration, stem.header.duration);
     }
-    if (!_duration) {
+    // A partial graph sounds like instruments disappeared. Reject the whole
+    // load so the caller can try full decode or display a playback failure.
+    if (unreadable || unreachable || !_duration) {
       _loadError = unreadable
         ? "This track's audio files are in a format N3LX_Stem could not read."
         : unreachable

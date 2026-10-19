@@ -21,4 +21,7 @@ jobs:
       - run: uv sync --frozen --all-extras
       - run: uv run pytest tests/test_directml_local.py tests/test_studio_local.py tests/test_complete_multitrack_local.py tests/test_processing_progress.py tests/test_ui_store.py
       - run: node tests/js/studio-lanes.test.mjs
+      - run: node tests/js/multitrack-playback.test.mjs
+      - run: node tests/js/wav-header.test.mjs
+      - run: node tests/js/audio-routing.test.mjs
       - run: node --check desktop-app/main.cjs

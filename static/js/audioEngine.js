@@ -124,7 +124,7 @@ export function createAudioEngine(stems, { onTime, onEnded, context } = {}) {
   let _loadError = null;
 
   // Decode all stems up front AND load the SoundTouch worklet in parallel.
-  // Resolves true once at least one stem is ready (worklet load is best-effort).
+  // Resolves true once every audible stem is ready (worklet load is best-effort).
   const ready = (async () => {
     // Counted so the failure can name a cause rather than arriving as a silent
     // console warning (#359). A fetch that never landed and a file the decoder
@@ -179,15 +179,17 @@ export function createAudioEngine(stems, { onTime, onEnded, context } = {}) {
       }),
     ]);
 
-    const hasPlaybackTrack = [...tracks.values()].some((track) => !track.visualOnly);
-    if (!hasPlaybackTrack) {
+    const playbackStems = stems.filter((s) => s?.url && !s.visualOnly);
+    const completePlayback = playbackStems.length > 0
+      && playbackStems.every((s) => tracks.has(s.name));
+    if (!completePlayback) {
       _loadError = undecodable
         ? "This track's audio files are in a format N3LX_Stem could not read."
         : unreachable
           ? "Could not load this track's audio files."
           : "This track has no stem files to play.";
     }
-    return hasPlaybackTrack;
+    return completePlayback;
   })();
 
   // Clamped so the reported playhead never reads before the start position.

@@ -8,7 +8,7 @@ import { showPlaybackError, clearPlaybackError, resolvePlaybackSuccess } from ".
 import {
   STEM_NAMES, TRACK_NAMES, EXTRA_STEM_NAMES, STEM_COLORS, PROGRESS_COLOR,
   LOOP_DEFAULT_START_FRAC, LOOP_DEFAULT_END_FRAC, LANE_VOLUME_MAX,
-  effectiveStemOrder, applyStudioLayout, STEM_DISPLAY, DRUM_STEMS,
+  effectiveStemOrder, stemLaneGroups, applyStudioLayout, STEM_DISPLAY, DRUM_STEMS,
 } from "./constants.js";
 import {
   mixerEl, multitrackContainer, bpmChip, keyChip, stemsChip, timeEl,
@@ -96,12 +96,7 @@ const _STEM_ROW_SELECTORS = [
 ];
 
 function applyStemSelectionFilter(presentNames) {
-  // The order for THIS job: STEM_NAMES, with "vocals" swapped for
-  // lead_vocals + backing_vocals when the on-demand split (#275) produced
-  // both. Rows for a name outside `order` (the vocals-family row not in
-  // play for this job) are hidden outright, not just grayed "unavailable" --
-  // unlike the base 6, lead_vocals/backing_vocals aren't part of every job's
-  // contract, so there's no "not selected this time" state for them to be in.
+  // Use the same family order as the waveform stack and ready-lane navigation.
   const order = effectiveStemOrder(presentNames);
   const isVocalFamily = (s) => s === "vocals" || s === "lead_vocals" || s === "backing_vocals";
 
@@ -156,11 +151,7 @@ function applyStemSelectionFilter(presentNames) {
     const stem = row.dataset.stem;
     const inOrder = stem === "original" ? presentNames.has("original") : order.includes(stem);
     const available = presentNames.has(stem);
-    // Mixer rows are built once in renderEmptyShell (original, the base 6,
-    // then lead_vocals/backing_vocals tacked on at the end) and reused across
-    // every job load -- DOM order alone would always put lead_vocals/
-    // backing_vocals last. CSS order (.mixer-column is a column flexbox)
-    // repositions them to match `order` (right after "original") per job.
+    // Keep visual order and keyboard navigation in the same sequence.
     row.style.order = stem === "original" ? "-1" : String(order.indexOf(stem));
     row.classList.toggle("hidden", !inOrder || !visibleMixerSet.has(stem));
     row.classList.toggle("unavailable", !available);
@@ -177,6 +168,11 @@ function applyStemSelectionFilter(presentNames) {
       }
       if ("disabled" in el) el.disabled = !available;
     }
+  }
+  // Move the existing elements, retaining their controls and listeners.
+  for (const name of ["original", ...order]) {
+    const row = mixerEl.querySelector(`.lane-header[data-stem="${name}"]`);
+    if (row) mixerEl.appendChild(row);
   }
   for (const row of document.querySelectorAll(".energy-row[data-stem]")) {
     const stem = row.dataset.stem;
@@ -920,7 +916,9 @@ export function destroyPlayer() {
   updateFooterTrack({});
 }
 
+let _availableLaneState = { stems: [], layout: null };
 function renderAvailableLanes(stems, layout) {
+  _availableLaneState = { stems, layout };
   const root = document.getElementById("availableLanes");
   if (!root) return;
   root.replaceChildren();
@@ -931,11 +929,19 @@ function renderAvailableLanes(stems, layout) {
   heading.textContent = `Pistas prontas · ${stems.length}`;
   root.append(heading);
   const order = effectiveStemOrder(new Set(stems.map((s) => s.name)));
-  for (const name of order.filter((n) => stems.some((s) => s.name === n))) {
+  const names = order.filter((n) => stems.some((s) => s.name === n));
+  const groups = names.some((name) => name.startsWith("studio_") || name === "reaper_master")
+    ? names.map((name) => ({ id: name, names: [name], custom: true }))
+    : stemLaneGroups(names);
+  for (const group of groups) {
+    const name = group.names[0];
     const chip = document.createElement("button");
     chip.type = "button";
     chip.className = "available-lane";
-    chip.textContent = STEM_DISPLAY[name] || name;
+    chip.dataset.group = group.id;
+    const label = group.custom ? (STEM_DISPLAY[name] || name) : t(`stemGroup.${group.id}`);
+    chip.textContent = label + (group.names.length > 1 ? ` · ${group.names.length}` : "");
+    chip.title = group.names.map((member) => STEM_DISPLAY[member] || member).join(" · ");
     chip.style.setProperty("--lane-color", STEM_COLORS[name] || "#a2b9db");
     chip.addEventListener("click", () => {
       const row = mixerEl.querySelector(`[data-stem="${name}"]`);
@@ -987,6 +993,7 @@ export function renderEmptyShell() {
 // clobbers a real, already-loaded track's mixer with the empty shell.
 onLanguageChange(() => {
   if (document.querySelector(".app")?.classList.contains("no-track")) renderEmptyShell();
+  else renderAvailableLanes(_availableLaneState.stems, _availableLaneState.layout);
 });
 
 function renderAllMiniWaves(mt, stems) {

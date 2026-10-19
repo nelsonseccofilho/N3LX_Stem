@@ -45,13 +45,39 @@ export async function syncStemNamesFromAPI() {
   }
 }
 
-// The lane order for a specific job: STEM_NAMES with "vocals" replaced by
-// lead_vocals + backing_vocals when a job's on-demand split (#275) has
-// produced both. `presentNames` is the Set of stem names the job actually
-// has (typically from job.stems). Order matters -- callers use this both to
-// decide what to render and in what sequence (waveform stacking, mixer rows).
+// One shared order for ready-lane navigation, mixer, waveforms and playback.
+// Keep reconstruction residues beside the corresponding source family.
+export const STEM_GROUPS = [
+  { id: "voices", names: ["vocals", "lead_vocals", "backing_vocals"] },
+  { id: "vocalResidual", names: ["residual_vocals"] },
+  { id: "strings", names: ["bass", "guitar"] },
+  { id: "keys", names: ["piano"] },
+  { id: "other", names: ["other"] },
+  { id: "separationResidual", names: ["residual_mix"] },
+  { id: "drums", names: ["drums", ...DRUM_STEMS] },
+  { id: "drumResidual", names: ["residual_drums"] },
+];
+
+export function stemLaneGroups(names) {
+  const remaining = new Set(names);
+  const groups = STEM_GROUPS.flatMap((group) => {
+    const members = group.names.filter((name) => remaining.delete(name));
+    return members.length ? [{ ...group, names: members }] : [];
+  });
+  // Custom DAW imports retain their own track sequence and names.
+  return [...groups, ...remaining].map((group) => typeof group === "string"
+    ? { id: group, names: [group], custom: true } : group);
+}
+
+function orderStemNames(names) {
+  if (names.some((name) => name.startsWith("studio_") || name === "reaper_master")) return names;
+  return stemLaneGroups(names).flatMap((group) => group.names);
+}
+
 export function effectiveStemOrder(presentNames) {
-  if (importedActiveNames.length) return importedActiveNames.filter((n) => presentNames.has(n));
+  // Older complete jobs stored bass first; normalize on read without changing
+  // audio, extraction metadata or the user's mix settings.
+  if (importedActiveNames.length) return orderStemNames(importedActiveNames.filter((n) => presentNames.has(n)));
   const splitDone = presentNames.has("lead_vocals") && presentNames.has("backing_vocals");
   const imported = EXTRA_STEM_NAMES.filter((n) => n.startsWith("studio_") && presentNames.has(n));
   if (imported.length) return imported;
@@ -62,7 +88,7 @@ export function effectiveStemOrder(presentNames) {
     if (n === "drums" && drumsDone) return DRUM_STEMS;
     return [n];
   });
-  return [...order, ...EXTRA_STEM_NAMES.filter((n) => n.startsWith("residual_") && presentNames.has(n))];
+  return orderStemNames([...order, ...EXTRA_STEM_NAMES.filter((n) => n.startsWith("residual_") && presentNames.has(n))]);
 }
 
 // A Proxy, not a plain object, so every lookup resolves through the CURRENT

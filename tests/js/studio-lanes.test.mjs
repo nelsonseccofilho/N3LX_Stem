@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { syncStemNamesFromAPI, effectiveStemOrder, DRUM_STEMS, applyStudioLayout, STEM_DISPLAY } from "../../static/js/constants.js";
+import { syncStemNamesFromAPI, effectiveStemOrder, DRUM_STEMS, applyStudioLayout, STEM_DISPLAY, stemLaneGroups } from "../../static/js/constants.js";
 import { buildPlaybackStems } from "../../static/js/playbackStems.js";
 import { effectivePitch } from "../../static/js/pitchBus.js";
 const base = ["vocals", "drums", "bass", "guitar", "piano", "other"];
@@ -33,3 +33,20 @@ assert.equal(effectivePitch("residual_mix",5),0);
 applyStudioLayout(null);
 setDefaultSeparationProfile("standard");
 console.log("Complete profile active lanes and residue routing: passed");
+
+// Exact family sequence applies to both new and legacy complete jobs.
+const expectedOrder = ["lead_vocals", "backing_vocals", "residual_vocals", "bass", "guitar", "piano", "other", "residual_mix", ...DRUM_STEMS, "residual_drums"];
+assert.deepEqual(order, expectedOrder);
+const legacyOrder = ["bass", "guitar", "piano", "other", ...DRUM_STEMS, "lead_vocals", "backing_vocals", "residual_mix", "residual_drums", "residual_vocals"];
+applyStudioLayout({profile:"complete", active_names:legacyOrder});
+assert.deepEqual(effectiveStemOrder(present), expectedOrder);
+assert.deepEqual(stemLaneGroups(expectedOrder).map(g => g.id), ["voices", "vocalResidual", "strings", "keys", "other", "separationResidual", "drums", "drumResidual"]);
+assert.deepEqual(stemLaneGroups(expectedOrder).flatMap(g => g.names), expectedOrder);
+assert.deepEqual(effectiveStemOrder(new Set(["bass", "lead_vocals"])), ["lead_vocals", "bass"]);
+applyStudioLayout({profile:"complete", active_names:[slots[2], slots[0], "custom_fx"]});
+assert.deepEqual(effectiveStemOrder(new Set([slots[0], slots[2], "custom_fx"])), [slots[2], slots[0], "custom_fx"]);
+applyStudioLayout({profile:"complete", active_names:["custom_fx", "bass", "vocals"]});
+assert.deepEqual(effectiveStemOrder(new Set(["custom_fx", "bass", "vocals"])), ["vocals", "bass", "custom_fx"]);
+applyStudioLayout(null);
+assert.deepEqual(effectiveStemOrder(new Set(base)), ["vocals", "bass", "guitar", "piano", "other", "drums"]);
+console.log("Requested family sequence, legacy jobs and custom imports: passed");

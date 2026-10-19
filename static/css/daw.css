@@ -591,13 +591,12 @@ input, textarea { font-family: inherit; }
   font-variant-numeric: tabular-nums;
   pointer-events: none;
 }
-/* App support actions match the header/footer shortcuts in N3LX_Voice. */
-.app-support-header, .app-support-footer {
+/* Header support action follows the shortcut in N3LX_Voice. */
+.app-support-header {
   display: flex; align-items: center; justify-content: flex-end; gap: 12px;
   flex-shrink: 0; padding: 4px 16px; background: var(--bg-2);
 }
 .app-support-header { border-bottom: 1px solid var(--border); }
-.app-support-footer { border-top: 1px solid var(--border); }
 .app-support-brand { margin-right: auto; font-size: 12px; font-weight: 600; color: var(--fg-2); }
 .github-star-shortcut {
   display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px;

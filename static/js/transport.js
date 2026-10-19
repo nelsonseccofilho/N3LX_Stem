@@ -60,7 +60,7 @@ const WAVE_ZOOM_STEP = 1.18;
 const DRAG_OUT_SELECTOR = "[data-loop-drag-out], [data-lane-drag-out]";
 // Below this visible width the waveform stops compressing to fit and instead
 // keeps a minimum size, overflowing horizontally so .wave-scroll can scroll.
-const WAVE_MIN_WIDTH = 720;
+const WAVE_MIN_WIDTH = 320;
 // rulerTime is the canonical timeline reference for both click->time
 // and time->pixel mapping. The wave-editor lays the ruler and the
 // waveform body out so they should be horizontally aligned (both gutter
@@ -825,7 +825,7 @@ export function setWaveZoomLevel(next, anchorClientX = null) {
     : (waveScroll ? waveScroll.clientWidth / 2 : 0);
   const contentX = (waveScroll?.scrollLeft ?? 0) + offsetX;
   // Measured, not derived from the zoom ratio. WAVE_MIN_WIDTH floors the
-  // content width, so on a window narrower than 720px a zoom step can widen the
+  // content width, so on a window narrower than 320px a zoom step can widen the
   // content by less than its own factor -- or not at all -- and scaling by the
   // ratio would slide the anchor out from under the pointer.
   const beforeWidth = waveCanvas?.getBoundingClientRect().width || 0;
@@ -899,7 +899,8 @@ function wireZoomButtons() {
         syncRulerScroll();
         return;
       }
-      if (!e.deltaY) return;
+      // The plain wheel scrolls the shared lane stack. Zoom is explicit.
+      if ((!e.ctrlKey && !e.metaKey) || !e.deltaY) return;
       // deltaMode 1 is lines and 2 is pages; both deliver far smaller numbers
       // than pixels, so normalise to notches rather than scaling by deltaY.
       const notches = Math.max(1, Math.min(3, Math.round(Math.abs(e.deltaY) / 100) || 1));
@@ -929,11 +930,50 @@ function wireLaneScrollSync() {
     }, { passive: true });
   link(mixer, waveScroll);
   link(waveScroll, mixer);
+  // A horizontal scrollbar reduces only the wave viewport's height. Add the
+  // same tail space to the mixer so both panes have identical bottom limits.
+  const syncGutter = () => mixer.style.setProperty("--lane-scroll-gutter",
+    `${Math.max(0, waveScroll.offsetHeight - waveScroll.clientHeight)}px`);
+  syncGutter();
+  if (typeof ResizeObserver === "function") new ResizeObserver(syncGutter).observe(waveScroll);
+}
+
+function wireMixerResize() {
+  const handle = document.getElementById("mixerResize");
+  const panel = document.querySelector(".daw-stems-panel");
+  const app = document.getElementById("app");
+  if (!handle || !panel || !app) return;
+  const resize = (width) => {
+    const available = document.querySelector(".daw-main-col")?.clientWidth || 1000;
+    const max = Math.max(520, Math.min(720, available - 260));
+    const next = Math.round(Math.max(520, Math.min(max, width)));
+    app.style.setProperty("--daw-col-w", `${next}px`);
+    handle.setAttribute("aria-valuemax", String(max));
+    handle.setAttribute("aria-valuenow", String(next));
+  };
+  let drag = null;
+  handle.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    drag = { x: event.clientX, width: panel.getBoundingClientRect().width };
+    handle.setPointerCapture(event.pointerId);
+  });
+  handle.addEventListener("pointermove", (event) => {
+    if (drag) resize(drag.width + event.clientX - drag.x);
+  });
+  handle.addEventListener("pointerup", () => { drag = null; });
+  handle.addEventListener("lostpointercapture", () => { drag = null; });
+  handle.addEventListener("keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight", "Home"].includes(event.key)) return;
+    event.preventDefault();
+    resize(event.key === "Home" ? 540 : panel.getBoundingClientRect().width + (event.key === "ArrowRight" ? 20 : -20));
+  });
 }
 
 // ─── Wire transport buttons ───
 
 export function wireTransportButtons() {
+  wireMixerResize();
   // Inert until a track with a beat grid arrives. The markup ships the panel
   // greyed so there is no flash of live-looking controls before this runs, but
   // greyed is only a look: this is what actually makes them unusable, and what

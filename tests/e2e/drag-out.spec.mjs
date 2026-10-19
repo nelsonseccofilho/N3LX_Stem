@@ -207,8 +207,11 @@ test.describe("dragging audio out", () => {
     // A redraw rewrites each row's innerHTML. Anything living in there is gone
     // unless it is put back, and the second wheel notch is where that shows.
     for (let i = 0; i < 6; i++) {
-      await page.mouse.move(900, 400);
+      const waveBox = await page.locator("#wave-scroll").boundingBox();
+      await page.mouse.move(waveBox.x + waveBox.width / 2, waveBox.y + waveBox.height / 2);
+      await page.keyboard.down("Control");
       await page.mouse.wheel(0, -240);
+      await page.keyboard.up("Control");
     }
 
     await expect(page.locator("[data-lane-drag-out]")).toHaveCount(before);

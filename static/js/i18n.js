@@ -218,6 +218,12 @@ function applyStemRowAriaLabels(scope) {
 // ─────────────────────────────────────────────────────────────────────────
 
 const en = {
+  "mixer.tracks": "Audio tracks",
+  "mixer.scrollHint": "Scroll tracks · Ctrl + wheel: zoom · Shift + wheel: move in time",
+  "aria.laneKeyReset": "Restore {name} to the original key",
+  "mixer.key.fixed": "Fixed",
+  "mixer.resize": "Resize mixer",
+  "nav.githubStarAction": "Star",
   "nav.githubStar": "Star on GitHub",
   "help.githubStar": "Open the N3LX_Stem repository on GitHub to give the project a star.",
   "sections.kind.intro": "Intro",
@@ -479,7 +485,7 @@ const en = {
   "help.laneKeyUp": "Moves only {name} up one semitone, the smallest step in music.",
   "help.laneKeyDown": "Moves only {name} down one semitone, the smallest step in music.",
   "help.laneKeyTitle": "Key of {name}",
-  "help.laneKey": "The key of {name}. K means its original key; a number means how many semitones it moved.",
+  "help.laneKey": "The key of {name}. 0 st means its original key; a number means how many semitones it moved.",
   "help.mute": "Silences {name}, so you can play or sing that part yourself.",
   "help.solo": "Plays only {name}, to hear it clearly.",
   "help.download": "Saves {name} as its own audio file.",
@@ -1116,6 +1122,7 @@ const en = {
 };
 
 const pl = {
+  "nav.githubStarAction": "Gwiazdka",
   "nav.githubStar": "Gwiazda na GitHubie",
   "help.githubStar": "Otwiera repozytorium N3LX_Stem w serwisie GitHub, aby przyznać projektowi gwiazdkę.",
   "sections.kind.intro": "Intro",
@@ -1377,7 +1384,7 @@ const pl = {
   "help.laneKeyUp": "Podnosi tylko {name} o półton, najmniejszy krok w muzyce.",
   "help.laneKeyDown": "Obniża tylko {name} o półton, najmniejszy krok w muzyce.",
   "help.laneKeyTitle": "Tonacja: {name}",
-  "help.laneKey": "Tonacja: {name}. K oznacza oryginalną tonację; liczba pokazuje, o ile półtonów ją przesunięto.",
+  "help.laneKey": "Tonacja: {name}. 0 st oznacza oryginalną tonację; liczba pokazuje, o ile półtonów ją przesunięto.",
   "help.mute": "Wycisza {name}, żebyś mógł sam zagrać lub zaśpiewać tę partię.",
   "help.solo": "Odtwarza tylko {name}, żeby było wyraźnie słychać.",
   "help.download": "Zapisuje {name} jako osobny plik audio.",
@@ -2004,6 +2011,7 @@ const pl = {
 };
 
 const ja = {
+  "nav.githubStarAction": "スター",
   "nav.githubStar": "GitHub でスターを付ける",
   "help.githubStar": "GitHub の N3LX_Stem リポジトリを開き、プロジェクトにスターを付けられます。",
   "sections.kind.intro": "イントロ",
@@ -2265,7 +2273,7 @@ const ja = {
   "help.laneKeyUp": "{name}だけを半音上げます。半音は音楽で最も小さな音程の単位です。",
   "help.laneKeyDown": "{name}だけを半音下げます。半音は音楽で最も小さな音程の単位です。",
   "help.laneKeyTitle": "{name}のキー",
-  "help.laneKey": "{name}のキーです。K は元のキー、数字は何半音動かしたかを示します。",
+  "help.laneKey": "{name}のキーです。0 st は元のキー、数字は何半音動かしたかを示します。",
   "help.mute": "{name}をミュートします。そのパートを自分で演奏したり歌ったりできます。",
   "help.solo": "{name}だけを再生して、はっきり聞けるようにします。",
   "help.download": "{name}を単独の音声ファイルとして保存します。",
@@ -2867,6 +2875,7 @@ const ja = {
 };
 
 const zhHans = {
+  "nav.githubStarAction": "加星",
   "nav.githubStar": "在 GitHub 上加星标",
   "help.githubStar": "打开 GitHub 上的 N3LX_Stem 仓库，为项目添加星标。",
   "sections.kind.intro": "前奏",
@@ -3128,7 +3137,7 @@ const zhHans = {
   "help.laneKeyUp": "只把{name}升高一个半音，半音是音乐中最小的音程。",
   "help.laneKeyDown": "只把{name}降低一个半音，半音是音乐中最小的音程。",
   "help.laneKeyTitle": "{name}的调",
-  "help.laneKey": "{name}的调。K 表示原调；数字表示移动了几个半音。",
+  "help.laneKey": "{name}的调。0 st 表示原调；数字表示移动了几个半音。",
   "help.mute": "将{name}静音，让你自己演奏或演唱这一部分。",
   "help.solo": "只播放{name}，听得更清楚。",
   "help.download": "把{name}保存为单独的音频文件。",
@@ -3730,6 +3739,7 @@ const zhHans = {
 };
 
 const de = {
+  "nav.githubStarAction": "Stern",
   "nav.githubStar": "Stern auf GitHub",
   "help.githubStar": "Öffnet das N3LX_Stem-Repository auf GitHub, um dem Projekt einen Stern zu geben.",
   "sections.kind.intro": "Intro",
@@ -3991,7 +4001,7 @@ const de = {
   "help.laneKeyUp": "Hebt nur {name} um einen Halbton an, den kleinsten Schritt in der Musik.",
   "help.laneKeyDown": "Senkt nur {name} um einen Halbton, den kleinsten Schritt in der Musik.",
   "help.laneKeyTitle": "Tonart von {name}",
-  "help.laneKey": "Die Tonart von {name}. K heißt Originaltonart; eine Zahl zeigt, um wie viele Halbtöne verschoben wurde.",
+  "help.laneKey": "Die Tonart von {name}. 0 st heißt Originaltonart; eine Zahl zeigt, um wie viele Halbtöne verschoben wurde.",
   "help.mute": "Schaltet {name} stumm, damit du diesen Part selbst spielen oder singen kannst.",
   "help.solo": "Spielt nur {name}, damit du es deutlich hörst.",
   "help.download": "Speichert {name} als eigene Audiodatei.",
@@ -4604,6 +4614,12 @@ const de = {
 };
 
 const pt = {
+  "mixer.tracks": "Pistas de áudio",
+  "mixer.scrollHint": "Role para ver as pistas · Ctrl + roda: zoom · Shift + roda: mover no tempo",
+  "aria.laneKeyReset": "Restaurar {name} ao tom original",
+  "mixer.key.fixed": "Fixo",
+  "mixer.resize": "Ajustar largura do mixer",
+  "nav.githubStarAction": "Dar estrela",
   "nav.githubStar": "Estrela no GitHub",
   "help.githubStar": "Abre o repositório do N3LX_Stem no GitHub para você dar uma estrela ao projeto.",
   "sections.kind.intro": "Introdução",
@@ -4865,7 +4881,7 @@ const pt = {
   "help.laneKeyUp": "Sobe só {name} um semitom, o menor passo na música.",
   "help.laneKeyDown": "Desce só {name} um semitom, o menor passo na música.",
   "help.laneKeyTitle": "Tom de {name}",
-  "help.laneKey": "O tom de {name}. K quer dizer o tom original; um número mostra quantos semitons ele mudou.",
+  "help.laneKey": "O tom de {name}. 0 st quer dizer o tom original; um número mostra quantos semitons ele mudou.",
   "help.mute": "Silencia {name}, para você tocar ou cantar essa parte.",
   "help.solo": "Toca só {name}, para ouvir com clareza.",
   "help.download": "Salva {name} como um arquivo de áudio separado.",
@@ -5480,6 +5496,7 @@ const pt = {
 };
 
 const id = {
+  "nav.githubStarAction": "Beri bintang",
   "nav.githubStar": "Bintangi di GitHub",
   "help.githubStar": "Buka repositori N3LX_Stem di GitHub untuk memberi bintang pada proyek.",
   "sections.kind.intro": "Intro",
@@ -5741,7 +5758,7 @@ const id = {
   "help.laneKeyUp": "Menaikkan hanya {name} satu semitone, langkah terkecil dalam musik.",
   "help.laneKeyDown": "Menurunkan hanya {name} satu semitone, langkah terkecil dalam musik.",
   "help.laneKeyTitle": "Kunci nada {name}",
-  "help.laneKey": "Kunci nada {name}. K berarti kunci aslinya; angka menunjukkan berapa semitone digeser.",
+  "help.laneKey": "Kunci nada {name}. 0 st berarti kunci aslinya; angka menunjukkan berapa semitone digeser.",
   "help.mute": "Membisukan {name}, agar Anda bisa memainkan atau menyanyikan bagian itu sendiri.",
   "help.solo": "Hanya memutar {name}, agar terdengar jelas.",
   "help.download": "Menyimpan {name} sebagai file audio tersendiri.",
@@ -6343,6 +6360,7 @@ const id = {
 };
 
 const fr = {
+  "nav.githubStarAction": "Étoile",
   "nav.githubStar": "Étoile sur GitHub",
   "help.githubStar": "Ouvre le dépôt N3LX_Stem sur GitHub pour donner une étoile au projet.",
   "sections.kind.intro": "Intro",
@@ -6604,7 +6622,7 @@ const fr = {
   "help.laneKeyUp": "Monte seulement {name} d'un demi-ton, le plus petit pas en musique.",
   "help.laneKeyDown": "Descend seulement {name} d'un demi-ton, le plus petit pas en musique.",
   "help.laneKeyTitle": "Tonalité de {name}",
-  "help.laneKey": "La tonalité de {name}. K signifie sa tonalité d'origine ; un nombre indique de combien de demi-tons elle a bougé.",
+  "help.laneKey": "La tonalité de {name}. 0 st signifie sa tonalité d'origine ; un nombre indique de combien de demi-tons elle a bougé.",
   "help.mute": "Coupe {name}, pour que vous puissiez jouer ou chanter cette partie vous-même.",
   "help.solo": "Joue seulement {name}, pour l'entendre clairement.",
   "help.download": "Enregistre {name} comme fichier audio séparé.",
@@ -7391,6 +7409,7 @@ const ptPT = {
 };
 
 const es = {
+  "nav.githubStarAction": "Dar estrella",
   "nav.githubStar": "Estrella en GitHub",
   "help.githubStar": "Abre el repositorio de N3LX_Stem en GitHub para dar una estrella al proyecto.",
   "sections.kind.intro": "Intro",
@@ -7652,7 +7671,7 @@ const es = {
   "help.laneKeyUp": "Sube solo {name} un semitono, el paso más pequeño en música.",
   "help.laneKeyDown": "Baja solo {name} un semitono, el paso más pequeño en música.",
   "help.laneKeyTitle": "Tonalidad de {name}",
-  "help.laneKey": "La tonalidad de {name}. K es su tonalidad original; un número indica cuántos semitonos se movió.",
+  "help.laneKey": "La tonalidad de {name}. 0 st es su tonalidad original; un número indica cuántos semitonos se movió.",
   "help.mute": "Silencia {name}, para que puedas tocar o cantar esa parte tú.",
   "help.solo": "Reproduce solo {name}, para oírlo con claridad.",
   "help.download": "Guarda {name} como un archivo de audio aparte.",
@@ -8287,6 +8306,7 @@ const es = {
 // 루프) stay loanwords; translating those would read as odd to anyone who
 // has opened a DAW.
 const ko = {
+  "nav.githubStarAction": "스타",
   "nav.githubStar": "GitHub에서 스타 누르기",
   "help.githubStar": "GitHub의 N3LX_Stem 저장소를 열어 프로젝트에 스타를 줄 수 있어요.",
 

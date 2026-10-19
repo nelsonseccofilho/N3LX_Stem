@@ -55,7 +55,9 @@ async function zoomIn(page, notches) {
   const box = await page.locator("#wave-scroll").boundingBox();
   for (let i = 0; i < notches; i++) {
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.keyboard.down("Control");
     await page.mouse.wheel(0, -120);
+    await page.keyboard.up("Control");
     await page.waitForTimeout(200);
   }
 }

@@ -202,7 +202,7 @@ test.describe("per-lane transpose", () => {
     await openStudio(page);
     await expect(laneKey(page, "vocals")).toBeVisible();
     // Reads as a label until it is doing something, then as a number.
-    await expect(laneValue(page, "vocals")).toHaveText("K");
+    await expect(laneValue(page, "vocals")).toHaveText("0 st");
     await expect(laneKey(page, "vocals")).not.toHaveClass(/active/);
   });
 
@@ -221,14 +221,14 @@ test.describe("per-lane transpose", () => {
     await openStudio(page);
     await laneUp(page, "vocals").click();
     await laneUp(page, "vocals").click();
-    await expect(laneValue(page, "vocals")).toHaveText("+2");
+    await expect(laneValue(page, "vocals")).toHaveText("+2 st");
     await expect(laneKey(page, "vocals")).toHaveClass(/active/);
 
     for (let i = 0; i < 3; i++) await laneDown(page, "vocals").click();
-    await expect(laneValue(page, "vocals")).toHaveText("-1");
+    await expect(laneValue(page, "vocals")).toHaveText("-1 st");
 
     await laneUp(page, "vocals").click();
-    await expect(laneValue(page, "vocals")).toHaveText("K");
+    await expect(laneValue(page, "vocals")).toHaveText("0 st");
     await expect(laneKey(page, "vocals")).not.toHaveClass(/active/);
   });
 
@@ -238,7 +238,7 @@ test.describe("per-lane transpose", () => {
     await settleRoutes(page);
 
     await laneUp(page, "vocals").click();
-    await expect(laneValue(page, "vocals")).toHaveText("+1");
+    await expect(laneValue(page, "vocals")).toHaveText("+1 st");
     await expect.poll(() => recentInputs(page)).toEqual([ZERO_INPUT + 1]);
   });
 
@@ -249,10 +249,10 @@ test.describe("per-lane transpose", () => {
     await expect(value(page)).toHaveText("+2");
     // A lane reads the key it is actually in, so moving the whole track moves
     // the numbers on the lanes too. There is never a second number to add.
-    await expect(laneValue(page, "vocals")).toHaveText("+2");
-    await expect(laneValue(page, "bass")).toHaveText("+2");
+    await expect(laneValue(page, "vocals")).toHaveText("+2 st");
+    await expect(laneValue(page, "bass")).toHaveText("+2 st");
     // Except drums, which never move.
-    await expect(laneValue(page, "drums")).toHaveText("K");
+    await expect(laneValue(page, "drums")).toHaveText("Fixed");
   });
 
   test("a lane keeps its distance when the global key moves", async ({ page }) => {
@@ -260,13 +260,13 @@ test.describe("per-lane transpose", () => {
     await laneUp(page, "vocals").click();
     await laneUp(page, "vocals").click();
     await laneUp(page, "vocals").click();
-    await expect(laneValue(page, "vocals")).toHaveText("+3");
+    await expect(laneValue(page, "vocals")).toHaveText("+3 st");
 
     await up(page).click();
     // The global control nudges rather than overrides: a lane deliberately put
     // above the rest stays above the rest.
-    await expect(laneValue(page, "vocals")).toHaveText("+4");
-    await expect(laneValue(page, "bass")).toHaveText("+1");
+    await expect(laneValue(page, "vocals")).toHaveText("+4 st");
+    await expect(laneValue(page, "bass")).toHaveText("+1 st");
   });
 
   test("a lane moved on its own rewires only itself", async ({ page }) => {
@@ -280,19 +280,19 @@ test.describe("per-lane transpose", () => {
 
     await clearRoutes(page);
     await laneDown(page, "vocals").click();
-    await expect(laneValue(page, "vocals")).toHaveText("+1");
+    await expect(laneValue(page, "vocals")).toHaveText("+1 st");
     await expect.poll(() => recentInputs(page)).toEqual([ZERO_INPUT + 1]);
   });
 
   test("a lane stops at the ends of the range", async ({ page }) => {
     await openStudio(page);
     for (let i = 0; i < 6; i++) await laneUp(page, "vocals").click();
-    await expect(laneValue(page, "vocals")).toHaveText("+6");
+    await expect(laneValue(page, "vocals")).toHaveText("+6 st");
     await expect(laneUp(page, "vocals")).toBeDisabled();
     await expect(laneDown(page, "vocals")).toBeEnabled();
 
     for (let i = 0; i < 12; i++) await laneDown(page, "vocals").click();
-    await expect(laneValue(page, "vocals")).toHaveText("-6");
+    await expect(laneValue(page, "vocals")).toHaveText("-6 st");
     await expect(laneDown(page, "vocals")).toBeDisabled();
   });
 
@@ -303,16 +303,16 @@ test.describe("per-lane transpose", () => {
     await laneUp(page, "vocals").click();
     await laneDown(page, "bass").click();
     await expect(value(page)).toHaveText("+2");
-    await expect(laneValue(page, "vocals")).toHaveText("+3");
-    await expect(laneValue(page, "bass")).toHaveText("+1");
+    await expect(laneValue(page, "vocals")).toHaveText("+3 st");
+    await expect(laneValue(page, "bass")).toHaveText("+1 st");
 
     await reset(page).click();
     // Everything, not just the global control: once lanes have been moved
     // individually, stepping the global back to zero cannot undo them.
     await expect(value(page)).toHaveText("0");
     await expect(value(page)).not.toHaveClass(/active/);
-    await expect(laneValue(page, "vocals")).toHaveText("K");
-    await expect(laneValue(page, "bass")).toHaveText("K");
+    await expect(laneValue(page, "vocals")).toHaveText("0 st");
+    await expect(laneValue(page, "bass")).toHaveText("0 st");
     await expect(laneKey(page, "vocals")).not.toHaveClass(/active/);
   });
 
@@ -384,4 +384,24 @@ test.describe("transpose over an insecure origin", () => {
     await expect(page.locator("#t-pitch-wrap")).not.toHaveAttribute("title", /.+/);
     await expect(page.locator("#t-speed-wrap")).not.toHaveAttribute("title", /.+/);
   });
+});
+
+
+test("horizontal lane controls fit their row and reset only the chosen lane", async ({ page }) => {
+  await openStudio(page);
+  await laneUp(page, "vocals").click();
+  await laneUp(page, "bass").click();
+  const row = page.locator('.lane-header[data-stem="vocals"]');
+  const geometry = await row.evaluate(el => {
+    const bounds = el.getBoundingClientRect();
+    const items = [...el.querySelectorAll('.lane-key button, .lane-key-value')]
+      .map(item => item.getBoundingClientRect());
+    return { inside: items.every(r => r.top >= bounds.top && r.bottom <= bounds.bottom),
+      horizontal: items.every(r => Math.abs(r.top - items[0].top) < 1),
+      separate: items.every((r,i) => !i || r.left >= items[i-1].right) };
+  });
+  expect(geometry).toEqual({inside:true, horizontal:true, separate:true});
+  await laneKey(page, "vocals").locator('.lane-key-reset').click();
+  await expect(laneValue(page, "vocals")).toHaveText("0 st");
+  await expect(laneValue(page, "bass")).toHaveText("+1 st");
 });

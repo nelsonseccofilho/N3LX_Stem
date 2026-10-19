@@ -137,3 +137,33 @@ test.describe("lane alignment", () => {
     expect(empty).toBe(filled);
   });
 });
+
+
+test("vertical wheel scroll reaches the last lane with aligned controls and fixed transport", async ({ page }) => {
+  await page.setViewportSize({width:1600, height:720});
+  await openStudio(page);
+  await waitForClickTrack(page);
+  const state = () => page.evaluate(() => {
+    const m = document.querySelector('#mixer');
+    const w = document.querySelector('#wave-scroll');
+    const rows = [...m.querySelectorAll('.lane-header:not(.hidden)')];
+    return { mixer:m.scrollTop, wave:w.scrollTop, maximum:w.scrollHeight-w.clientHeight,
+      footer:document.querySelector('.daw-footer').getBoundingClientRect().y,
+      ruler:document.querySelector('.daw-wave-header').getBoundingClientRect().y,
+      zoom:getComputedStyle(document.querySelector('#lanes')).getPropertyValue('--zoom'),
+      difference:Math.max(...rows.map(row => Math.abs(row.getBoundingClientRect().y-
+        document.querySelector(`.stem-waveform-row[data-stem="${row.dataset.stem}"]`).getBoundingClientRect().y))) };
+  });
+  const before = await state();
+  expect(before.maximum).toBeGreaterThan(0);
+  const box = await page.locator('#wave-scroll').boundingBox();
+  await page.mouse.move(box.x+box.width/2, box.y+box.height/2);
+  await page.mouse.wheel(0,10000);
+  await expect.poll(async () => (await state()).wave).toBe(before.maximum);
+  const after = await state();
+  expect(after.mixer).toBe(after.wave);
+  expect(after.difference).toBeLessThan(1);
+  expect(after.zoom).toBe(before.zoom);
+  expect(after.footer).toBe(before.footer);
+  expect(after.ruler).toBe(before.ruler);
+});

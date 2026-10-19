@@ -10,8 +10,13 @@
 import { test, expect } from "@playwright/test";
 import { openStudio, JOB_ID } from "./helpers.mjs";
 
-const wheel = (page, dy, x = 900, y = 400) =>
-  page.mouse.move(x, y).then(() => page.mouse.wheel(0, dy));
+const wheel = async (page, dy, x = null, y = null) => {
+  const box = await page.locator("#wave-scroll").boundingBox();
+  await page.keyboard.down("Control");
+  await page.mouse.move(x ?? box.x + box.width / 2, y ?? box.y + box.height / 2);
+  await page.mouse.wheel(0, dy);
+  await page.keyboard.up("Control");
+};
 
 async function zoomState(page) {
   return page.evaluate(() => {
@@ -100,7 +105,7 @@ test.describe("waveform zoom", () => {
     expect(s.loopStartDisabled).toBe(false);
   });
 
-  test("scrolling up zooms in and scrolling down comes back", async ({ page }) => {
+  test("Ctrl-wheel zooms in and out while ordinary wheel scrolls lanes", async ({ page }) => {
     await openStudio(page, { tauri: true });
     const start = await zoomState(page);
 

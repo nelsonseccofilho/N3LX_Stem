@@ -125,9 +125,7 @@ export function refreshLaneKeyVisual(name) {
   const n = mixerState[name]?.pitch ?? 0;
   const signed = n > 0 ? `+${n}` : String(n);
   const valueEl = wrap.querySelector(".lane-key-value");
-  // "K" while the lane is in its own key, so the control reads as a label
-  // until it is doing something, and as a number the moment it is.
-  if (valueEl) valueEl.textContent = n === 0 ? "K" : signed;
+  if (valueEl) valueEl.textContent = wrap.classList.contains("locked") ? t("mixer.key.fixed") : `${signed} st`;
   wrap.classList.toggle("active", n !== 0);
 
   const locked = wrap.classList.contains("locked");
@@ -136,6 +134,8 @@ export function refreshLaneKeyVisual(name) {
   const down = wrap.querySelector(".lane-key-step.down");
   if (up) up.disabled = locked || unsupported || n >= PITCH_MAX;
   if (down) down.disabled = locked || unsupported || n <= PITCH_MIN;
+  const reset = wrap.querySelector(".lane-key-reset");
+  if (reset) reset.disabled = locked || unsupported || n === 0;
   // One place decides the tooltip. Setting it from both here and from
   // availability left a drum lane explaining the wrong thing after the engine
   // came up, because whichever ran last won and neither restored the other.
@@ -433,6 +433,7 @@ function makeVolumeKnob(stemName, color) {
 
   wrap.addEventListener("dblclick", () => setLaneVolume(stemName, 1));
   wrap.addEventListener("wheel", (e) => {
+    if (!e.ctrlKey && !e.metaKey) return; // ordinary wheel scrolls the lanes
     e.preventDefault();
     const cur = mixerState[stemName]?.volume ?? 1;
     setLaneVolume(stemName, cur - Math.sign(e.deltaY) * (e.shiftKey ? 0.2 : 0.04));
@@ -603,11 +604,10 @@ export function renderMixerRow(stem) {
 }
 
 /**
- * The per-lane key stepper: plus above, the reading in the middle, minus below.
+ * The per-lane key stepper: minus, semitones, plus, restore original.
  *
- * Drums get the control too, disabled and saying why, rather than no control at
- * all. A missing button on one row reads as a rendering bug; a disabled one
- * that explains itself teaches the rule.
+ * Percussion keeps a fixed-key status in the same column, without inactive
+ * step buttons competing with the controls that can actually be used.
  */
 function makeLaneKey(stemName, display) {
   const wrap = document.createElement("div");
@@ -622,7 +622,7 @@ function makeLaneKey(stemName, display) {
 
   const valueEl = document.createElement("span");
   valueEl.className = "lane-key-value";
-  valueEl.textContent = "K";
+  valueEl.textContent = "0 st";
 
   const down = document.createElement("button");
   down.type = "button";
@@ -631,14 +631,28 @@ function makeLaneKey(stemName, display) {
   down.textContent = "\u2212";
   down.setAttribute("aria-label", t("aria.laneKeyDown", { name: display }));
 
-  // Plus above, the reading, minus below.
-  wrap.append(up, valueEl, down);
+  const reset = document.createElement("button");
+  reset.type = "button";
+  reset.className = "lane-key-reset";
+  reset.textContent = "↺";
+  reset.title = t("aria.laneKeyReset", { name: display });
+  reset.setAttribute("aria-label", reset.title);
+  reset.addEventListener("click", () => setLanePitch(stemName, 0));
+  const lock = document.createElement("span");
+  lock.className = "lane-key-lock";
+  lock.setAttribute("aria-hidden", "true");
+  lock.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="12" rx="2"/><path d="M8 10V6a4 4 0 0 1 8 0v4"/></svg>';
+  wrap.setAttribute("role", "group");
+  wrap.setAttribute("aria-label", t("help.laneKeyTitle", { name: display }));
+  wrap.append(lock, down, valueEl, up, reset);
 
   if (isPercussion(stemName)) {
     wrap.classList.add("locked");
     wrap.title = t("mixer.key.drumsLocked");
     up.disabled = true;
     down.disabled = true;
+    reset.disabled = true;
+    valueEl.textContent = t("mixer.key.fixed");
     return wrap;
   }
 

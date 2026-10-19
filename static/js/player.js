@@ -1103,7 +1103,7 @@ function _applyLaneHeight(count) {
   // So the row is the unit. Divide the panel by the row count, and give the
   // mixer and the waveform column exactly the same total.
   const rowH = panelH > 0 && count > 0
-    ? Math.max(count > 10 ? 22 : WAVEFORM_LANE_HEIGHT + WAVEFORM_SEPARATOR_HEIGHT, Math.floor((panelH - (count > 10 ? 12 : 0)) / count))
+    ? Math.max(count > 10 ? 44 : WAVEFORM_LANE_HEIGHT + WAVEFORM_SEPARATOR_HEIGHT, Math.floor((panelH - (count > 10 ? 12 : 0)) / count))
     : WAVEFORM_LANE_HEIGHT + WAVEFORM_SEPARATOR_HEIGHT;
   const appEl = document.querySelector(".app");
   appEl?.classList.toggle("many-lanes", count > 10);

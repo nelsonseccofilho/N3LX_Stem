@@ -770,7 +770,7 @@
 
               <!-- Mixer faders (JS populates) -->
               <div id="mixer" class="mixer-column"></div>
-              <div id="mixerResize" class="mixer-resize" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize mixer" data-i18n-aria-label="mixer.resize" aria-valuemin="520" aria-valuemax="720" aria-valuenow="540"></div>
+              <div id="mixerResize" class="mixer-resize" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Resize mixer" data-i18n-aria-label="mixer.resize" aria-valuemin="470" aria-valuemax="640" aria-valuenow="470"></div>
             </div>
 
             <!-- Waveform panel -->
@@ -825,6 +825,23 @@
           </div><!-- /.daw-content -->
 
         </div><!-- /#lanes -->
+
+      <div class="studio-view-tools" role="group" aria-label="Timeline view" data-i18n-aria-label="view.controls">
+        <div class="view-control-group">
+          <span data-i18n="view.time">Time</span>
+          <button id="waveZoomOut" type="button" aria-label="Zoom out in time" data-i18n-aria-label="view.zoomOut" disabled>−</button>
+          <output id="waveZoomValue" aria-label="Time zoom" data-i18n-aria-label="view.timeZoom">1.0x</output>
+          <button id="waveZoomIn" type="button" aria-label="Zoom in time" data-i18n-aria-label="view.zoomIn" disabled>+</button>
+          <button id="waveZoomFit" class="view-fit" type="button" data-i18n="view.fit" disabled>Fit song</button>
+        </div>
+        <div class="view-control-group">
+          <span data-i18n="view.lanes">Tracks</span>
+          <button id="laneHeightOut" type="button" aria-label="Reduce track height" data-i18n-aria-label="view.heightOut" disabled>−</button>
+          <output id="laneHeightValue" aria-label="Track height" data-i18n-aria-label="view.height">44 px</output>
+          <button id="laneHeightIn" type="button" aria-label="Increase track height" data-i18n-aria-label="view.heightIn" disabled>+</button>
+        </div>
+        <span class="view-shortcuts" data-i18n="view.hint">Ctrl + wheel: zoom · Shift + wheel: move in time</span>
+      </div>
 
       <!-- ══ FOOTER — sibling of #lanes inside .daw-main-col, not clipped ══ -->
       <footer class="daw-footer">

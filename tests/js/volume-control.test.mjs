@@ -1,0 +1,17 @@
+import assert from "node:assert/strict";
+import { nudgeVolumeGain } from "../../static/js/volumeControl.js";
+const db = gain => 20 * Math.log10(gain);
+assert(Math.abs(db(nudgeVolumeGain(1, 1)) - 0.1) < 1e-9);
+assert(Math.abs(db(nudgeVolumeGain(1, -1)) + 0.1) < 1e-9);
+assert(Math.abs(db(nudgeVolumeGain(1, -1, true)) + 1) < 1e-9);
+let gain = 1;
+for (let i = 0; i < 20; i++) gain = nudgeVolumeGain(gain, -1);
+assert(Math.abs(db(gain) + 2) < 1e-9);
+for (let i = 0; i < 20; i++) gain = nudgeVolumeGain(gain, 1);
+assert(Math.abs(gain - 1) < 1e-9);
+assert.equal(nudgeVolumeGain(0, -1), 0);
+assert.equal(nudgeVolumeGain(0, 1), 0.001);
+assert.equal(nudgeVolumeGain(0.001, -1), 0);
+assert.equal(nudgeVolumeGain(2, 1), 2);
+assert(nudgeVolumeGain(2, -1) < 2);
+console.log("Gain keyboard precision, round trip, silence and ceiling: passed");

@@ -156,11 +156,11 @@ function applyStemSelectionFilter(presentNames) {
     row.classList.toggle("hidden", !inOrder || !visibleMixerSet.has(stem));
     row.classList.toggle("unavailable", !available);
     row.setAttribute("aria-disabled", String(!available));
-    for (const el of row.querySelectorAll("button, .lane-knob, .lane-dl")) {
+    for (const el of row.querySelectorAll("button, .lane-knob, .mx-fader-input, .lane-dl")) {
       el.classList.toggle("disabled", !available);
       if (available) {
         el.removeAttribute("aria-disabled");
-        if (el.matches(".lane-knob")) el.setAttribute("tabindex", "0");
+        if (el.matches(".lane-knob")) el.setAttribute("tabindex", "-1");
         else el.removeAttribute("tabindex");
       } else {
         el.setAttribute("aria-disabled", "true");
@@ -1072,6 +1072,16 @@ export function buildStripStems() {
 // the reclaimed space becomes a gap under them: 141px of it with all three
 // panels collapsed.
 let _laneCount = 0;
+let _manualLaneHeight = null;
+document.addEventListener("laneheightchange", (event) => {
+  const height = Number(event.detail?.height);
+  if (!Number.isFinite(height) || _laneCount <= 0) return;
+  _manualLaneHeight = Math.max(44, Math.min(160, height));
+  const drawableHeight = _applyLaneHeight(_laneCount);
+  for (const ws of multitrack?.wavesurfers || multitrack?._wavesurfers || []) {
+    ws?.setOptions?.({ height: drawableHeight });
+  }
+});
 let _laneFitObs = null;
 
 function _watchLaneFit(count) {
@@ -1109,12 +1119,13 @@ function _applyLaneHeight(count) {
   //
   // So the row is the unit. Divide the panel by the row count, and give the
   // mixer and the waveform column exactly the same total.
-  const rowH = panelH > 0 && count > 0
+  const rowH = _manualLaneHeight ?? (panelH > 0 && count > 0
     ? Math.max(count > 10 ? 44 : WAVEFORM_LANE_HEIGHT + WAVEFORM_SEPARATOR_HEIGHT, Math.floor((panelH - (count > 10 ? 12 : 0)) / count))
-    : WAVEFORM_LANE_HEIGHT + WAVEFORM_SEPARATOR_HEIGHT;
+    : WAVEFORM_LANE_HEIGHT + WAVEFORM_SEPARATOR_HEIGHT);
   const appEl = document.querySelector(".app");
   appEl?.classList.toggle("many-lanes", count > 10);
   appEl?.style.setProperty("--lane-h", `${rowH}px`);
+  document.dispatchEvent(new CustomEvent("laneheightapplied", { detail: { height: rowH } }));
   appEl?.style.setProperty("--wave-widget-track-stack-h", `${count * rowH}px`);
   // The drawable height inside a row, which is what the multitrack is given.
   return rowH - WAVEFORM_SEPARATOR_HEIGHT;

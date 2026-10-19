@@ -1,3 +1,4 @@
+import { nudgeVolumeGain } from "./volumeControl.js";
 import {
   isPercussion, STEM_NAMES, TRACK_NAMES, EXTRA_STEM_NAMES, STEM_COLORS, STEM_DISPLAY, LANE_VOLUME_MAX,
 } from "./constants.js";
@@ -211,6 +212,7 @@ export function updateLaneKnobVisual(knobEl, v) {
   if (val) {
     const db = v <= 0 ? "-∞" : (20 * Math.log10(v)).toFixed(1);
     val.textContent = db === "-∞" ? "-∞" : `${parseFloat(db) > 0 ? "+" : ""}${db}`;
+    input?.setAttribute("aria-valuetext", `${val.textContent} dB`);
   }
 }
 
@@ -290,7 +292,9 @@ export function setLaneControlsEnabled(enabled) {
   for (const k of mixerEl.querySelectorAll(".lane-knob")) {
     k.classList.toggle("disabled", !enabled);
     k.setAttribute("aria-disabled", String(!enabled));
-    k.setAttribute("tabindex", enabled ? "0" : "-1");
+    k.setAttribute("tabindex", "-1");
+    const input = k.querySelector("input");
+    if (input) input.disabled = !enabled;
   }
 }
 
@@ -422,12 +426,20 @@ function makeVolumeKnob(stemName, color) {
   input.className = "mx-fader-input";
   input.setAttribute("min", "0");
   input.setAttribute("max", String(LANE_VOLUME_MAX));
-  input.setAttribute("step", "0.01");
+  input.setAttribute("step", "any");
+  input.title = t("mixer.volumeKeys");
   input.setAttribute("value", "1");
   input.style.setProperty("--fader-color", color);
   input.style.setProperty("--lane-pos", "0.5");
   input.setAttribute("aria-label", t("aria.volume", { name: STEM_DISPLAY[stemName] || stemName }));
   input.addEventListener("input", () => setLaneVolume(stemName, parseFloat(input.value)));
+  input.addEventListener("keydown", (event) => {
+    const direction = { ArrowLeft: -1, ArrowDown: -1, ArrowRight: 1, ArrowUp: 1 }[event.key];
+    if (!direction || event.ctrlKey || event.metaKey || event.altKey) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setLaneVolume(stemName, nudgeVolumeGain(mixerState[stemName]?.volume ?? 1, direction, event.shiftKey, LANE_VOLUME_MAX));
+  });
   input.addEventListener("dblclick", (e) => { e.stopPropagation(); setLaneVolume(stemName, 1); });
   wrap.appendChild(input);
 

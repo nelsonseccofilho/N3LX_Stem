@@ -5746,7 +5746,7 @@ input, textarea { font-family: inherit; }
 .processing-step-state { grid-column:2; font-size:10px; opacity:.8; }
 
 /* Studio controls retain their width; extra lanes scroll instead of shrinking. */
-.daw { --daw-col-w: 540px; }
+.daw { --daw-col-w: 470px; }
 .daw-stems-panel { position:relative; }
 .lane-name-vu { width:124px; }
 .mx-val { width:28px; }
@@ -5766,3 +5766,23 @@ input, textarea { font-family: inherit; }
   .available-lanes { gap:2px; padding-top:4px; }
   .available-lanes-notice { flex-basis:auto; }
 }
+
+/* Compact gain control: resizing the mixer gives room to names, not a longer fader. */
+.daw .lane-knob.mx-fader { flex:0 0 64px; width:64px; }
+.daw .lane-name-vu { flex:1 1 auto; min-width:124px; }
+.mx-fader-input:focus-visible { outline:2px solid var(--fader-color, var(--accent)); outline-offset:3px; border-radius:4px; }
+.app.daw:not(.is-import) .wave-scroll { overflow-x:scroll; overflow-y:scroll; scrollbar-width:auto; }
+.daw .wave-scroll::-webkit-scrollbar { width:14px; height:14px; }
+.daw .wave-scroll::-webkit-scrollbar-thumb { border:3px solid var(--bg-2); border-radius:9px; }
+.daw .wave-scroll::-webkit-scrollbar-corner { background:var(--bg-2); }
+.studio-view-tools { display:flex; flex:0 0 auto; align-items:center; flex-wrap:wrap; gap:8px 20px; padding:5px 12px; border-top:1px solid var(--border); background:var(--bg-2); }
+.view-control-group { display:flex; align-items:center; gap:5px; }
+.view-control-group > span { color:var(--muted); font-size:11px; margin-right:3px; }
+.view-control-group button { display:inline-flex; align-items:center; justify-content:center; height:26px; min-width:28px; padding:0 7px; border:1px solid var(--border-strong); border-radius:5px; color:var(--fg); background:transparent; cursor:pointer; font-size:14px; }
+.view-control-group button:hover:not(:disabled) { color:var(--accent); border-color:var(--accent); }
+.view-control-group button:disabled { opacity:.35; cursor:default; }
+.view-control-group output { min-width:42px; text-align:center; font:11px var(--font-mono); color:var(--fg); }
+.view-control-group .view-fit { font-size:11px; margin-left:3px; }
+.view-shortcuts { color:var(--muted); font-size:10px; margin-left:auto; }
+@media (max-width:1200px) { .view-shortcuts { display:none; } }
+.daw .lane-header.mx-row { min-height:var(--lane-h,72px); }

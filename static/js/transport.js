@@ -773,6 +773,7 @@ export function syncRulerScroll() {
 }
 
 export function applyWaveZoom() {
+  paintViewControls();
   const lanes = document.getElementById("lanes") || waveCanvas;
   const wavesColumn = document.querySelector(".waves-column");
   if (wavesColumn) {
@@ -860,7 +861,41 @@ export function resetWaveZoom() {
   return setWaveZoomLevel(WAVE_ZOOM_MIN);
 }
 
+function paintViewControls() {
+  const enabled = Boolean(multitrack && totalDuration > 0);
+  const zoomValue = document.getElementById("waveZoomValue");
+  if (zoomValue) zoomValue.textContent = `${waveZoom.toFixed(1)}x`;
+  const disabled = { waveZoomIn: !enabled || waveZoom >= WAVE_ZOOM_MAX,
+    waveZoomOut: !enabled || waveZoom <= WAVE_ZOOM_MIN, waveZoomFit: !enabled,
+    laneHeightOut: !enabled || _viewLaneHeight <= 44, laneHeightIn: !enabled || _viewLaneHeight >= 160 };
+  for (const [id, value] of Object.entries(disabled)) {
+    const button = document.getElementById(id);
+    if (button) button.disabled = value;
+  }
+}
+let _viewLaneHeight = 44;
+
 function wireZoomButtons() {
+  document.getElementById("waveZoomIn")?.addEventListener("click", () => setWaveZoomLevel(waveZoom * WAVE_ZOOM_STEP));
+  document.getElementById("waveZoomOut")?.addEventListener("click", () => setWaveZoomLevel(waveZoom / WAVE_ZOOM_STEP));
+  document.getElementById("waveZoomFit")?.addEventListener("click", () => {
+    resetWaveZoom();
+    if (waveScroll) waveScroll.scrollLeft = 0;
+    syncRulerScroll();
+  });
+  document.addEventListener("laneheightapplied", (event) => {
+    _viewLaneHeight = event.detail.height;
+    const value = document.getElementById("laneHeightValue");
+    if (value) value.textContent = `${_viewLaneHeight} px`;
+    paintViewControls();
+  });
+  for (const [id, delta] of [["laneHeightOut", -16], ["laneHeightIn", 16]]) {
+    document.getElementById(id)?.addEventListener("click", () => {
+      document.dispatchEvent(new CustomEvent("laneheightchange", {
+        detail: { height: Math.max(44, Math.min(160, _viewLaneHeight + delta)) },
+      }));
+    });
+  }
   if (waveScroll) {
     let rafId = null;
     const ro = new ResizeObserver(() => {
@@ -945,8 +980,8 @@ function wireMixerResize() {
   if (!handle || !panel || !app) return;
   const resize = (width) => {
     const available = document.querySelector(".daw-main-col")?.clientWidth || 1000;
-    const max = Math.max(520, Math.min(720, available - 260));
-    const next = Math.round(Math.max(520, Math.min(max, width)));
+    const max = Math.max(470, Math.min(640, available - 260));
+    const next = Math.round(Math.max(470, Math.min(max, width)));
     app.style.setProperty("--daw-col-w", `${next}px`);
     handle.setAttribute("aria-valuemax", String(max));
     handle.setAttribute("aria-valuenow", String(next));
@@ -966,7 +1001,7 @@ function wireMixerResize() {
   handle.addEventListener("keydown", (event) => {
     if (!["ArrowLeft", "ArrowRight", "Home"].includes(event.key)) return;
     event.preventDefault();
-    resize(event.key === "Home" ? 540 : panel.getBoundingClientRect().width + (event.key === "ArrowRight" ? 20 : -20));
+    resize(event.key === "Home" ? 470 : panel.getBoundingClientRect().width + (event.key === "ArrowRight" ? 20 : -20));
   });
 }
 

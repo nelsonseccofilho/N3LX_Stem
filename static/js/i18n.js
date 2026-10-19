@@ -218,6 +218,8 @@ function applyStemRowAriaLabels(scope) {
 // ─────────────────────────────────────────────────────────────────────────
 
 const en = {
+  "nav.githubStar": "Star on GitHub",
+  "help.githubStar": "Open the N3LX_Stem repository on GitHub to give the project a star.",
   "sections.kind.intro": "Intro",
   "sections.kind.outro": "Outro",
   "sections.kind.break": "Break",
@@ -1114,6 +1116,8 @@ const en = {
 };
 
 const pl = {
+  "nav.githubStar": "Gwiazda na GitHubie",
+  "help.githubStar": "Otwiera repozytorium N3LX_Stem w serwisie GitHub, aby przyznać projektowi gwiazdkę.",
   "sections.kind.intro": "Intro",
   "sections.kind.outro": "Zakończenie",
   "sections.kind.break": "Przerwa",
@@ -2000,6 +2004,8 @@ const pl = {
 };
 
 const ja = {
+  "nav.githubStar": "GitHub でスターを付ける",
+  "help.githubStar": "GitHub の N3LX_Stem リポジトリを開き、プロジェクトにスターを付けられます。",
   "sections.kind.intro": "イントロ",
   "sections.kind.outro": "アウトロ",
   "sections.kind.break": "ブレイク",
@@ -2861,6 +2867,8 @@ const ja = {
 };
 
 const zhHans = {
+  "nav.githubStar": "在 GitHub 上加星标",
+  "help.githubStar": "打开 GitHub 上的 N3LX_Stem 仓库，为项目添加星标。",
   "sections.kind.intro": "前奏",
   "sections.kind.outro": "尾奏",
   "sections.kind.break": "间奏",
@@ -3722,6 +3730,8 @@ const zhHans = {
 };
 
 const de = {
+  "nav.githubStar": "Stern auf GitHub",
+  "help.githubStar": "Öffnet das N3LX_Stem-Repository auf GitHub, um dem Projekt einen Stern zu geben.",
   "sections.kind.intro": "Intro",
   "sections.kind.outro": "Outro",
   "sections.kind.break": "Break",
@@ -4594,6 +4604,8 @@ const de = {
 };
 
 const pt = {
+  "nav.githubStar": "Estrela no GitHub",
+  "help.githubStar": "Abre o repositório do N3LX_Stem no GitHub para você dar uma estrela ao projeto.",
   "sections.kind.intro": "Introdução",
   "sections.kind.outro": "Final",
   "sections.kind.break": "Pausa",
@@ -5468,6 +5480,8 @@ const pt = {
 };
 
 const id = {
+  "nav.githubStar": "Bintangi di GitHub",
+  "help.githubStar": "Buka repositori N3LX_Stem di GitHub untuk memberi bintang pada proyek.",
   "sections.kind.intro": "Intro",
   "sections.kind.outro": "Outro",
   "sections.kind.break": "Jeda",
@@ -6329,6 +6343,8 @@ const id = {
 };
 
 const fr = {
+  "nav.githubStar": "Étoile sur GitHub",
+  "help.githubStar": "Ouvre le dépôt N3LX_Stem sur GitHub pour donner une étoile au projet.",
   "sections.kind.intro": "Intro",
   "sections.kind.outro": "Outro",
   "sections.kind.break": "Pause",
@@ -7375,6 +7391,8 @@ const ptPT = {
 };
 
 const es = {
+  "nav.githubStar": "Estrella en GitHub",
+  "help.githubStar": "Abre el repositorio de N3LX_Stem en GitHub para dar una estrella al proyecto.",
   "sections.kind.intro": "Intro",
   "sections.kind.outro": "Outro",
   "sections.kind.break": "Pausa",
@@ -8269,6 +8287,8 @@ const es = {
 // 루프) stay loanwords; translating those would read as odd to anyone who
 // has opened a DAW.
 const ko = {
+  "nav.githubStar": "GitHub에서 스타 누르기",
+  "help.githubStar": "GitHub의 N3LX_Stem 저장소를 열어 프로젝트에 스타를 줄 수 있어요.",
 
   "sections.kind.intro": "인트로",
   "sections.kind.outro": "아웃트로",

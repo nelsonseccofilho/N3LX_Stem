@@ -520,14 +520,32 @@ function _armCountIn(eng, startPos) {
   // this one's clicks belong to this one. A destroyed metronome ignores them.
   const generation = ++_countInGeneration;
   const clickTrack = metronome;
-  eng.play(leadIn).then((started) => {
-    if (!started || generation !== _countInGeneration) return;
+  return eng.play(leadIn).then((started) => {
+    if (!started || generation !== _countInGeneration) return false;
     clickTrack.playCountIn(sourceClicks);
+    return true;
   });
+}
+
+// Setlist awaits the same count-in path used by the normal Play button.
+export async function startPreparedPlayback(prefs = {}) {
+  const tx = audioEngine ?? multitrack;
+  if (!tx) return false;
+  const wantsClick = prefs.enabled === true || Number(prefs.countInBars) > 0;
+  if (wantsClick && (!metronome || !_currentGrid())) throw new Error(t("setlist.noGrid"));
+  if (Number(prefs.countInBars) > 0 && !tx.supportsCountIn) throw new Error(t("setlist.noCountIn"));
+  if (tx.audioContext?.state === "suspended") await tx.audioContext.resume();
+  tx.setTime(0);
+  const generation = _countInGeneration;
+  const armed = _armCountIn(tx, 0);
+  const started = await (armed || tx.play());
+  if (tx !== (audioEngine ?? multitrack) || (!armed && generation !== _countInGeneration) || started === false) return false;
+  playBtn.classList.add("playing"); stopBtn.classList.remove("stopped");
   return true;
 }
 
 export function togglePlayPause() {
+  if (!document.dispatchEvent(new CustomEvent("transportintent", { cancelable: true, detail: { action: (audioEngine ?? multitrack)?.isPlaying() ? "pause" : "play" } }))) return;
   const eng = audioEngine;
   const tx = eng ?? multitrack;
   if (!tx) return;
@@ -565,6 +583,7 @@ export function togglePlayPause() {
 }
 
 export function stopTransport() {
+  document.dispatchEvent(new CustomEvent("transportintent", { detail: { action: "stop" } }));
   const eng = audioEngine;
   const tx = eng ?? multitrack;
   if (!tx) return;
@@ -1233,14 +1252,30 @@ function wireSpeedControl() {
 
 const _METRO_PREFS_KEY = "stemdeck:metronome";
 
+let _metroPreferenceScope = null;
+export function getMetronomePrefs() {
+  return { enabled: metronomeEnabled, volume: metronomeVolume, beatsPerBar: metronomeBeatsPerBar,
+    grouping: metronomeGrouping, countInBars: metronomeCountInBars, multiplier: metronome?.getMultiplier?.() ?? 1 };
+}
+export function setMetronomePreferenceScope(scope, restore = null) {
+  _metroPreferenceScope = scope;
+  const prefs = scope?.prefs || restore;
+  if (!prefs) return;
+  setMetronomeEnabled(prefs.enabled === true);
+  if (Number.isFinite(prefs.volume)) setMetronomeVolume(prefs.volume);
+  if (Number.isFinite(prefs.beatsPerBar)) setMetronomeBeatsPerBar(prefs.beatsPerBar);
+  setMetronomeGrouping(prefs.grouping ?? null);
+  setMetronomeCountInBars(prefs.countInBars || 0);
+  metronome?.setEnabled(metronomeEnabled); metronome?.setVolume(metronomeVolume);
+  metronome?.setMultiplier?.([0.5, 1, 2].includes(prefs.multiplier) ? prefs.multiplier : 1);
+  metroBtn?.classList.toggle("active", metronomeEnabled && !metroBtn.disabled);
+  metroBtn?.setAttribute("aria-pressed", String(metronomeEnabled && !metroBtn.disabled));
+  _renderCountIn(); _renderMetroVolume(); _renderMetroBar(); applyMetronomeAccent();
+}
 function _saveMetroPrefs() {
-  storeSet(_METRO_PREFS_KEY, {
-    enabled: metronomeEnabled,
-    volume: metronomeVolume,
-    beatsPerBar: metronomeBeatsPerBar,
-    grouping: metronomeGrouping,
-    countInBars: metronomeCountInBars,
-  }).catch((e) => console.warn("[transport] failed to save metronome prefs:", e));
+  const prefs = getMetronomePrefs();
+  if (_metroPreferenceScope) { _metroPreferenceScope.prefs = structuredClone(prefs); _metroPreferenceScope.save(prefs); return; }
+  storeSet(_METRO_PREFS_KEY, prefs).catch((e) => console.warn("[transport] failed to save metronome prefs:", e));
 }
 
 /**
@@ -1522,6 +1557,7 @@ function setMetroOptionsAvailable(available) {
 }
 
 export function updateMetronomeAvailability(grid, reason = "") {
+  if (_metroPreferenceScope) metronome?.setMultiplier?.(_metroPreferenceScope.prefs.multiplier ?? 1);
   if (!metroBtn) return;
   _lastGrid = grid || null;
   const available = !!(grid && Array.isArray(grid.beats) && grid.beats.length);
@@ -1710,6 +1746,7 @@ function wireMetronomeControl() {
   for (const [btn, mult] of [[metroHalfBtn, 0.5], [metroOneBtn, 1], [metroDoubleBtn, 2]]) {
     btn?.addEventListener("click", () => {
       metronome?.setMultiplier(mult);
+      if (_metroPreferenceScope) _saveMetroPrefs();
       _renderMetroMultiplier();
       _renderMetroNote(_lastGrid);
     });

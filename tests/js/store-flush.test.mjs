@@ -1,0 +1,13 @@
+import assert from "node:assert/strict";
+const saved = new Map();
+globalThis.window = { __TAURI__: {core:{invoke:async (command,{key,value}) => {if(command === "store_set") saved.set(key,structuredClone(value));}}} };
+const {storeSetDebounced,flushStoreWrites} = await import("../../static/js/utils.js");
+const mix = {bass:{volume:0.6,muted:true}};
+storeSetDebounced("stemdeck:mix:first",mix,60000); mix.bass.volume=1;
+storeSetDebounced("stemdeck:mix:second",{guitar:{muted:true}},60000);
+await flushStoreWrites();
+assert.equal(saved.get("stemdeck:mix:first").bass.volume,0.6);
+assert.equal(saved.get("stemdeck:mix:first").bass.muted,true);
+assert.equal(saved.get("stemdeck:mix:second").guitar.muted,true);
+await flushStoreWrites(); assert.equal(saved.size,2);
+console.log("Pending song mixes flush as immutable snapshots before switching: passed");

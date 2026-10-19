@@ -21,6 +21,7 @@ KEYS = {
     "stemdeck:beatgrid-prefs",
     "stemdeck:slow-speed",
     "stemdeck:metronome",
+    "stemdeck:setlist",
 }
 
 

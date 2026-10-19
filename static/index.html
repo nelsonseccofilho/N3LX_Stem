@@ -326,6 +326,10 @@
               </svg>
               <span data-i18n="nav.library">Library</span>
             </button>
+            <button class="rail-btn rail-setlist" type="button" title="Setlist" aria-label="Setlist" aria-pressed="false">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 5h13M3 10h13M3 15h7M16 13l5 4-5 4z"/></svg>
+              <span>Setlist</span>
+            </button>
             <!-- Lyrics for the open track (#699): a view of the sidebar, like
                  Favorites and Trash, drawn by lyrics.js. -->
             <button class="rail-btn rail-lyrics" type="button" title="Lyrics" aria-label="Lyrics" aria-pressed="false" data-i18n-title="nav.lyrics" data-i18n-aria-label="nav.lyrics">
@@ -826,6 +830,7 @@
 
         </div><!-- /#lanes -->
 
+      <div id="setlistBar" class="setlist-bar" hidden></div>
       <div class="studio-view-tools" role="group" aria-label="Timeline view" data-i18n-aria-label="view.controls">
         <div class="view-control-group">
           <span data-i18n="view.time">Time</span>

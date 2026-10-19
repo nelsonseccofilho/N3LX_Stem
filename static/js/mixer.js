@@ -36,23 +36,28 @@ export function ensureMixerStateDefaults() {
   }
 }
 
-export async function loadMixIntoState(jobId, loadedStemNames = STEM_NAMES) {
+let _mixContext = null;
+let _mixJobId = null;
+let _mixLoadToken = 0;
+export async function loadMixIntoState(jobId, loadedStemNames = STEM_NAMES, context = null) {
+  const token = ++_mixLoadToken;
+  _mixContext = context;
+  _mixJobId = jobId;
   let stored = {};
   try {
-    const data = await storeGet(`stemdeck:mix:${jobId}`, {});
+    const data = context?.mix ?? await storeGet(`stemdeck:mix:${jobId}`, {});
     if (data && typeof data === "object") stored = data;
   } catch (e) { console.warn("[mixer] failed to load mix state:", e); }
+  if (token !== _mixLoadToken || currentJobId !== jobId) return;
   for (const name of allTrackNames()) {
     Object.assign(mixerState[name], defaultMixerEntry(), stored[name] || {});
   }
-  // If all loaded stems are muted the session is unplayable -- unmute as recovery.
-  const loadedStems = loadedStemNames.filter((n) => mixerState[n]);
-  if (loadedStems.length > 0 && loadedStems.every((n) => mixerState[n].muted)) {
-    for (const name of loadedStems) mixerState[name].muted = false;
-  }
+  // A playlist may intentionally silence every stem; preserve that choice.
+  context?.save?.(structuredClone(mixerState));
 }
 
 export function resetMixerState() {
+  _mixContext = null; _mixJobId = null; _mixLoadToken++;
   for (const name of allTrackNames()) {
     Object.assign(mixerState[name], defaultMixerEntry());
   }
@@ -60,7 +65,8 @@ export function resetMixerState() {
 
 function saveMix() {
   if (!currentJobId) return;
-  storeSetDebounced(`stemdeck:mix:${currentJobId}`, mixerState);
+  if (_mixContext && _mixJobId === currentJobId) _mixContext.save(structuredClone(mixerState));
+  else storeSetDebounced(`stemdeck:mix:${currentJobId}`, mixerState);
 }
 
 /** Push one lane's transpose into whichever engine is playing. */

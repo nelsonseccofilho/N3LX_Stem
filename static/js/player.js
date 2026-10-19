@@ -1131,7 +1131,8 @@ function _applyLaneHeight(count) {
   return rowH - WAVEFORM_SEPARATOR_HEIGHT;
 }
 
-export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, title = "", peaksPromise = null, hasVideo = false, videoStatus = null, studioLayout = null) {
+export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, title = "", peaksPromise = null, hasVideo = false, videoStatus = null, studioLayout = null, mixContext = null) {
+  document.dispatchEvent(new CustomEvent("playbackloading", { detail: { jobId } }));
   applyStudioLayout(studioLayout);
   mixerEl.replaceChildren();
   for (const name of ["original", ...STEM_NAMES, ...EXTRA_STEM_NAMES]) {
@@ -1168,7 +1169,7 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
   setCurrentJobId(jobId);
   setTotalDuration(duration || 0);
   refreshMixerVisuals();
-  const mixReady = loadMixIntoState(jobId, stems.map((s) => s.name))
+  const mixReady = loadMixIntoState(jobId, stems.map((s) => s.name), mixContext)
     .then(() => { if (currentJobId === jobId) refreshMixerVisuals(); })
     .catch((e) => { console.warn("[player] mix state load failed:", e); });
   setLaneControlsEnabled(true);
@@ -1439,7 +1440,11 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
     updateFooterTimes(0);
     updatePresencePlayhead(0);
     setMasterVolume(masterFader ? parseFloat(masterFader.value) : masterVolume);
-    mixReady.then(() => { if (currentJobId === jobId && multitrack === mt) applyMix(); });
+    mixReady.then(() => {
+      if (currentJobId !== jobId || multitrack !== mt) return;
+      applyMix();
+      if (!useEngine) document.dispatchEvent(new CustomEvent("playbackready", { detail: { jobId } }));
+    });
     setLoopStart(totalDuration * LOOP_DEFAULT_START_FRAC);
     setLoopEnd(totalDuration * LOOP_DEFAULT_END_FRAC);
     // When the engine owns playback the multitrack has null URLs and no decoded
@@ -1512,6 +1517,10 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
       updateStopVisual();
     });
     ws.on("seeking", updateStopVisual);
+    ws.on("finish", () => {
+      if (!useEngine && multitrack === mt && token === visualRenderToken && !loopEnabled)
+        document.dispatchEvent(new CustomEvent("trackplaybackended", { detail: { jobId } }));
+    });
 
     // ── Web Audio engine (flag-gated) ──────────────────────────────────────
     // When enabled, decode the active stems and play them off a single
@@ -1533,7 +1542,11 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
       };
       teardownMetronome();
       if (audioEngine) { audioEngine.destroy(); setAudioEngine(null); }
-      const onEnded = () => { playBtn.classList.remove("playing"); updateStopVisual(); };
+      const onEnded = () => {
+        if (multitrack !== mt || token !== visualRenderToken) return;
+        playBtn.classList.remove("playing"); updateStopVisual();
+        document.dispatchEvent(new CustomEvent("trackplaybackended", { detail: { jobId } }));
+      };
       // Engine bring-up, callable twice: the chunked path falls back to
       // "fulldecode" when peaks.json is missing (legacy jobs), because the
       // backend's documented degradation for missing peaks is client-side
@@ -1597,7 +1610,7 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
           // Click track. Bound to this engine instance, so it is rebuilt on
           // every engine bring-up (including the chunked -> fulldecode swap
           // below) and torn down with it.
-          _beatsPromise.then((grid) => {
+          const clickReady = _beatsPromise.then((grid) => {
             if (token !== visualRenderToken || multitrack !== mt || audioEngine !== eng) return;
             teardownMetronome();
             const beats = Array.isArray(grid?.beats) ? grid.beats : null;
@@ -1634,6 +1647,11 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
             // One place decides how accents are driven; the panel's Accent
             // setting can override the detected bar marks.
             applyMetronomeAccent();
+          });
+          Promise.all([mixReady, clickReady]).then(() => {
+            if (token !== visualRenderToken || multitrack !== mt || audioEngine !== eng) return;
+            applyMix(); applyAllLanePitches();
+            document.dispatchEvent(new CustomEvent("playbackready", { detail: { jobId } }));
           });
           if (kind === "chunked") {
             // Streaming path: the engine holds no full buffers. Overview waveforms

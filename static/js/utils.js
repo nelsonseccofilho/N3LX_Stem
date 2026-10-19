@@ -36,12 +36,23 @@ export async function storeSet(key, value) {
 // value so no mutation races occur.
 const _storePending = new Map();
 export function storeSetDebounced(key, value, delayMs = 300) {
-  if (_storePending.has(key)) clearTimeout(_storePending.get(key));
+  if (_storePending.has(key)) clearTimeout(_storePending.get(key).timer);
   const snapshot = structuredClone(value);
-  _storePending.set(key, setTimeout(() => {
+  const timer = setTimeout(() => {
     _storePending.delete(key);
     storeSet(key, snapshot);
-  }, delayMs));
+  }, delayMs);
+  _storePending.set(key, { timer, snapshot });
+}
+
+// Flush a fader's latest snapshot before another song replaces mixerState.
+export async function flushStoreWrites() {
+  const pending = [..._storePending];
+  _storePending.clear();
+  await Promise.all(pending.map(([key, { timer, snapshot }]) => {
+    clearTimeout(timer);
+    return storeSet(key, snapshot);
+  }));
 }
 
 // Keys that hold critical user data and must be migrated from localStorage

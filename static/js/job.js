@@ -257,6 +257,7 @@ function clearImportError() {
 // has not read yet. Always retry:false -- "Try again" sends the user to the URL
 // field, which is not what a broken stem file calls for.
 export function showPlaybackError(message, detail, context = {}) {
+  document.dispatchEvent(new CustomEvent("playbackfailed", { detail: { jobId: context.jobId, message } }));
   showError(message, detail, { retry: false });
   errorEl.dataset.kind = "playback";
   // The class of failure #359 was written about: a track that loads and then

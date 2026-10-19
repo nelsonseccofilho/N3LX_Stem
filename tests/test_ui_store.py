@@ -43,3 +43,16 @@ def test_ui_store_is_host_only_and_survives_separate_reads(store):
     assert local.get("/api/ui-store").json()["values"] == {"stemdeck.language": "pt"}
     assert local.post("/api/ui-store", json={"values": {"password": "secret"}}).status_code == 422
     assert local.get("/api/ui-store").json()["values"] == {"stemdeck.language": "pt"}
+
+
+def test_setlists_and_per_playlist_mix_persist_without_replacing_song_mix(store):
+    song_mix = {"bass": {"volume": 1, "muted": False}}
+    playlist = {"version": 1, "selectedId": "p1", "playlists": [
+        {"id": "p1", "name": "Baixo mudo", "metro": {"enabled": True, "countInBars": 2},
+         "entries": [{"id": "song", "mix": {"bass": {"volume": 0.8, "muted": True}}}]}
+    ]}
+    store.update_values({"stemdeck:mix:song": song_mix})
+    store.update_values({"stemdeck:setlist": playlist})
+    saved = store.read_values()
+    assert saved["stemdeck:setlist"] == playlist
+    assert saved["stemdeck:mix:song"] == song_mix

@@ -28,6 +28,14 @@ O inicializador usa **Completo + Best** como padrão de uma instalação nova. P
 
 As pistas efetivas aparecem no mixer e na área de pistas prontas. O ZIP completo evita duplicar os grupos de voz e bateria que já foram subdivididos. O aplicativo mantém fila, biblioteca persistente, controles de mixagem e configurações do projeto original.
 
+## Setlist e playlists
+
+Abra **Setlist** na lateral para criar ou duplicar playlists e adicionar músicas já extraídas da Biblioteca. Reordene com as setas, selecione uma música e ajuste volumes, mudo, solo e transposição no mixer original. Esses ajustes ficam salvos por música dentro de cada playlist, separados da mixagem da Biblioteca. Para repetir uma configuração em toda a playlist, use **Aplicar esta mixagem a todas desta playlist**.
+
+Use os controles originais de **contagem** e **metrônomo**; suas opções também ficam salvas por playlist. O **Play normal** inicia na música selecionada e avança automaticamente ao terminar. Pausar mantém a sequência; Parar interrompe o avanço. O loop mantém a música atual repetindo até ser desligado. Para voltar à mixagem normal da Biblioteca, use **Sair do modo playlist**.
+
+A próxima música começa depois de carregar áudio, mixagem e mapa de batidas. A troca é automática, com um possível intervalo curto; não é reprodução sem lacunas. Se uma faixa falhar, a sequência para e informa o problema. Contagem e metrônomo dependem de um mapa de batidas disponível.
+
 ## Acompanhar a extração
 
 O painel mostra **7 etapas** no modo Completo: preparar áudio, analisar música, separar instrumentos, separar vozes, detalhar bateria, preservar resíduos e finalizar pistas. Os três modelos informam percentuais medidos pelos trechos processados, incluindo todas as passagens configuradas. As demais partes mostram atividade e tempo decorrido, sem percentual ou previsão inventados. A contagem de etapas concluídas não é uma estimativa do tempo restante.

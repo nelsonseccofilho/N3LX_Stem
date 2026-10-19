@@ -1,3 +1,4 @@
+import { initSetlist, renderSetlistPanel } from "./setlist.js";
 import { setDefaultSeparationProfile, defaultSeparationProfile } from "./constants.js";
 // catalog.js — library panel: folders, tracks, collapse, drag-and-drop
 import { STEM_NAMES } from "./constants.js";
@@ -13,7 +14,7 @@ import {
   queueCount, queueRowStates, refreshQueue, reorderQueuedJob, runningLabel, startQueue,
   startQueueStream,
 } from "./queue.js";
-import { fmtTime, isReimportableSource, storeGet, storeSet } from "./utils.js";
+import { fmtTime, isReimportableSource, storeGet, storeSet, flushStoreWrites } from "./utils.js";
 import { notifyFailure, setReleasePending, dismissFailuresByJobId, dismissFailuresByKind } from "./notifications.js";
 // Aliased (not the bare "t") -- this file already uses "t"/"tr" as local
 // variable names for track objects and table rows in several scopes.
@@ -849,7 +850,7 @@ function moveTrackToTrash(trackId) {
 }
 
 function setCatalogView(view) {
-  catalogView = ["trash", "favorites", "queue", "lyrics"].includes(view) ? view : "library";
+  catalogView = ["trash", "favorites", "queue", "lyrics", "setlist"].includes(view) ? view : "library";
   // Switching to Trash, Favourites, Queue or Lyrics is a request to look at
   // the sidebar, so a collapsed one comes back. Through the shared helper, or
   // the collapse button's aria-expanded is left claiming the sidebar is still
@@ -891,10 +892,13 @@ function reimportUnavailableTrack(trackId, track) {
   showError(i18nT("track.audioUnavailableError"));
 }
 
-async function loadTrackIntoStudio(trackId) {
+async function loadTrackIntoStudio(trackId, { source = "library", signal = null, mixContext = null } = {}) {
+  if (signal?.aborted) return false;
+  document.dispatchEvent(new CustomEvent("trackwillopen", { detail: { jobId: trackId, source } }));
   let track = tracks[trackId];
   if (!track) return;
   if (track.status === "unavailable") {
+    if (source.startsWith("setlist")) return false;
     reimportUnavailableTrack(trackId, track);
     return;
   }
@@ -905,6 +909,8 @@ async function loadTrackIntoStudio(trackId) {
   if (trackId !== foregroundJobId) detachForegroundJob();
   const hadStoredAudio = Boolean(track.audioStems?.length);
   const token = ++_loadTrackToken;
+  await flushStoreWrites();
+  if (token !== _loadTrackToken || signal?.aborted) return false;
 
   // Start peaks fetch immediately — runs in parallel with job-data fetch so it
   // resolves before wireUpAudio calls Multitrack.create. This prevents peaks.json
@@ -918,13 +924,14 @@ async function loadTrackIntoStudio(trackId) {
   // are reflected — cached localStorage data can be stale.
   try {
     const res = await fetch(`/api/jobs/${trackId}`);
-    if (token !== _loadTrackToken) return;
+    if (token !== _loadTrackToken || signal?.aborted) return false;
     if (res.ok) {
       const state = await res.json();
       track = stateMetadataToTrack(state, track);
       tracks[trackId] = track;
       saveState();
       if (state.status === "unavailable") {
+        if (source.startsWith("setlist")) return false;
         reimportUnavailableTrack(trackId, track);
         return;
       }
@@ -938,7 +945,7 @@ async function loadTrackIntoStudio(trackId) {
     }
   } catch (e) { console.warn("[catalog] server sync failed, using stored track:", e); }
 
-  if (token !== _loadTrackToken) return;
+  if (token !== _loadTrackToken || signal?.aborted) return false;
   // A reprocessing track may still carry the previous extraction's stems
   // (hadStoredAudio), but it isn't ready — loading it would replace the live
   // job-progress overlay with stale audio. Leave the progress UI in place.
@@ -980,14 +987,15 @@ async function loadTrackIntoStudio(trackId) {
   setResplitTarget(resplittable ? track : null);
 
   applyTrackInfoToPanel(track);
-  wireUpAudio(trackId, track.audioStems, track.duration || 0, track.thumb, track.mixUrl ?? null, track.title || "", peaksPromise, track.hasVideo ?? false, track.videoStatus ?? null, track.studioLayout ?? null);
+  wireUpAudio(trackId, track.audioStems, track.duration || 0, track.thumb, track.mixUrl ?? null, track.title || "", peaksPromise, track.hasVideo ?? false, track.videoStatus ?? null, track.studioLayout ?? null, mixContext);
   initSections(trackId, track.sections, track.duration || 0);
   // Not awaited: the track is already loading, and the answer arrives as a
   // "tracktags" event.
   backfillAudioTags(trackId);
   // For artistInfo.js, which finds the band from the file's tags. An event
   // rather than an import, since that module already imports this one.
-  document.dispatchEvent(new CustomEvent("trackopen", { detail: { id: trackId } }));
+  document.dispatchEvent(new CustomEvent("trackopen", { detail: { id: trackId, source } }));
+  return true;
 }
 
 /**
@@ -2052,7 +2060,8 @@ function render() {
   const isFavoritesView = catalogView === "favorites";
   const isQueueView = catalogView === "queue";
   const isLyricsView = catalogView === "lyrics";
-  const isLibraryView = !isTrashView && !isFavoritesView && !isQueueView && !isLyricsView;
+  const isSetlistView = catalogView === "setlist";
+  const isLibraryView = !isTrashView && !isFavoritesView && !isQueueView && !isLyricsView && !isSetlistView;
 
   catalog?.classList.toggle("trash-view", isTrashView);
   catalog?.classList.toggle("favorites-view", isFavoritesView);
@@ -2060,6 +2069,9 @@ function render() {
   // The lyrics panel replaces the list rather than being rendered into it;
   // daw.css swaps which of the two is shown.
   catalog?.classList.toggle("lyrics-view", isLyricsView);
+  catalog?.classList.toggle("setlist-view", isSetlistView);
+  document.querySelector(".rail-setlist")?.classList.toggle("active", isSetlistView);
+  document.querySelector(".rail-setlist")?.setAttribute("aria-pressed", String(isSetlistView));
   document.querySelector(".rail-lyrics")?.classList.toggle("active", isLyricsView);
   document.querySelector(".rail-lyrics")?.setAttribute("aria-pressed", String(isLyricsView));
 
@@ -2079,6 +2091,8 @@ function render() {
         ? i18nT("search.placeholderFavorites")
         : i18nT("search.placeholderLibrary");
   }
+
+  if (isSetlistView) { renderSetlistPanel(list); return; }
 
   // ── Queue view ──
   // Rendered from the queue snapshot, not the library: it shows what the
@@ -2644,6 +2658,7 @@ function wireCatalogToggle() {
 }
 
 function wireCatalogRailViews() {
+  document.querySelector(".rail-setlist")?.addEventListener("click", () => setCatalogView("setlist"));
   document.querySelector(".rail-library")?.addEventListener("click", () => setCatalogView("library"));
   document.querySelector(".rail-favorites")?.addEventListener("click", () => setCatalogView("favorites"));
   document.querySelector(".rail-trash")?.addEventListener("click", () => setCatalogView("trash"));
@@ -4914,6 +4929,16 @@ function wireSettingsMenu() {
 
 export async function initCatalog() {
   await loadState();
+  await initSetlist({
+    tracks: () => {
+      const trash = new Set(getTrashFolder()?.items || []);
+      return Object.entries(tracks).filter(([id, track]) => !trash.has(id) && track.status === "done" && track.audioStems?.length)
+        .map(([id, track]) => ({ id, title: track.title, duration: track.duration }));
+    },
+    open: loadTrackIntoStudio,
+    show: () => setCatalogView("setlist"),
+    changed: () => { if (catalogView === "setlist") render(); },
+  });
   wireCatalogToggle();
   wireCatalogRailViews();
   wireCatalogSearch();

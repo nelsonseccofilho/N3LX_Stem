@@ -54,6 +54,12 @@ def _clean_text(value: Any) -> str:
 
 
 def _parse_whisper_cpp(source: dict[str, Any]) -> list[dict[str, Any]]:
+    """Read actual -ojf JSON: segment-level timestamps and optional tokens.
+
+    Segment timestamps alone are NOT word timecodes. Prefer each token's own
+    offsets, and join token fragments until a whitespace-delimited word begins.
+    Reject ambiguous multiword segments without timestamped tokens.
+    """
     chunks = source.get("transcription")
     if not isinstance(chunks, list) or len(chunks) > MAX_WORDS * 2:
         raise KaraokeTimingError("whisper.cpp transcription must be a bounded list")
@@ -62,23 +68,67 @@ def _parse_whisper_cpp(source: dict[str, Any]) -> list[dict[str, Any]]:
         if not isinstance(chunk, dict) or not isinstance(chunk.get("offsets"), dict):
             raise KaraokeTimingError(f"invalid transcription chunk {index}")
         offsets = chunk["offsets"]
-        start = _finite(offsets.get("from"), "offset.from") / 1000
-        end = _finite(offsets.get("to"), "offset.to") / 1000
-        if end < start:
+        seg_start = _finite(offsets.get("from"), "segment.from") / 1000
+        seg_end = _finite(offsets.get("to"), "segment.to") / 1000
+        if seg_end < seg_start:
             raise KaraokeTimingError("segment ends before it starts")
-        text = _clean_text(chunk.get("text"))
-        if not text or _SPECIAL.fullmatch(text):
-            continue
-        # -ml 1 yields individual words or punctuation; never interpolate
-        # unknown individual timestamps from a multiword segment.
-        if len(text.split()) > 1:
-            raise KaraokeTimingError("multiword segment: use whisper-cli -ml 1")
-        if not _WORD.search(text):
-            if words:
-                words[-1]["text"] += text
-                words[-1]["end"] = max(words[-1]["end"], end)
-            continue
-        words.append({"text": text, "start": start, "end": end})
+        tokens = chunk.get("tokens")
+        if isinstance(tokens, list) and tokens:
+            if len(tokens) > MAX_WORDS * 4:
+                raise KaraokeTimingError("segment has too many tokens")
+            current: dict[str, Any] | None = None
+            for token in tokens:
+                if not isinstance(token, dict) or not isinstance(token.get("text"), str):
+                    raise KaraokeTimingError("invalid full JSON token")
+                raw = token["text"]
+                stripped = raw.strip()
+                if not stripped or _SPECIAL.fullmatch(stripped):
+                    continue
+                piece = _clean_text(raw)
+                if not piece:
+                    continue
+                if len(piece.split()) > 1:
+                    raise KaraokeTimingError("multiword token has no per-word timecodes")
+                toff = token.get("offsets")
+                if not isinstance(toff, dict):
+                    # A token without its own timing cannot become a word.
+                    if not _WORD.search(piece):
+                        continue
+                    raise KaraokeTimingError("word token lacks timestamps")
+                start = _finite(toff.get("from"), "token.from") / 1000
+                end = _finite(toff.get("to"), "token.to") / 1000
+                if end < start or start < seg_start - 0.15 or end > seg_end + 0.3:
+                    raise KaraokeTimingError("token timestamps inconsistent with segment")
+                if not _WORD.search(piece):
+                    if current is not None:
+                        current["text"] += piece
+                        current["end"] = max(current["end"], end)
+                    continue
+                boundary = (current is None or raw[0].isspace()
+                            or start - current["end"] > 0.35)
+                if boundary:
+                    if current is not None:
+                        words.append(current)
+                    current = {"text": piece, "start": start, "end": end}
+                else:
+                    # Wordpieces such as " en", "con", "trar" must be joined,
+                    # not interpreted as three different words.
+                    current["text"] += piece
+                    current["end"] = max(current["end"], end)
+            if current is not None:
+                words.append(current)
+        else:
+            text = _clean_text(chunk.get("text"))
+            if not text or _SPECIAL.fullmatch(text):
+                continue
+            if len(text.split()) > 1:
+                raise KaraokeTimingError("multiword segment has no token timecodes")
+            if not _WORD.search(text):
+                if words:
+                    words[-1]["text"] += text
+                    words[-1]["end"] = max(words[-1]["end"], seg_end)
+                continue
+            words.append({"text": text, "start": seg_start, "end": seg_end})
         if len(words) > MAX_WORDS:
             raise KaraokeTimingError("too many words")
     return words

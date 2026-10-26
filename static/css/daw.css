@@ -5816,3 +5816,63 @@ input, textarea { font-family: inherit; }
 
 .setlist-track-open { display:block; width:100%; text-align:left; font-size:12px; font-weight:600; border-color:transparent; background:transparent; padding:4px 0; overflow-wrap:anywhere; }
 .setlist-item.selected { border-radius:6px; box-shadow:inset 0 0 0 1px var(--accent); background:rgba(244,183,64,.06); }
+
+/* N3LX stereo PAN — inside the existing name/VU cell, never another DAW row.
+   All lanes retain the same --lane-h so waves and controls stay aligned. */
+.daw .lane-header.mx-row .lane-name-vu {
+  margin-top: 0;
+  gap: 1px;
+}
+.daw .lane-header.mx-row .lane-pan-wrap {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  justify-content: center;
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  height: 25px;
+  color: var(--fg-2);
+}
+.daw .lane-pan-heading { display: none; }
+.daw .lane-pan-input {
+  appearance: auto;
+  width: calc(100% - 23px);
+  min-width: 0;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--stem-color, var(--accent));
+  cursor: ew-resize;
+  touch-action: pan-y;
+}
+.daw .lane-pan-labels {
+  display: flex;
+  justify-content: space-between;
+  width: calc(100% - 23px);
+  font: 600 9px/10px var(--font-mono);
+  color: var(--muted);
+}
+.daw .lane-pan-value { color: var(--stem-color, var(--accent)); }
+.daw .lane-pan-center {
+  position: absolute;
+  right: 0;
+  top: 2px;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--fg-2);
+  font: 600 10px var(--font-mono);
+  cursor: pointer;
+  padding: 0;
+}
+.daw .lane-pan-input:focus-visible,
+.daw .lane-pan-center:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.daw .lane-pan-input:disabled,
+.daw .lane-pan-center:disabled { opacity: 0.4; cursor: default; }

@@ -15,9 +15,11 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 
 MAX_WORDS = 30_000
@@ -205,9 +207,35 @@ def _checked_executable(value: str, label: str) -> str:
     return resolved
 
 
+def _run_command(
+    argv: list[str], *, timeout: float,
+    cancelled: Callable[[], bool] | None = None,
+) -> int:
+    """Terminate workers reliably on cancel/timeout, including Windows."""
+    proc = subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    started = time.monotonic()
+    try:
+        while proc.poll() is None:
+            if cancelled is not None and cancelled():
+                raise KaraokeTimingError("karaoke generation cancelled")
+            if time.monotonic() - started > timeout:
+                raise KaraokeTimingError("karaoke worker exceeded its timeout")
+            time.sleep(0.15)
+        return int(proc.returncode)
+    finally:
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=5)
+
+
 def generate_timing(
     audio: Path, *, whisper_cli: str, model: Path, ffmpeg: str = "ffmpeg",
     timeout: int = 3600,
+    cancelled: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
     """Process isolated audio, with no automatic model install or CPU fallback."""
     audio, model = Path(audio), Path(model)
@@ -219,19 +247,19 @@ def generate_timing(
         root = Path(tmp)
         wav = root / "vocals16.wav"
         result_prefix = root / "transcription"
-        ff = subprocess.run(
+        ff_status = _run_command(
             [ffmpeg_bin, "-nostdin", "-v", "error", "-y", "-i", str(audio),
              "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(wav)],
-            capture_output=True, timeout=180, check=False,
+            timeout=180, cancelled=cancelled,
         )
-        if ff.returncode or not wav.is_file():
+        if ff_status or not wav.is_file():
             raise KaraokeTimingError("ffmpeg failed to prepare vocal audio")
         # Deliberately no --vad: known segment/token timestamp mapping issue.
         args = [cli, "-m", str(model), "-f", str(wav), "-l", "auto", "-t", "4",
                 "-dev", "0", "-ml", "1", "-sow", "-ojf", "-of", str(result_prefix)]
-        proc = subprocess.run(args, capture_output=True, timeout=timeout, check=False)
+        code = _run_command(args, timeout=timeout, cancelled=cancelled)
         json_path = result_prefix.with_suffix(".json")
-        if proc.returncode or not json_path.is_file():
+        if code or not json_path.is_file():
             raise KaraokeTimingError("whisper-cli did not produce a valid JSON result")
         if json_path.stat().st_size > MAX_BYTES:
             raise KaraokeTimingError("Whisper JSON exceeds the size limit")

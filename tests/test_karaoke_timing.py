@@ -69,3 +69,27 @@ def test_symlink_target_is_rejected(tmp_path: Path):
     with pytest.raises(KaraokeTimingError):
         store_timing(destination, {"v": 1}, replace=True)
     assert target.read_text(encoding="utf-8") == "original"
+
+def test_cancelled_worker_is_terminated(monkeypatch):
+    from app.pipeline import karaoke_timing as k
+
+    class Process:
+        returncode = None
+        stopped = False
+
+        def poll(self):
+            return self.returncode
+
+        def terminate(self):
+            self.stopped = True
+            self.returncode = -15
+
+        def wait(self, timeout=None):
+            return self.returncode
+
+    proc = Process()
+    monkeypatch.setattr(k.subprocess, "Popen", lambda *args, **kwargs: proc)
+    with pytest.raises(KaraokeTimingError, match="cancelled"):
+        k._run_command(["dummy"], timeout=30, cancelled=lambda: True)
+    assert proc.stopped
+

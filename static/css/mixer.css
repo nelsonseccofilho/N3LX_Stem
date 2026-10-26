@@ -292,7 +292,8 @@
   grid-template-columns: 1fr;
   grid-template-rows: 1fr;
   gap: 0;
-  padding: 0 5px 38px;
+  /* Make room for a compact PAN row above the download control. */
+  padding: 0 5px 107px;
 }
 
 .app:not(.is-import) .lane-knob {
@@ -416,3 +417,78 @@
 .app:not(.is-import) .master-strip .master-fader-track::after {
   display: none;
 }
+
+/* Independent stereo placement; controls do not generate or duplicate WAVs. */
+.lane-pan-wrap { display: none; }
+
+.app:not(.is-import) .lane-pan-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 18px;
+  grid-template-rows: 16px 16px 12px;
+  align-items: center;
+  gap: 1px 2px;
+  position: absolute;
+  bottom: 45px;
+  left: 4px;
+  right: 4px;
+  min-width: 0;
+  padding: 2px 3px;
+  border: 1px solid color-mix(in srgb, var(--stem-color) 24%, transparent);
+  border-radius: 6px;
+  background: rgba(10, 17, 24, 0.88);
+  color: #d7dce3;
+  z-index: 2;
+}
+
+.lane-pan-heading {
+  grid-column: 1;
+  grid-row: 1;
+  font: 600 10px/1 var(--font-mono);
+  letter-spacing: 0.04em;
+}
+
+.lane-pan-center {
+  grid-column: 2;
+  grid-row: 1;
+  padding: 0;
+  width: 18px;
+  height: 18px;
+  color: #e6edf6;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 3px;
+  font: 600 10px var(--font-mono);
+  cursor: pointer;
+}
+
+.lane-pan-input {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  appearance: auto;
+  width: 100%;
+  min-width: 0;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--stem-color);
+  cursor: ew-resize;
+}
+
+.lane-pan-labels {
+  grid-column: 1 / -1;
+  grid-row: 3;
+  display: flex;
+  justify-content: space-between;
+  font: 600 10px/1 var(--font-mono);
+  color: #c3ccd8;
+}
+
+.lane-pan-value { color: var(--stem-color); }
+
+.lane-pan-input:focus-visible,
+.lane-pan-center:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.lane-pan-input:disabled,
+.lane-pan-center:disabled { opacity: 0.4; cursor: default; }

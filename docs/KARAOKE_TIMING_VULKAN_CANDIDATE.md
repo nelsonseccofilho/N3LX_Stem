@@ -48,13 +48,42 @@ The command uses ffmpeg to create a temporary mono 16-kHz WAV and runs
 Known whisper.cpp versions have a segment/token timestamp axis mismatch when
 the VAD removes silence; see ggml-org/whisper.cpp issue #4046.
 
+## On-demand endpoint candidate
+
+The new `app/api/karaoke.py` router is explicitly opt-in. The backend
+process requires these two environment variables to point at pre-existing
+local files (no downloads/installs):
+
+- `N3LX_WHISPER_CLI`: path to a Vulkan-built whisper-cli executable
+- `N3LX_WHISPER_MODEL`: path to a local GGML model
+
+The route is not usable without these settings. After controlled local
+reconciliation and service restart:
+
+- `POST /api/jobs/{id}/karaoke/generate` with body `{}` to create the
+  sidecar for an existing `vocals.wav`; or `{"replace":true}` to regenerate
+  while preserving the previous sidecar as a separate backup;
+- `GET /api/jobs/{id}/karaoke/status` to check the result;
+- `GET /api/jobs/{id}/karaoke/timing` for the normalized JSON;
+- `GET /api/jobs/{id}/karaoke/lrc` for a preliminary enhanced-LRC preview;
+- `POST /api/jobs/{id}/karaoke/cancel` to cancel the active sidecar task.
+
+The service uses the existing global pipeline lock and lyrics retime run
+registry for GPU serialization and cancellation. It **does not** overwrite
+`lyrics.json`, automatically replace a manual `user_synced` timeline, or
+yet connect this sidecar to the actual karaoke UI.
+
+Two additional on-demand service tests were exercised with isolated
+stubs (no real repository installation), alongside 10 pure timing tests.
+Full integrated API regression is still pending.
+
 ## Next implementation gates
 
 1. Validate actual Vulkan GPU dispatch and timecodes against a real song
    using existing `whisper.cpp` and the RX 6600M. A CLI exit code is not
    evidence of correct GPU execution or musical alignment.
-2. Add one GPU-serialized on-demand job API for **generate/regenerate** on
-   existing stems, including cancellation, state and download.
+2. Run the GPU-serialized on-demand job API end-to-end on the locally
+   reconciled project, including cancellation, state and download.
 3. Add isolated upload-only karaoke workflow for files with no stems.
 4. Integrate `lyrics_timing.json` with `lyrics_retime.py` and the karaoke
    UI. Prefer a verified existing lyric text over transcription guesses.
@@ -69,5 +98,5 @@ the VAD removes silence; see ggml-org/whisper.cpp issue #4046.
 & .\.venv\Scripts\python.exe -B -m pytest tests/test_karaoke_timing.py -q
 ```
 
-The isolated prototype passed 9 contract tests; no real RX 6600M model was
+The isolated prototype passed 10 pure contract tests and 2 service-stub tests; no real RX 6600M model was
 executed and no end-to-end API/UI verification has been claimed.

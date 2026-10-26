@@ -1,9 +1,12 @@
+import { clampStereoPan } from "./stereoPan.js";
+
 const validId = value => typeof value === "string" && /^[a-zA-Z0-9_-]{1,80}$/.test(value);
 export function copyMix(mix) {
   return Object.fromEntries(Object.entries(mix || {}).filter(([name]) => validId(name)).map(([name, value]) => [name, {
     volume: Number.isFinite(value?.volume) ? Math.max(0, Math.min(2, value.volume)) : 1,
     muted: value?.muted === true, soloed: value?.soloed === true,
     pitch: Number.isFinite(value?.pitch) ? Math.max(-6, Math.min(6, Math.round(value.pitch))) : 0,
+    pan: clampStereoPan(value?.pan),
   }]));
 }
 export function newPlaylist(id, name, source = null) {

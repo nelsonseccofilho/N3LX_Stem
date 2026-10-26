@@ -311,7 +311,26 @@ export function refreshMixerVisuals() {
   }
 }
 
+let _panSupported = false;
+let _laneControlsEnabled = false;
+
+function refreshPanAvailability() {
+  const available = _panSupported && _laneControlsEnabled;
+  for (const input of mixerEl?.querySelectorAll(".lane-pan-input, .lane-pan-center") || []) {
+    input.disabled = !available;
+    input.title = available ? (input.classList.contains("lane-pan-center")
+      ? "Centralizar PAN" : "Esquerda - Centro - Direita")
+      : "PAN disponível no motor Web Audio";
+  }
+}
+
+export function setLanePanAvailability(supported) {
+  _panSupported = supported === true;
+  refreshPanAvailability();
+}
+
 export function setLaneControlsEnabled(enabled) {
+  _laneControlsEnabled = !!enabled;
   for (const b of mixerEl.querySelectorAll(".ms-btn")) b.disabled = !enabled;
   for (const b of mixerEl.querySelectorAll(".lane-icon-toggle")) b.disabled = !enabled;
   for (const a of mixerEl.querySelectorAll(".lane-dl")) {
@@ -324,9 +343,7 @@ export function setLaneControlsEnabled(enabled) {
       a.removeAttribute("tabindex");
     }
   }
-  for (const input of mixerEl.querySelectorAll(".lane-pan-input, .lane-pan-center")) {
-    input.disabled = !enabled;
-  }
+  refreshPanAvailability();
   for (const k of mixerEl.querySelectorAll(".lane-knob")) {
     k.classList.toggle("disabled", !enabled);
     k.setAttribute("aria-disabled", String(!enabled));

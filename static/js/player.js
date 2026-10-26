@@ -39,7 +39,7 @@ import { initBeatGrid, destroyBeatGrid } from "./beatgrid.js";
 import { setBeatGridAvailable, syncBeatGridButtons } from "./beatgridUi.js";
 import {
   loadMixIntoState, resetMixerState, refreshMixerVisuals,
-  setLaneControlsEnabled, ensureMixerStateDefaults, applyMix,
+  setLaneControlsEnabled, setLanePanAvailability, ensureMixerStateDefaults, applyMix,
   renderRealMiniWave, renderRealMiniWaveFromPeaks, renderMixerRow,
   applyAllLanePitches, setLaneKeysAvailable,
 } from "./mixer.js";
@@ -1172,6 +1172,7 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
   const mixReady = loadMixIntoState(jobId, stems.map((s) => s.name), mixContext)
     .then(() => { if (currentJobId === jobId) refreshMixerVisuals(); })
     .catch((e) => { console.warn("[player] mix state load failed:", e); });
+  setLanePanAvailability(false); // until the playback engine loads
   setLaneControlsEnabled(true);
   setLoopEnabled(false);
   setLoopStart(0);
@@ -1601,6 +1602,7 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
           resolvePlaybackSuccess(jobId);
           eng.setLoop(loopEnabled, loopStart, loopEnd);
           updatePitchAvailability(eng.supportsPitchShift?.() === true);
+          setLanePanAvailability(eng.supportsStereoPan?.() === true);
           applyMix(); // push per-stem gains (incl. >1.0 boost) into the engine
           // Lane keys ride on the same engine, so they are restored from the
           // per-track store in the same breath as the gains.

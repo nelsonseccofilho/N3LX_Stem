@@ -93,3 +93,41 @@ def test_cancelled_worker_is_terminated(monkeypatch):
         k._run_command(["dummy"], timeout=30, cancelled=lambda: True)
     assert proc.stopped
 
+def test_real_whisper_cpp_full_json_tokens_use_word_offsets():
+    """-ojf carries token times inside segments, not just segment times."""
+    payload = {
+        "result": {"language": "pt"},
+        "transcription": [{
+            "offsets": {"from": 0, "to": 1500},
+            "text": " Eu vou encontrar.",
+            "tokens": [
+                {"text": "[_BEG]"},
+                {"text": " Eu", "offsets": {"from": 100, "to": 300}},
+                {"text": " vou", "offsets": {"from": 350, "to": 550}},
+                {"text": " en", "offsets": {"from": 600, "to": 700}},
+                {"text": "con", "offsets": {"from": 700, "to": 900}},
+                {"text": "trar", "offsets": {"from": 900, "to": 1200}},
+                {"text": ".", "offsets": {"from": 1200, "to": 1300}},
+            ],
+        }],
+    }
+    result = normalize_timing(payload)
+    assert result["language"] == "pt"
+    assert [word["text"] for word in result["words"]] == ["Eu", "vou", "encontrar."]
+    assert [word["start"] for word in result["words"]] == [.1, .35, .6]
+    assert [word["end"] for word in result["words"]] == [.3, .55, 1.3]
+
+
+def test_full_json_without_word_offsets_is_rejected():
+    payload = {"transcription": [{
+        "text": "Eu vou cantar",
+        "offsets": {"from": 0, "to": 2000},
+        "tokens": [
+            {"text": " Eu", "offsets": {"from": 0, "to": 300}},
+            {"text": " vou"},
+            {"text": " cantar", "offsets": {"from": 800, "to": 2000}},
+        ],
+    }]}
+    with pytest.raises(KaraokeTimingError, match="lacks timestamps"):
+        normalize_timing(payload)
+

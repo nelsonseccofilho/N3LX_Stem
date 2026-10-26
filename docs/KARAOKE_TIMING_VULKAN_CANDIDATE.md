@@ -28,6 +28,21 @@ Regeneration is explicit: `--replace` first stores the previous sidecar
 under a uniquely named timestamped backup, then atomically replaces it.
 Without `--replace`, an existing sidecar is never overwritten.
 
+## Windows discovery — 26 October 2026
+
+The operator verified the following existing paths (read-only PowerShell
+discovery; **no GPU inference benchmark has yet run**):
+
+- `C:\Users\nelso\whisper.cpp\build-vulkan\bin\Release\whisper-cli.exe`
+- `C:\Users\nelso\whisper.cpp\models\ggml-medium.bin` (1,533,763,059 bytes)
+
+The word reader consumes `-ojf` full JSON token offsets from
+`transcription[].tokens[].offsets`, not just segment offsets. If only
+a segment has timestamps and contains several words, conversion rejects it
+rather than inventing a plausible word timeline. The reader also accepts
+already word-split single-word segments. Real Windows output must confirm
+this before the feature is integrated or made automatic.
+
 ## Usage after the code is locally reviewed / reconciled
 
 Supply paths to the exact Vulkan-built `whisper-cli.exe` and a local ggml

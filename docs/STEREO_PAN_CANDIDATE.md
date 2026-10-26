@@ -36,7 +36,7 @@ prior mixes.
   continues. There is no false claim of L/R positioning on that path.
 - No backend changes or new Python dependencies.
 
-The UI is compact in the existing mixer columns. The saved center value is
+The PAN slider lives inside each existing horizontal DAW row's name/VU cell, above the centered lane label; it adds no additional audio track or waveform row. The saved center value is
 silent as a functional change to the legacy mix. No separate guitar L and R
 stems are created; splitting a stereo signal into L/R **does not** isolate
 distinct instruments recorded together.

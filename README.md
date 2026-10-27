@@ -4,9 +4,9 @@
 
 Aplicativo local derivado do [StemDeck](https://github.com/stemdeckapp/stemdeck), com adaptações para GPU AMD, biblioteca persistente, playlists e uma interface de estúdio.
 
-[**Baixar para Windows — rc.3 (ZIP)**](https://github.com/nelsonseccofilho/N3LX_Stem/releases/download/v0.21.0-rc.3/N3LX_Stem-Windows-Update-0.21.0-rc.3.zip) · [Notas da versão e SHA-256](https://github.com/nelsonseccofilho/N3LX_Stem/releases/tag/v0.21.0-rc.3) · [Como atualizar](#atualizar-uma-instalação-existente)
+[**Baixar para Windows — rc.4 (ZIP)**](https://github.com/nelsonseccofilho/N3LX_Stem/releases/download/v0.21.0-rc.4/N3LX_Stem-Windows-Update-0.21.0-rc.4.zip) · [Notas da versão e SHA-256](https://github.com/nelsonseccofilho/N3LX_Stem/releases/tag/v0.21.0-rc.4) · [Como atualizar](#atualizar-uma-instalação-existente)
 
-> **0.21.0-rc.3 é uma pré-release.** O download é um pacote de atualização que usa os ambientes AMD e modelos de uma instalação existente. A validação de instalação limpa em outro computador e a aceitação musical completa continuam pendentes.
+> **0.21.0-rc.4 é uma pré-release.** O download é um pacote de atualização que usa os ambientes AMD e modelos de uma instalação existente. A validação de instalação limpa em outro computador e a aceitação musical completa continuam pendentes.
 
 ![Estúdio N3LX_Stem no tema escuro, com biblioteca, PAN, controles de mixagem e formas de onda](docs/images/studio-dark.png)
 
@@ -21,16 +21,16 @@ Aplicativo local derivado do [StemDeck](https://github.com/stemdeckapp/stemdeck)
 
 ## Atualizar uma instalação existente
 
-1. [Baixe o ZIP da rc.3](https://github.com/nelsonseccofilho/N3LX_Stem/releases/download/v0.21.0-rc.3/N3LX_Stem-Windows-Update-0.21.0-rc.3.zip) e extraia **todo o conteúdo em uma pasta nova**, mantendo o executável, a pasta `resources` e os demais arquivos juntos.
+1. [Baixe o ZIP da rc.4](https://github.com/nelsonseccofilho/N3LX_Stem/releases/download/v0.21.0-rc.4/N3LX_Stem-Windows-Update-0.21.0-rc.4.zip) e extraia **todo o conteúdo em uma pasta nova**, mantendo o executável, a pasta `resources` e os demais arquivos juntos.
 2. Feche o aplicativo anterior e encerre seu servidor com **Stop-N3LX_Stem.cmd**, na instalação atual.
 3. Abra **N3LX_Stem.exe** na pasta extraída.
 4. Na primeira abertura, selecione a pasta da instalação AMD existente — aquela que contém `.venv`, `.venv-directml` e sua biblioteca `data`.
 
 O pacote reutiliza os ambientes, ferramentas, pesos e biblioteca dessa instalação. Os áudios, modelos e configurações pessoais não estão incluídos no download. Preserve sua instalação anterior para poder retornar a ela. Evite substituir um checkout com alterações locais sem revisá-las primeiro.
 
-Para conferir o arquivo, compare seu SHA-256 com o arquivo `.zip.sha256` disponível na [release](https://github.com/nelsonseccofilho/N3LX_Stem/releases/tag/v0.21.0-rc.3).
+Para conferir o arquivo, compare seu SHA-256 com o arquivo `.zip.sha256` disponível na [release](https://github.com/nelsonseccofilho/N3LX_Stem/releases/tag/v0.21.0-rc.4).
 
-A rc.3 acrescenta uma tela de processamento do karaokê, com etapas reais, tempo decorrido e cancelamento. Gerar novamente retira o JSON anterior de uso antes de criar um novo; **Excluir JSON do karaokê** remove o resultado automático. Consulte a [validação desta correção](docs/KARAOKE_PROCESSING_RC3.md).
+A rc.4 reduz a largura dos controles de PAN e volume, mantendo o nome da pista acima do PAN. A rc.3 acrescentou uma tela de processamento do karaokê, com etapas reais, tempo decorrido e cancelamento. Gerar novamente retira o JSON anterior de uso antes de criar um novo; **Excluir JSON do karaokê** remove o resultado automático. Consulte a [validação desta correção](docs/KARAOKE_PROCESSING_RC3.md).
 
 ## O que você pode fazer
 

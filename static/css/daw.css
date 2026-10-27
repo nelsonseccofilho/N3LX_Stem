@@ -6947,3 +6947,33 @@ input, textarea { font-family: inherit; }
 @media(max-width:1250px) { .daw-info-row { grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); } }
 
 #metro-preview-status:empty { display:none; }
+
+/* The grid is a passive visual guide until the user opens the editor. */
+.beatgrid-canvas:not(.is-editing) { opacity:0.4; }
+/* Keep all metronome options readable in the compact popover. */
+.footer-clusters.collapse-click .footer-metro-panel {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  width:min(320px,calc(100vw - 16px));
+  box-sizing:border-box;
+  align-items:center;
+}
+.footer-clusters.collapse-click .footer-metro-panel > .metro-select-wrap:has(#t-metro-countin),
+.footer-clusters.collapse-click .metro-countin-hint,
+.footer-clusters.collapse-click #t-metro-preview,
+.footer-clusters.collapse-click #metro-preview-status,
+.footer-clusters.collapse-click .metro-mult,
+.footer-clusters.collapse-click #t-metro-note { grid-column:1 / -1; }
+.footer-clusters.collapse-click .footer-metro-panel button,
+.footer-clusters.collapse-click .footer-metro-panel select { max-width:100%; }
+.footer-clusters.collapse-click #t-metro-preview { width:100%; min-height:34px; white-space:normal; }
+.footer-clusters.collapse-click #metro-preview-status:not(:empty),
+.footer-clusters.collapse-click #t-metro-note:not(:empty) {
+  display:block; margin:0; white-space:normal; overflow:visible;
+  overflow-wrap:anywhere; line-height:1.4; font-size:11px;
+}
+.footer-clusters.collapse-click .metro-mult { justify-self:start; }
+
+.footer-clusters.collapse-click .footer-metro-panel { max-height:calc(100vh - 16px); overflow-y:auto; }
+
+.footer-clusters.collapse-click .metro-select-wrap:has(#t-metro-countin) select { width:100%; }

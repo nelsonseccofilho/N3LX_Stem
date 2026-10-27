@@ -369,6 +369,7 @@ function _render() {
   // zoomed-out click can still grab one.
   const spacingPx = w / Math.max(1, _beats.length);
   const beatsVisible = spacingPx >= DENSE_MIN_PX;
+  const sparseStride = Math.max(1, Math.ceil(DENSE_MIN_PX / Math.max(spacingPx, 0.001)));
 
   const minPx = 2;
   let lastX = -Infinity;
@@ -377,7 +378,7 @@ function _render() {
     const isBar = _bars.some((b) => b.beat === i)
       || (_bars.length > 0 && _isDownbeat(i));
     const isAnchor = _anchors.has(i);
-    if (!isBar && !isAnchor && !beatsVisible) continue;
+    if (!isBar && !isAnchor && !beatsVisible && (_bars.length || i % sparseStride !== 0)) continue;
     if (!isBar && !isAnchor && x - lastX < minPx) continue;
     lastX = x;
 
@@ -528,6 +529,8 @@ export function initBeatGrid({ jobId, grid, duration, onChange }) {
   _host = document.querySelector(".waves-column");
   _canvas = document.getElementById("beatgrid-canvas");
   if (!_host || !_canvas) return false;
+  _canvas.classList.remove("hidden", "is-editing");
+  _canvas.style.pointerEvents = "none";
 
   _canvas.addEventListener("pointermove", _onPointerMove);
   _canvas.addEventListener("pointerdown", _onPointerDown);
@@ -582,7 +585,8 @@ export function destroyBeatGrid() {
 export function setBeatGridEditing(on) {
   _editing = !!on;
   if (!_canvas) return;
-  _canvas.classList.toggle("hidden", !_editing);
+  _canvas.classList.remove("hidden");
+  _canvas.classList.toggle("is-editing", _editing);
   _canvas.style.pointerEvents = _editing ? "auto" : "none";
   if (!_editing) { _hoverIdx = -1; _dragIdx = -1; flushBeatGrid(); }
   _render();

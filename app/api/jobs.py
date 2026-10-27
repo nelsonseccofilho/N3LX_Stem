@@ -1807,8 +1807,11 @@ def _preview_alternative_grid(job_id: str) -> dict:
     beats, head, tail = _extend_to_track_edges(beats, len(y) / sr, spread)
     beats = _sanitize(beats, len(y) / sr)
     onsets = librosa.onset.onset_detect(onset_envelope=env, sr=sr, hop_length=BEATGRID_HOP, units="time")
+    reference = registry_get(job_id)
     return {"beats": beats, "bars": [], "source": "drums", "detector": "librosa",
             "device": "cpu", "preview": True, "irregularity": spread,
+            "bpm": float(60.0 / np.median(np.diff(beats))) if len(beats) > 1 else None,
+            "reference_bpm": getattr(reference, "bpm", None),
             "confidence": _grid_confidence(beats, onsets, .07),
             "extrapolated_head": head, "extrapolated_tail": tail}
 

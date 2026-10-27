@@ -13,7 +13,7 @@ import {
   undoBeatGrid, redoBeatGrid, resetBeatGrid, canUndo, canRedo,
   barLengthAt, setBarLengthAt, getBeats, flushBeatGrid, beginBeatGridPreview, endBeatGridPreview, isBeatGridPreview,
 } from "./beatgrid.js";
-import { applyMetronomeAccent, toggleMetronome, onMetronomeToggle } from "./transport.js";
+import { applyMetronomeAccent, toggleMetronome, onMetronomeToggle, beginMetronomePreview, endMetronomePreview } from "./transport.js";
 import { t, onLanguageChange } from "./i18n.js";
 
 const TOOL_BTNS = [
@@ -93,14 +93,23 @@ export function wireBeatGridUi() {
     preview.title = t("metro.previewHint");
     if (metroEditBtn) metroEditBtn.disabled = !_available || isBeatGridPreview();
     const note = document.getElementById("metro-preview-status");
-    if (note) note.textContent = isBeatGridPreview() ? t("metro.previewActive") : "";
+    if (note) {
+      note.textContent = isBeatGridPreview()
+        ? t(preview.dataset.automaticLevel ? "metro.previewAutoLevel" : "metro.previewActive") : "";
+      note.classList.remove("warn");
+    }
   };
-  document.addEventListener("trackwillopen", () => { pending = false; queueMicrotask(paintPreview); });
+  document.addEventListener("trackwillopen", () => { pending = false; if (preview) delete preview.dataset.automaticLevel; queueMicrotask(paintPreview); });
   document.addEventListener("playbackready", paintPreview);
   onLanguageChange(paintPreview);
   paintPreview();
+  for (const id of ["t-metro-half", "t-metro-one", "t-metro-double"]) {
+    document.getElementById(id)?.addEventListener("click", () => {
+      if (isBeatGridPreview() && preview) { delete preview.dataset.automaticLevel; paintPreview(); }
+    });
+  }
   preview?.addEventListener("click", async () => {
-    if (isBeatGridPreview()) { endBeatGridPreview(); paintPreview(); return; }
+    if (isBeatGridPreview()) { endBeatGridPreview(); endMetronomePreview(); delete preview.dataset.automaticLevel; paintPreview(); return; }
     if (pending || !_available || !currentJobId) return;
     if (isBeatGridEditing()) toggleBeatGridEditor(false);
     const id = currentJobId;
@@ -112,16 +121,19 @@ export function wireBeatGridUi() {
       if (id !== currentJobId || !pending) return;
       flushBeatGrid();
       if (!beginBeatGridPreview(result.beats)) throw new Error("invalid preview");
+      const suggestion = beginMetronomePreview(result);
       toggleMetronome(true);
+      if (suggestion) preview.dataset.automaticLevel = String(suggestion);
+      else delete preview.dataset.automaticLevel;
     } catch {
       if (id === currentJobId) {
         const note = document.getElementById("metro-preview-status");
-        if (note) note.textContent = t("metro.previewFailed");
+        if (note) { note.textContent = t("metro.previewFailed"); note.classList.add("warn"); }
       }
     } finally {
       const failed = !isBeatGridPreview() && id === currentJobId;
       pending = false; paintPreview();
-      if (failed) { const note = document.getElementById("metro-preview-status"); if (note) note.textContent = t("metro.previewFailed"); }
+      if (failed) { const note = document.getElementById("metro-preview-status"); if (note) { note.textContent = t("metro.previewFailed"); note.classList.add("warn"); } }
     }
   });
 

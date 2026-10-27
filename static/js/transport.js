@@ -1269,7 +1269,8 @@ const _METRO_PREFS_KEY = "stemdeck:metronome";
 let _metroPreferenceScope = null;
 export function getMetronomePrefs() {
   return { enabled: metronomeEnabled, volume: metronomeVolume, beatsPerBar: metronomeBeatsPerBar,
-    grouping: metronomeGrouping, countInBars: metronomeCountInBars, multiplier: metronome?.getMultiplier?.() ?? 1 };
+    grouping: metronomeGrouping, countInBars: metronomeCountInBars,
+    multiplier: _metroPreviewState?.automatic != null ? _metroPreviewState.previous : metronome?.getMultiplier?.() ?? 1 };
 }
 export function setMetronomePreferenceScope(scope, restore = null) {
   _metroPreferenceScope = scope;
@@ -1479,6 +1480,41 @@ export function toggleMetronome(force) {
  * @param {string} reason  Shown to the user when there is no grid.
  */
 let _lastGrid = null;
+let _metroPreviewState = null;
+
+// The grid's pulse can be detected at double/half time. Only apply a suggested
+// metrical level while auditioning, and never overwrite a user's preference.
+export function beginMetronomePreview(grid) {
+  const previous = metronome?.getMultiplier?.() ?? 1;
+  _metroPreviewState = { grid: _lastGrid, previous, automatic: null };
+  _lastGrid = grid;
+  const bpm = Number(grid?.bpm), reference = Number(grid?.reference_bpm);
+  if (previous === 1 && Number.isFinite(bpm) && bpm > 0 && Number.isFinite(reference) && reference > 0) {
+    const half = Math.abs(bpm / 2 - reference) / reference;
+    const twice = Math.abs(bpm * 2 - reference) / reference;
+    const suggestion = half < 0.12 ? 0.5 : twice < 0.12 ? 2 : 1;
+    if (suggestion !== 1) {
+      metronome?.setMultiplier?.(suggestion);
+      _metroPreviewState.automatic = suggestion;
+    }
+  }
+  _renderMetroMultiplier();
+  _renderMetroNote(_lastGrid);
+  return _metroPreviewState.automatic;
+}
+
+export function endMetronomePreview() {
+  if (!_metroPreviewState) return;
+  const previous = _metroPreviewState;
+  _metroPreviewState = null;
+  if (previous.automatic != null && metronome?.getMultiplier?.() === previous.automatic) {
+    metronome.setMultiplier(previous.previous);
+  }
+  _lastGrid = previous.grid;
+  _renderMetroMultiplier();
+  _renderMetroNote(_lastGrid);
+}
+document.addEventListener("trackwillopen", endMetronomePreview);
 
 function _renderMetroMultiplier() {
   const mult = metronome?.getMultiplier?.() ?? 1;
@@ -1765,6 +1801,7 @@ function wireMetronomeControl() {
 
   for (const [btn, mult] of [[metroHalfBtn, 0.5], [metroOneBtn, 1], [metroDoubleBtn, 2]]) {
     btn?.addEventListener("click", () => {
+      if (_metroPreviewState) _metroPreviewState.automatic = null;
       metronome?.setMultiplier(mult);
       if (_metroPreferenceScope) _saveMetroPrefs();
       _renderMetroMultiplier();

@@ -349,18 +349,69 @@ def _terminate_worker_tree(proc: subprocess.Popen) -> None:
         proc.wait(timeout=10)
 
 
+def _generate_english_timing(audio: Path, cli: str, model: Path, ffmpeg: str,
+                             timeout: int, cancelled, phase_changed) -> dict[str, Any]:
+    """English: explicit Whisper Vulkan word timestamps, without PT aligner."""
+    ffmpeg_bin = _checked_executable(ffmpeg, "ffmpeg")
+    with tempfile.TemporaryDirectory(prefix="n3lx-english-") as tmp:
+        root = Path(tmp)
+        wav = root / "vocals16.wav"
+        prefix = root / "transcription"
+        if phase_changed: phase_changed("prepare")
+        code = _run_command([ffmpeg_bin, "-nostdin", "-v", "error", "-y", "-i", str(audio),
+                             "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(wav)],
+                            timeout=180, cancelled=cancelled)
+        if code or not wav.is_file(): raise KaraokeTimingError("ffmpeg failed to prepare vocal audio")
+        if phase_changed: phase_changed("transcribe")
+        log_path = root / "vulkan.log"
+        with log_path.open("w", encoding="utf-8") as log:
+            if cancelled is not None and cancelled():
+                raise KaraokeTimingError("karaoke generation cancelled")
+            proc = subprocess.Popen([cli, "-m", str(model), "-f", str(wav), "-l", "en", "-t", "6",
+                                     "-dev", "0", "-ml", "1", "-sow", "-ojf", "-of", str(prefix)],
+                                    stdout=log, stderr=subprocess.STDOUT, start_new_session=os.name != "nt")
+            started = time.monotonic()
+            try:
+                while proc.poll() is None:
+                    if cancelled is not None and cancelled(): raise KaraokeTimingError("karaoke generation cancelled")
+                    if time.monotonic() - started > timeout: raise KaraokeTimingError("karaoke worker exceeded its timeout")
+                    time.sleep(.3)
+                code = proc.returncode
+            finally:
+                _terminate_worker_tree(proc)
+        log_text = log_path.read_text(encoding="utf-8", errors="replace")
+        if code or not re.search(r"use gpu\s*=\s*1", log_text) or "using Vulkan0 backend" not in log_text:
+            raise KaraokeTimingError("English Vulkan recognition failed or GPU not verified")
+        output = prefix.with_suffix(".json")
+        if not output.is_file() or output.stat().st_size > MAX_BYTES:
+            raise KaraokeTimingError("Whisper did not produce bounded JSON")
+        try: result = json.loads(output.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc: raise KaraokeTimingError("Whisper returned unreadable JSON") from exc
+        if phase_changed: phase_changed("finalize")
+        timing = normalize_timing(result)
+        if timing.get("language") != "en": raise KaraokeTimingError("Whisper returned unexpected language")
+        timing.update({"lrc_preview": enhanced_lrc(timing["words"]), "requested_device": "vulkan_device_0",
+                       "gpu_verified": True, "alignment_backend": "whisper_word_timestamps"})
+        return timing
+
+
 def generate_timing(
     audio: Path, *, whisper_cli: str, model: Path, ffmpeg: str = "ffmpeg",
     timeout: int = 3600,
     cancelled: Callable[[], bool] | None = None,
     phase_changed: Callable[[str], None] | None = None,
+    language: str = "pt",
 ) -> dict[str, Any]:
-    """Recognize Portuguese vocals with Vulkan, then align JSON via DirectML."""
+    """Recognize vocals in the selected language with an explicit GPU route."""
     audio, model = Path(audio), Path(model)
     if not audio.is_file() or not model.is_file():
         raise KaraokeTimingError("audio or Whisper model not found")
     cli = _checked_executable(whisper_cli, "whisper-cli")
     _checked_executable(ffmpeg, "ffmpeg")
+    if language == "en":
+        return _generate_english_timing(audio, cli, model, ffmpeg, timeout, cancelled, phase_changed)
+    if language != "pt":
+        raise KaraokeTimingError("unsupported karaoke language")
     python, worker = aligned_worker_resources()
     model_name = model.stem.removeprefix("ggml-")
     if model_name not in {"large-v3", "medium"}:
@@ -381,6 +432,8 @@ def generate_timing(
         if phase_changed:
             phase_changed("prepare")
         with logfile.open("w", encoding="utf-8") as log:
+            if cancelled is not None and cancelled():
+                raise KaraokeTimingError("karaoke generation cancelled")
             proc = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
                                     env=env, start_new_session=os.name != "nt")
             started = time.monotonic()

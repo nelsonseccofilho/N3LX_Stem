@@ -81,7 +81,7 @@ def test_regeneration_removes_old_result_before_worker_and_never_reuses_it(prepa
     client, job, work = prepared
     original = (work / "lyrics_timing.json").read_bytes()
     preserved = {p: p.read_bytes() for p in [work / "lyrics.json", work / "stems/vocals.wav"]}
-    monkeypatch.setattr(k, "_configuration", lambda name: ("worker", Path("ggml-large-v3.bin"), "ffmpeg"))
+    monkeypatch.setattr(k, "_configuration", lambda name, language="pt": ("worker", Path("ggml-large-v3.bin"), "ffmpeg"))
     def generate(*args, **kwargs):
         assert not (work / "lyrics_timing.json").exists()
         kwargs["phase_changed"]("transcribe")
@@ -115,9 +115,59 @@ def test_regeneration_removes_old_result_before_worker_and_never_reuses_it(prepa
 
 def test_regeneration_configuration_failure_keeps_existing_result(prepared, monkeypatch):
     client, job, work = prepared
-    def unavailable(name):
+    def unavailable(name, language="pt"):
         raise HTTPException(503, "worker unavailable")
     monkeypatch.setattr(k, "_configuration", unavailable)
     assert client.post(f"/api/jobs/{job.id}/karaoke/generate", json={"replace": True, "model": "large-v3"}).status_code == 503
     assert (work / "lyrics_timing.json").exists()
     assert not list(work.glob("lyrics_timing.regenerated-*.json"))
+
+
+def test_language_validation_happens_before_old_json_is_archived(prepared):
+    client, job, work = prepared
+    for value in ("es", None, ["en"]):
+        response = client.post(f"/api/jobs/{job.id}/karaoke/generate", json={"replace": True, "language": value})
+        assert response.status_code == 422
+        assert (work / "lyrics_timing.json").exists()
+        assert not list(work.glob("lyrics_timing.regenerated-*.json"))
+
+
+def test_english_does_not_require_portuguese_aligner(tmp_path, monkeypatch):
+    model = tmp_path / "ggml-large-v3.bin"
+    model.write_bytes(b"test")
+    monkeypatch.setenv("N3LX_WHISPER_CLI", sys.executable)
+    monkeypatch.setenv("N3LX_WHISPER_MODEL", str(model))
+    monkeypatch.delenv("N3LX_WHISPER_LARGE_MODEL", raising=False)
+    def missing(): raise k.KaraokeTimingError("missing aligner")
+    monkeypatch.setattr(k, "aligned_worker_resources", missing)
+    monkeypatch.setattr(k, "ffmpeg_executable", lambda: "ffmpeg")
+    assert k._configuration("large-v3", "en")[1] == model
+    with pytest.raises(HTTPException) as problem: k._configuration("large-v3", "pt")
+    assert problem.value.status_code == 503
+
+
+def test_english_request_reaches_worker_and_preserves_previous_json(prepared, monkeypatch):
+    import asyncio
+    from pathlib import Path
+    from starlette.requests import Request
+    from tests.test_karaoke_service import _fake_timing
+    client, job, work = prepared
+    old = (work / "lyrics_timing.json").read_bytes()
+    selected = []
+    monkeypatch.setattr(k, "_configuration", lambda name, language="pt": ("worker", Path("ggml-large-v3.bin"), "ffmpeg"))
+    def generate(*args, **kwargs):
+        selected.append(kwargs["language"])
+        return {**_fake_timing(), "language": kwargs["language"]}
+    monkeypatch.setattr(k, "generate_timing", generate)
+    async def scenario():
+        monkeypatch.setattr(k, "_pipeline_lock", asyncio.Lock())
+        async def receive():
+            return {"type": "http.request", "body": b'{"replace":true,"model":"large-v3","language":"en"}'}
+        response = await k.generate_karaoke(job.id, Request({"type": "http", "headers": []}, receive))
+        assert response.status_code == 202
+        assert k.karaoke_status(job.id)["language"] == "en"
+        await asyncio.gather(*list(k._active_tasks))
+    asyncio.run(scenario())
+    assert selected == ["en"]
+    assert json.loads((work / "lyrics_timing.json").read_text())["language"] == "en"
+    assert list(work.glob("lyrics_timing.regenerated-*.json"))[0].read_bytes() == old

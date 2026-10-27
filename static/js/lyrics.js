@@ -346,6 +346,7 @@ function setKaraokeMessage(key = "", kind = "") {
 }
 
 let karaokeProgress = { phase: "queued", elapsed_seconds: 0 };
+let karaokeLanguageModels = null;
 let karaokeProgressTimer = null;
 let karaokeProgressReceived = 0;
 let karaokeCancelRequested = false;
@@ -368,7 +369,7 @@ function updateKaraokeProgress(value) {
     return;
   }
   document.getElementById("karaokeProcessingTrack").textContent = getCurrentTrackInfo()?.title || "";
-  const phases = ["queued", "prepare", "transcribe", "align", "finalize"];
+  const phases = karaokeProgress.language === "en" ? ["queued", "prepare", "transcribe", "finalize"] : ["queued", "prepare", "transcribe", "align", "finalize"];
   const phase = phases.includes(karaokeProgress.phase) ? karaokeProgress.phase : "queued";
   document.getElementById("karaokeProcessingPhase").textContent = t(karaokeCancelRequested ? "karaokeTiming.canceling" : `karaokeTiming.phase.${phase}`);
   const elapsed = Math.max(0, Math.floor((karaokeProgress.elapsed_seconds || 0) + (Date.now() - karaokeProgressReceived) / 1000));
@@ -401,20 +402,26 @@ function updateKaraokeControls() {
   const info = getCurrentTrackInfo();
   const same = Boolean(info?.id && info.id === karaokeTrackId);
   const busy = karaokeRunning || karaokeDeleting;
+  const selectedModel = document.getElementById("lyricsKaraokeModel");
+  const modelUnavailable = Boolean(karaokeLanguageModels && selectedModel?.selectedOptions[0]?.disabled);
+  const unavailable = document.getElementById("karaokeModelUnavailable");
+  if (unavailable) unavailable.hidden = !same || !modelUnavailable;
   const button = document.getElementById("lyricsGenerateKaraokeBtn");
   if (button) {
     const activePreview = shownFrom === "preview" && shownEntry?.machinePreview;
     button.textContent = t(activePreview && karaokeBeforePreview ? "karaokeTiming.restore"
       : karaokeAvailable ? "karaokeTiming.view" : "karaokeTiming.generate");
-    button.disabled = !same || busy || (activePreview && !karaokeBeforePreview);
+    button.disabled = !same || busy || (!karaokeAvailable && modelUnavailable) || (activePreview && !karaokeBeforePreview);
     button.setAttribute("aria-busy", String(same && karaokeRunning));
   }
   const cancel = document.getElementById("lyricsCancelKaraokeBtn");
   if (cancel) cancel.hidden = !(same && karaokeRunning);
   const regenerate = document.getElementById("lyricsRegenerateKaraokeBtn");
-  if (regenerate) { regenerate.disabled = !same || !karaokeAvailable || busy; regenerate.hidden = !karaokeAvailable; }
+  if (regenerate) { regenerate.disabled = !same || !karaokeAvailable || busy || modelUnavailable; regenerate.hidden = !karaokeAvailable; }
   const remove = document.getElementById("lyricsDeleteKaraokeBtn");
   if (remove) { remove.disabled = !same || !karaokeAvailable || busy; remove.hidden = !karaokeAvailable; }
+  const language = document.getElementById("lyricsKaraokeLanguage");
+  if (language) language.disabled = !same || busy;
   const model = document.getElementById("lyricsKaraokeModel");
   if (model) model.disabled = !same || busy;
   const link = document.getElementById("lyricsTimingJsonLink");
@@ -438,6 +445,7 @@ function selectKaraokeTrack(trackId) {
   if (karaokeTrackId === trackId) return;
   karaokeTrackId = trackId;
   karaokeDeleting = false;
+  karaokeLanguageModels = null;
   karaokeRequestToken++;
   karaokeAvailable = false;
   karaokeRunning = false;
@@ -457,15 +465,22 @@ async function fetchKaraokeStatus(trackId) {
   return res.json();
 }
 
+function updateKaraokeModels() {
+  const language = document.getElementById("lyricsKaraokeLanguage")?.value || "pt";
+  const select = document.getElementById("lyricsKaraokeModel");
+  if (!select || !karaokeLanguageModels) return;
+  const available = karaokeLanguageModels[language] || [];
+  for (const option of select.options) option.disabled = !available.includes(option.value);
+  updateKaraokeControls();
+}
+
 async function inspectKaraokeStatus(trackId, token) {
   try {
     const result = await fetchKaraokeStatus(trackId);
     if (token !== karaokeRequestToken || getCurrentTrackInfo()?.id !== trackId) return;
     karaokeAvailable = result?.available === true;
-    if (Array.isArray(result.models)) {
-      const select = document.getElementById("lyricsKaraokeModel");
-      if(select) for (const option of select.options) option.disabled = !result.models.includes(option.value);
-    }
+    karaokeLanguageModels = result.language_models || { pt: result.models || [], en: result.models || [] };
+    updateKaraokeModels();
     karaokeRunning = result?.state === "running";
     updateKaraokeProgress(result);
     updateKaraokeControls();
@@ -573,13 +588,14 @@ async function generateKaraoke({ replace = false } = {}) {
   const token = ++karaokeRequestToken;
   karaokeRunning = true;
   karaokeCancelRequested = false;
-  updateKaraokeProgress({ phase: "queued", elapsed_seconds: 0 });
+  const language = document.getElementById("lyricsKaraokeLanguage")?.value || "pt";
+  updateKaraokeProgress({ phase: "queued", elapsed_seconds: 0, language });
   setKaraokeMessage("karaokeTiming.running");
   updateKaraokeControls();
   try {
     const res = await fetch(karaokeApi(trackId, "generate"), {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ replace, model: document.getElementById("lyricsKaraokeModel")?.value || "large-v3" }),
+      body: JSON.stringify({ replace, model: document.getElementById("lyricsKaraokeModel")?.value || "large-v3", language }),
     });
     if (!res.ok) {
       // A sidecar from another session may have appeared since we last checked.
@@ -1986,6 +2002,8 @@ export function initLyrics() {
   document.getElementById("lyricsRegenerateKaraokeBtn")?.addEventListener("click", () => void generateKaraoke({ replace: true }));
   document.getElementById("lyricsDeleteKaraokeBtn")?.addEventListener("click", () => void deleteGeneratedKaraoke());
   document.getElementById("lyricsCancelKaraokeBtn")?.addEventListener("click", () => void cancelKaraoke());
+  document.getElementById("lyricsKaraokeLanguage")?.addEventListener("change", updateKaraokeModels);
+  document.getElementById("lyricsKaraokeModel")?.addEventListener("change", updateKaraokeControls);
   document.getElementById("karaokeProcessingCancel")?.addEventListener("click", () => void cancelKaraoke());
   document.getElementById("lyricsEditBtn")?.addEventListener("click", editLyrics);
   document.getElementById("lyricsAutoSyncBtn")?.addEventListener("click", () => {

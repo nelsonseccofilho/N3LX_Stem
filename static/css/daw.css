@@ -6888,3 +6888,6 @@ input, textarea { font-family: inherit; }
 #lyricsPanel.is-karaoke-processing > :not(.lyrics-heading):not(#lyricsGeneratorStatus):not(#karaokeProcessing) { display:none!important; }
 @keyframes karaoke-pulse { 50% { opacity:.35; } }
 @media (prefers-reduced-motion:reduce) { .karaoke-processing-symbol { animation:none; } }
+
+.lyrics-generator-language { display:flex; align-items:center; flex-wrap:wrap; gap:6px 10px; }
+.lyrics-generator-language select { min-height:30px; max-width:100%; }

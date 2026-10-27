@@ -70,7 +70,7 @@ def build(source: Path, installation: Path, output: Path) -> Path:
     manifest = package / "sha256-manifest.json"
     manifest.write_text(json.dumps(hashes, indent=2), encoding="utf-8")
     archive = output / (package.name + ".zip")
-    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=6, strict_timestamps=False) as z:
         for file in sorted(package.rglob("*")):
             if file.is_file():
                 z.write(file, file.relative_to(output))
@@ -91,3 +91,4 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=Path, required=True)
     options = parser.parse_args()
     build(options.source, options.installation, options.output)
+

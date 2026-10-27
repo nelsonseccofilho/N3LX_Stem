@@ -6874,3 +6874,17 @@ input, textarea { font-family: inherit; }
   .app.daw .sidebar #processingPanel { position: absolute; left: calc(var(--rail-w) + 324px); top: 0; bottom: 0; z-index: 70; }
   .app.daw.cat-collapsed .sidebar #processingPanel { left: var(--rail-w); }
 }
+
+/* Karaoke owns a visible processing state without blocking the library/player. */
+.karaoke-processing[hidden] { display:none; }
+.karaoke-processing { flex:1 0 auto; min-height:300px; padding:28px 16px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; text-align:center; border:1px solid var(--border); border-radius:8px; background:var(--panel); }
+.karaoke-processing h3,.karaoke-processing p { margin:0; }
+.karaoke-processing p { color:var(--muted); max-width:560px; }
+.karaoke-processing-symbol { color:var(--accent); font-size:26px; animation:karaoke-pulse 1.4s ease-in-out infinite; }
+.karaoke-processing progress { width:min(100%,320px); accent-color:var(--accent); }
+#karaokeProcessingSteps { display:flex; flex-wrap:wrap; justify-content:center; gap:8px 24px; padding:0 20px; font-size:12px; color:var(--muted); }
+#karaokeProcessingSteps .active { color:var(--accent); font-weight:700; }
+#karaokeProcessingSteps .done { color:var(--green, #63ac83); }
+#lyricsPanel.is-karaoke-processing > :not(.lyrics-heading):not(#lyricsGeneratorStatus):not(#karaokeProcessing) { display:none!important; }
+@keyframes karaoke-pulse { 50% { opacity:.35; } }
+@media (prefers-reduced-motion:reduce) { .karaoke-processing-symbol { animation:none; } }

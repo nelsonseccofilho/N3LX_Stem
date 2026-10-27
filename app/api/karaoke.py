@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import shutil
+import time
 import uuid
 from pathlib import Path
 
@@ -64,6 +65,22 @@ def _configuration(model_name: str | None = None) -> tuple[str, Path, str]:
     return cli, model, ffmpeg_executable()
 
 
+def _archive_timing(job_dir: Path, reason: str) -> None:
+    """Remove the active sidecar, keeping a private recovery copy."""
+    path = job_dir / _SIDE_CAR
+    if path.is_symlink() or not path.resolve().is_relative_to(job_dir):
+        raise HTTPException(status_code=409, detail="invalid timing path")
+    if path.exists():
+        if not path.is_file():
+            raise HTTPException(status_code=409, detail="invalid timing sidecar")
+        path.replace(path.with_name(f"{path.stem}.{reason}-{uuid.uuid4().hex}.json"))
+
+
+def _phase(run, phase: str) -> None:
+    run.karaoke_phase = phase
+    run.karaoke_phase_started = time.monotonic()
+
+
 async def _generate(job, job_dir: Path, run, replace: bool, cli: str, model: Path, ffmpeg: str) -> None:
     def cancelled() -> bool:
         return run.cancel.is_set() or registry_get(job.id) is not job
@@ -74,11 +91,12 @@ async def _generate(job, job_dir: Path, run, replace: bool, cli: str, model: Pat
             if cancelled():
                 run.state = "idle"
                 return
+            _phase(run, "prepare")
             audio = _vocals(job_dir)
             before = (audio.stat().st_size, audio.stat().st_mtime_ns)
             timing = await asyncio.to_thread(
                 generate_timing, audio, whisper_cli=cli, model=model,
-                ffmpeg=ffmpeg, cancelled=cancelled,
+                ffmpeg=ffmpeg, cancelled=cancelled, phase_changed=lambda phase: _phase(run, phase),
             )
             if cancelled():
                 run.state = "idle"
@@ -86,10 +104,12 @@ async def _generate(job, job_dir: Path, run, replace: bool, cli: str, model: Pat
             after = (audio.stat().st_size, audio.stat().st_mtime_ns)
             if before != after:
                 raise KaraokeTimingError("vocals changed during transcription")
+            _phase(run, "finalize")
             timing["model"] = model.stem.removeprefix("ggml-")
             output = job_dir / _SIDE_CAR
             await asyncio.to_thread(store_timing, output, timing, replace=replace)
             run.state = "done"
+            _phase(run, "done")
     except KaraokeTimingError as exc:
         if cancelled():
             run.state = "idle"
@@ -133,6 +153,15 @@ async def generate_karaoke(job_id: str, request: Request) -> JSONResponse:
     run = claim_run(job_id)
     if run is None:
         raise HTTPException(status_code=409, detail="lyrics processing already running")
+    try:
+        if replace:
+            _archive_timing(job_dir, "regenerated")
+    except Exception:
+        run.state = "idle"
+        run.ended.set()
+        raise
+    run.karaoke_started = time.monotonic()
+    _phase(run, "queued")
     _karaoke_runs[job_id] = run
     task = asyncio.create_task(_generate(job, job_dir, run, replace, cli, model, ffmpeg))
     _active_tasks.add(task)
@@ -154,7 +183,15 @@ def karaoke_status(job_id: str) -> dict:
             models.append(name)
         except HTTPException:
             pass
-    return {"state": run.state if run is not None else "idle", "available": output.is_file(), "models": models}
+    now = time.monotonic()
+    return {
+        "state": run.state if run is not None else "idle",
+        "available": output.is_file(), "models": models,
+        "phase": getattr(run, "karaoke_phase", "queued") if run is not None else None,
+        "elapsed_seconds": round(max(0, now - getattr(run, "karaoke_started", now))),
+        "phase_elapsed_seconds": round(max(0, now - getattr(run, "karaoke_phase_started", now))),
+        "cancel_requested": bool(run is not None and run.cancel.is_set()),
+    }
 
 
 @router.post("/{job_id}/karaoke/cancel")
@@ -205,14 +242,7 @@ def delete_karaoke(job_id: str) -> dict:
     _karaoke_runs[job_id] = run
     run.started = True
     try:
-        path = job_dir / _SIDE_CAR
-        if path.is_symlink() or not path.resolve().is_relative_to(job_dir):
-            raise HTTPException(status_code=409, detail="invalid timing path")
-        if path.exists():
-            if not path.is_file():
-                raise HTTPException(status_code=409, detail="invalid timing sidecar")
-            backup = path.with_name(f"{path.stem}.deleted-{uuid.uuid4().hex}.json")
-            path.replace(backup)
+        _archive_timing(job_dir, "deleted")
         return {"state": "idle", "available": False}
     finally:
         run.state = "idle"

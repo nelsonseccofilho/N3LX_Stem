@@ -45,6 +45,12 @@ export function initKaraoke() {
     catch { document.getElementById("lyricsGeneratorStatus").textContent = t("karaoke.cinemaUnavailable"); }
   });
   cinemaExit?.addEventListener("click", () => { if (document.fullscreenElement === stage) void document.exitFullscreen(); });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && document.fullscreenElement === stage) {
+      event.preventDefault(); event.stopPropagation();
+      void document.exitFullscreen();
+    }
+  }, true);
   document.addEventListener("fullscreenchange", () => {
     const on = document.fullscreenElement === stage;
     stage.classList.toggle("cinema-mode", on);

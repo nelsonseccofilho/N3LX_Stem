@@ -79,4 +79,3 @@ const {chromium} = require(process.env.N3LX_PLAYWRIGHT || 'playwright');
  } catch(error) {await page.screenshot({path:path.join(out,'failure.png')});throw error;}
  finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1});
-

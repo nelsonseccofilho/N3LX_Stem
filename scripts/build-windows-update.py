@@ -91,4 +91,3 @@ if __name__ == "__main__":
     parser.add_argument("--output", type=Path, required=True)
     options = parser.parse_args()
     build(options.source, options.installation, options.output)
-

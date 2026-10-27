@@ -135,4 +135,3 @@ def test_full_json_without_word_offsets_is_rejected():
     }]}
     with pytest.raises(KaraokeTimingError, match="lacks timestamps"):
         normalize_timing(payload)
-

@@ -2,8 +2,8 @@ import { getLanguage, onLanguageChange } from "./i18n.js";
 import { onQueueChange, getQueueSnapshot, cancelQueuedJob } from "./queue.js";
 
 const labels = {
-  pt: { prepare: "Preparar áudio", analyze: "Analisar música", separate: "Separar instrumentos", vocals: "Separar vozes", drums: "Detalhar bateria", reconstruct: "Preservar resíduos", finalize: "Finalizar pistas" },
-  en: { prepare: "Prepare audio", analyze: "Analyze song", separate: "Separate instruments", vocals: "Separate vocals", drums: "Detail drums", reconstruct: "Preserve residues", finalize: "Finalize tracks" },
+  pt: { prepare: "Preparar áudio", analyze: "Analisar música", separate: "Separar instrumentos", vocals: "Separar vozes", guitars: "Detalhar guitarras", drums: "Detalhar bateria", reconstruct: "Preservar resíduos", finalize: "Finalizar pistas" },
+  en: { prepare: "Prepare audio", analyze: "Analyze song", separate: "Separate instruments", vocals: "Separate vocals", guitars: "Detail guitars", drums: "Detail drums", reconstruct: "Preserve residues", finalize: "Finalize tracks" },
 };
 const isPt = () => getLanguage().startsWith("pt");
 export function stepLabel(id) { return (isPt() ? labels.pt : labels.en)[id] || id; }
@@ -24,6 +24,16 @@ let timer = null;
 let lastJob = null;
 let revision = 0;
 let dismissed = null;
+let selectedId = null;
+
+function withProgress(job) {
+  if (job.processing) return job;
+  const now = Date.now() / 1000;
+  const ids = job.separation_profile === "standard" ? ["prepare","analyze","separate","finalize"] : Object.keys(labels.en);
+  return { ...job, processing: { step:"prepare", step_number:1, total_steps:ids.length,
+    completed_steps:0, fraction:null, terminal:false, started_at:now, step_started_at:now,
+    steps:ids.map(id => ({ id, state:"pending" })) } };
+}
 
 function render() {
   const panel = document.getElementById("processingPanel");
@@ -31,21 +41,23 @@ function render() {
   const p = current?.processing;
   const visible = p && current.job_id !== dismissed;
   panel.hidden = !visible;
+  panel.setAttribute("data-active", String(Boolean(visible && !p.terminal)));
   if (!visible) return;
   const pt = isPt();
   const terminal = p.terminal;
   const done = current.status === "done";
+  const waiting = current.status === "queued";
   const status = done ? (pt ? "Extração concluída" : "Extraction complete") :
     terminal ? (pt ? "Extração interrompida" : "Extraction stopped") :
-    (pt ? "Extraindo" : "Extracting");
+    waiting ? (pt ? "Aguardando extração" : "Waiting for extraction") : (pt ? "Extraindo" : "Extracting");
   panel.querySelector(".processing-title").textContent = `${status} · ${current.title || "Áudio"}`;
   panel.querySelector(".processing-current").textContent = done ?
     (pt ? "Pistas prontas na biblioteca" : "Tracks ready in your library") : processingLabel(current);
   const now = Date.now() / 1000;
-  const elapsed = terminal ? p.elapsed_seconds : now - p.started_at;
-  const stepElapsed = terminal ? p.step_elapsed_seconds : now - p.step_started_at;
-  const cpu = ["vocals", "drums"].includes(p.step);
-  const device = cpu ? "CPU" : p.step === "separate" ? (current.compute_device === "directml" ? "AMD / DirectML" : current.compute_device || "") : "";
+  const elapsed = waiting ? 0 : terminal ? p.elapsed_seconds : now - p.started_at;
+  const stepElapsed = waiting ? 0 : terminal ? p.step_elapsed_seconds : now - p.step_started_at;
+  const actualDevice = p.device || (p.step === "vocals" ? "cpu" : p.step === "separate" ? current.compute_device : "");
+  const device = actualDevice === "directml" ? "AMD / DirectML" : actualDevice === "cpu" ? "CPU" : actualDevice || "";
   panel.querySelector(".processing-time").textContent = pt ?
     `Total ${clock(elapsed)} · Nesta etapa ${clock(stepElapsed)}${device ? ` · ${device}` : ""}` :
     `Total ${clock(elapsed)} · This step ${clock(stepElapsed)}${device ? ` · ${device}` : ""}`;
@@ -54,7 +66,8 @@ function render() {
   else bar.value = p.fraction * 100;
   const counters = p.counters;
   let note = pt ? "Em andamento · esta parte não informa percentual." : "In progress · this part does not report a percentage.";
-  if (counters) note = pt ? `Processamento: passagem ${counters.pass}/${counters.passes} · ${counters.completed}/${counters.total} trechos. Depois, as pistas serão gravadas.` :
+  if (waiting) note = pt ? "Aguardando sua vez na fila." : "Waiting for its turn in the queue.";
+  if (counters?.total) note = pt ? `Processamento: passagem ${counters.pass}/${counters.passes} · ${counters.completed}/${counters.total} trechos. Depois, as pistas serão gravadas.` :
     `Processing: pass ${counters.pass}/${counters.passes} · ${counters.completed}/${counters.total} chunks. The tracks will then be written.`;
   if (terminal) note = done ? (pt ? "Você já pode abrir o resultado e exportar as pistas." : "Open the result to play or export the tracks.") : current.error || (pt ? "O processamento foi encerrado." : "Processing has stopped.");
   panel.querySelector(".processing-note").textContent = note;
@@ -87,8 +100,9 @@ function render() {
 
 async function queueChanged(snap) {
   const rev = ++revision;
-  if (snap.running?.processing) {
-    current = snap.running;
+  const chosen = snap.running?.job_id === selectedId ? snap.running : snap.queued?.find(job => job.job_id === selectedId) || snap.running;
+  if (chosen) {
+    current = withProgress(chosen);
     lastJob = current.job_id;
     render();
     if (!timer) timer = setInterval(render, 1000);
@@ -100,7 +114,9 @@ async function queueChanged(snap) {
     try {
       const response = await fetch(`/api/jobs/${encodeURIComponent(id)}`);
       if (response.ok && rev === revision) {
-        current = await response.json(); render(); return;
+        const final = await response.json();
+        if (rev !== revision) return;
+        current = final; render(); return;
       }
     } catch (error) { console.warn("[progress] final state unavailable", error); }
   }
@@ -116,6 +132,10 @@ export function initProcessingProgress() {
   });
   document.querySelector(".processing-close")?.addEventListener("click", () => { dismissed = current?.job_id; render(); });
   onQueueChange(queueChanged);
+  document.addEventListener("trackwillopen", event => {
+    selectedId = event.detail?.source === "processing" ? event.detail.jobId : null;
+    queueChanged(getQueueSnapshot());
+  });
   onLanguageChange(render);
   queueChanged(getQueueSnapshot());
 }

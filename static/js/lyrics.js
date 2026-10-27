@@ -37,7 +37,9 @@
 // textContent, never as HTML: anyone can edit LRCLIB or a tag, and this page
 // can reach the desktop app's native commands.
 
-import { t, getLanguage } from "./i18n.js";
+import { lyricsEditorText, editedLyrics, untimedLines } from "./lyricsEditing.js";
+import { karaokePreviewFromTiming, hasProtectedLyrics } from "./karaokeTiming.js";
+import { t, getLanguage, onLanguageChange } from "./i18n.js";
 import { storeGet, storeSet } from "./utils.js";
 import { getCurrentTrackInfo, getCurrentTrackArtist } from "./catalog.js";
 import { transport, setPlayheadTime } from "./transport.js";
@@ -76,7 +78,7 @@ import {
 // One store entry per track rather than a field in the library store: a song's
 // lyrics run to a few kilobytes, and the library is rewritten whole on every
 // change to any track.
-const storeKey = (trackId) => `stemdeck.lyrics.${trackId}`;
+const storeKey = (trackId) => `stemdeck:lyrics:${trackId}`;
 
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
@@ -85,6 +87,9 @@ let versionsEl = null;
 let bodyEl = null;
 
 let visible = false;
+let sidebarVisible = false;
+let karaokeVisible = false;
+let provisional = false;
 let shownTrackId = null; // the track whose lyrics are on screen
 let lines = []; // timed lines of what is shown, in the timing in effect, [] for plain text
 let baseLines = []; // the lyrics' own lines at their own timing
@@ -135,6 +140,18 @@ const answered = new Map();
 let envelope = null;
 let envelopeFor = null;
 let envelopeAsked = null; // the track whose envelope is being fetched
+// The machine sidecar is read-only in the UI. Never save it as lyrics.json or
+// overwrite store-backed lyrics unless the user explicitly edits/saves them.
+let karaokeTrackId = null;
+let karaokeAvailable = false;
+let karaokeRunning = false;
+let karaokeRequestToken = 0;
+let karaokeBeforePreview = null;
+let karaokeMessageKey = "";
+let karaokeMessageKind = "";
+const KARAOKE_POLL_MS = 2000;
+const KARAOKE_MAX_POLLS = 1950; // bounded, no endless polling on stalled workers
+
 
 function el(tag, className, text) {
   const node = document.createElement(tag);
@@ -161,6 +178,9 @@ function clearLyrics() {
   baseLines = [];
   offset = 0;
   shownEntry = null;
+  shownFrom = "store";
+  provisional = false;
+  updateTimingNote();
   shownOthers = [];
   pickedIndex = -1;
   align = null;
@@ -172,6 +192,7 @@ function clearLyrics() {
   bodyEl.replaceChildren();
   bodyEl.classList.remove("synced", "aligning", "syncing");
   versionsEl.replaceChildren();
+  updateKaraokeControls();
 }
 
 // The language a line's script says it is in, for its lang attribute: Korean
@@ -285,12 +306,21 @@ function show(entry, others = [], from = "store") {
   // Words to align, or to say why they cannot be: not for an instrumental.
   // The panel goes under the tools row, above the versions list.
   if (entry.synced || entry.plain) tools.append(syncToggle(), alignToggle());
+  if (from === "preview" && karaokeBeforePreview) {
+    const restore = el("button", "lyrics-link", t("karaokeTiming.restore"));
+    restore.type = "button";
+    restore.addEventListener("click", restoreKaraokeLyrics);
+    tools.append(restore);
+  }
+
   if (baseLines.length && alignOpen && !syncOpen) tools.after(alignPanel());
   const remove = el("button", "lyrics-link", t("lyrics.remove"));
   remove.type = "button";
   remove.addEventListener("click", () => removeLyrics());
-  tools.append(remove);
+  if (from !== "preview") tools.append(remove);
 
+  updateTimingNote();
+  updateKaraokeControls();
   if (lines.length) {
     renderLines();
     loadEnvelope(shownTrackId);
@@ -300,6 +330,235 @@ function show(entry, others = [], from = "store") {
   }
   bodyEl.scrollTop = 0;
   if (syncOpen && lines.length) openSync();
+}
+
+
+/** Render and control the on-demand word-timecode sidecar. */
+function setKaraokeMessage(key = "", kind = "") {
+  karaokeMessageKey = key;
+  karaokeMessageKind = kind;
+  const node = document.getElementById("lyricsGeneratorStatus");
+  if (node) {
+    node.textContent = key ? t(key) : "";
+    node.className = `lyrics-note${kind ? ` ${kind}` : ""}`;
+  }
+}
+
+function updateKaraokeControls() {
+  const info = getCurrentTrackInfo();
+  const same = Boolean(info?.id && info.id === karaokeTrackId);
+  const button = document.getElementById("lyricsGenerateKaraokeBtn");
+  if (button) {
+    const activePreview = shownFrom === "preview" && shownEntry?.machinePreview;
+    button.textContent = t(activePreview && karaokeBeforePreview ? "karaokeTiming.restore"
+      : karaokeAvailable ? "karaokeTiming.view" : "karaokeTiming.generate");
+    button.disabled = !same || karaokeRunning || (activePreview && !karaokeBeforePreview);
+    button.setAttribute("aria-busy", String(same && karaokeRunning));
+  }
+  const cancel = document.getElementById("lyricsCancelKaraokeBtn");
+  if (cancel) cancel.hidden = !(same && karaokeRunning);
+  const regenerate = document.getElementById("lyricsRegenerateKaraokeBtn");
+  if (regenerate) regenerate.disabled = !same || !karaokeAvailable || karaokeRunning;
+  const link = document.getElementById("lyricsTimingJsonLink");
+  if (link) {
+    link.hidden = !same || !karaokeAvailable;
+    if (same) link.href = `/api/jobs/${encodeURIComponent(info.id)}/karaoke/timing`;
+    else link.removeAttribute("href");
+  }
+}
+
+function restoreKaraokeLyrics() {
+  const previous = karaokeBeforePreview;
+  if (!previous) return;
+  karaokeBeforePreview = null;
+  show(previous.entry, previous.others, previous.from);
+  setKaraokeMessage("karaokeTiming.ready");
+  updateKaraokeControls();
+}
+
+function selectKaraokeTrack(trackId) {
+  if (karaokeTrackId === trackId) return;
+  karaokeTrackId = trackId;
+  karaokeRequestToken++;
+  karaokeAvailable = false;
+  karaokeRunning = false;
+  karaokeBeforePreview = null;
+  setKaraokeMessage();
+  updateKaraokeControls();
+  if (trackId) void inspectKaraokeStatus(trackId, karaokeRequestToken);
+}
+
+const karaokeApi = (trackId, tail) =>
+  `/api/jobs/${encodeURIComponent(trackId)}/karaoke/${tail}`;
+
+async function fetchKaraokeStatus(trackId) {
+  const res = await fetch(karaokeApi(trackId, "status"), { cache: "no-store" });
+  if (!res.ok) throw new Error(`Karaoke status HTTP ${res.status}`);
+  return res.json();
+}
+
+async function inspectKaraokeStatus(trackId, token) {
+  try {
+    const result = await fetchKaraokeStatus(trackId);
+    if (token !== karaokeRequestToken || getCurrentTrackInfo()?.id !== trackId) return;
+    karaokeAvailable = result?.available === true;
+    karaokeRunning = result?.state === "running";
+    updateKaraokeControls();
+    if (karaokeRunning) {
+      setKaraokeMessage("karaokeTiming.running");
+      void pollKaraoke(trackId, token);
+    } else if (karaokeAvailable) setKaraokeMessage("karaokeTiming.ready");
+  } catch {
+    // The PR #5 router may not yet be installed. Editing must remain usable.
+    if (token === karaokeRequestToken) setKaraokeMessage("karaokeTiming.unavailable", "error");
+  }
+}
+
+function previewKaraoke(trackId, timing, { explicit = false } = {}) {
+  const info = getCurrentTrackInfo();
+  if (!info || info.id !== trackId) return false;
+  const preview = karaokePreviewFromTiming(timing, {
+    title: info.audioTags?.title || info.title || "",
+    artist: info.audioTags?.artist || "", duration: info.duration || 0,
+  });
+  if (!preview) {
+    setKaraokeMessage("karaokeTiming.invalid", "error");
+    return false;
+  }
+  if (!explicit && hasProtectedLyrics(shownEntry, syncOpen || !!sync ||
+      Boolean(document.getElementById("lyricsEditor")))) {
+    setKaraokeMessage("karaokeTiming.preserved");
+    return false;
+  }
+  if (shownFrom !== "preview" && shownEntry) {
+    karaokeBeforePreview = { entry: shownEntry, others: shownOthers, from: shownFrom };
+  }
+  show(preview, [], "preview");
+  setKaraokeMessage("karaokeTiming.preview");
+  return true;
+}
+
+async function showGeneratedKaraoke(trackId, { explicit = false } = {}) {
+  try {
+    const res = await fetch(karaokeApi(trackId, "timing"), { cache: "no-store" });
+    if (!res.ok) throw new Error(`Karaoke timing HTTP ${res.status}`);
+    const json = await res.json();
+    if (getCurrentTrackInfo()?.id !== trackId) return;
+    previewKaraoke(trackId, json, { explicit });
+  } catch (err) {
+    console.warn("karaoke preview failed", err);
+    if (getCurrentTrackInfo()?.id === trackId) setKaraokeMessage("karaokeTiming.failed", "error");
+  }
+}
+
+async function pollKaraoke(trackId, token) {
+  for (let attempt = 0; attempt < KARAOKE_MAX_POLLS; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, KARAOKE_POLL_MS));
+    if (token !== karaokeRequestToken || getCurrentTrackInfo()?.id !== trackId) return;
+    try {
+      const state = await fetchKaraokeStatus(trackId);
+      if (token !== karaokeRequestToken || getCurrentTrackInfo()?.id !== trackId) return;
+      karaokeAvailable = state?.available === true;
+      karaokeRunning = state?.state === "running";
+      updateKaraokeControls();
+      if (karaokeRunning) continue;
+      if (state?.state === "failed") {
+        setKaraokeMessage("karaokeTiming.failed", "error");
+      } else if (state?.state === "idle" && !karaokeAvailable) {
+        setKaraokeMessage("karaokeTiming.cancelled");
+      } else if (state?.state === "done" || karaokeAvailable) {
+        setKaraokeMessage("karaokeTiming.ready");
+        await showGeneratedKaraoke(trackId);
+      } else {
+        setKaraokeMessage("karaokeTiming.failed", "error");
+      }
+      return;
+    } catch (err) {
+      console.warn("karaoke status failed", err);
+      setKaraokeMessage("karaokeTiming.failed", "error");
+      karaokeRunning = false;
+      updateKaraokeControls();
+      return;
+    }
+  }
+  if (token === karaokeRequestToken) {
+    karaokeRunning = false;
+    setKaraokeMessage("karaokeTiming.timeout", "error");
+    updateKaraokeControls();
+  }
+}
+
+async function generateKaraoke({ replace = false } = {}) {
+  const trackId = getCurrentTrackInfo()?.id;
+  if (!trackId) return setKaraokeMessage("karaokeTiming.noTrack");
+  if (karaokeTrackId !== trackId) selectKaraokeTrack(trackId);
+  if (karaokeRunning) return;
+  if (shownFrom === "preview" && karaokeBeforePreview && !replace) {
+    restoreKaraokeLyrics();
+    return;
+  }
+  if (karaokeAvailable && !replace) {
+    await showGeneratedKaraoke(trackId, { explicit: true });
+    return;
+  }
+  if (replace && !window.confirm(t("karaokeTiming.regenerateConfirm"))) return;
+  const token = ++karaokeRequestToken;
+  karaokeRunning = true;
+  setKaraokeMessage("karaokeTiming.running");
+  updateKaraokeControls();
+  try {
+    const res = await fetch(karaokeApi(trackId, "generate"), {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(replace ? { replace: true } : {}),
+    });
+    if (!res.ok) {
+      // A sidecar from another session may have appeared since we last checked.
+      if (res.status === 409 && !replace) {
+        const state = await fetchKaraokeStatus(trackId);
+        if (state?.available) {
+          karaokeAvailable = true;
+          karaokeRunning = false;
+          updateKaraokeControls();
+          await showGeneratedKaraoke(trackId, { explicit: true });
+          return;
+        }
+        if (state?.state === "running") {
+          karaokeRunning = true;
+          updateKaraokeControls();
+          void pollKaraoke(trackId, token);
+          return;
+        }
+      }
+      throw new Error(`Karaoke generate HTTP ${res.status}`);
+    }
+    if (token === karaokeRequestToken && getCurrentTrackInfo()?.id === trackId) {
+      void pollKaraoke(trackId, token);
+    }
+  } catch (err) {
+    console.warn("karaoke generation failed", err);
+    if (token !== karaokeRequestToken) return;
+    karaokeRunning = false;
+    updateKaraokeControls();
+    setKaraokeMessage(resolutionUnavailable(err) ? "karaokeTiming.unavailable" : "karaokeTiming.failed", "error");
+  }
+}
+
+function resolutionUnavailable(err) {
+  return /HTTP (404|503)/.test(String(err?.message || ""));
+}
+
+async function cancelKaraoke() {
+  const trackId = getCurrentTrackInfo()?.id;
+  if (!trackId || !karaokeRunning) return;
+  try {
+    const res = await fetch(karaokeApi(trackId, "cancel"), { method: "POST" });
+    if (!res.ok) throw new Error(`Karaoke cancel HTTP ${res.status}`);
+    const result = await res.json();
+    setKaraokeMessage(result?.cancel_requested ? "karaokeTiming.canceling" : "karaokeTiming.cancellationFailed");
+  } catch (err) {
+    console.warn("karaoke cancel failed", err);
+    setKaraokeMessage("karaokeTiming.cancellationFailed", "error");
+  }
 }
 
 /** The timing in effect for what is shown, into `lines`: the user's own, the
@@ -712,7 +971,7 @@ function syncToggle() {
   const toggle = el("button", "lyrics-link lyrics-sync-toggle", t("lyrics.sync.button"));
   toggle.type = "button";
   syncToggleEl = toggle;
-  if (!lines.length) {
+  if (!lines.length && !shownEntry?.plain?.trim()) {
     toggle.setAttribute("aria-disabled", "true");
     toggle.title = t("lyrics.sync.syncedOnly");
     return toggle;
@@ -729,7 +988,13 @@ function syncToggle() {
 }
 
 function openSync({ focus = false } = {}) {
-  if (!lines.length || sync) return;
+  if (sync) return;
+  if (!lines.length && shownEntry?.plain?.trim()) {
+    provisional = true;
+    lines = untimedLines(shownEntry.plain, totalDuration);
+    renderLines();
+  }
+  if (!lines.length) return;
   if (align) closeAlign(false);
   syncOpen = true;
   const session = new SyncSession(lines, {
@@ -761,6 +1026,8 @@ function openSync({ focus = false } = {}) {
   });
   onCursor();
   showSyncState();
+  if (provisional) setSyncMessage(t("karaoke.provisional"), "muted");
+  updateTimingNote();
   if (focus) sync.tap.focus();
 }
 
@@ -782,6 +1049,10 @@ function closeSync(focusToggle, { keepOpen = false } = {}) {
   sync = null;
   syncToggleEl?.setAttribute("aria-expanded", "false");
   if (focusToggle) syncToggleEl?.focus();
+  if (provisional && !keepOpen) {
+    provisional = false;
+    show(shownEntry, shownOthers, shownFrom);
+  }
 }
 
 /** One of the panel's options, a checkbox that lets go of focus once
@@ -945,6 +1216,8 @@ function syncChanged({ reveal = false } = {}) {
   setDisplayLines(session.lines);
   updateLane(lines, session.cursor);
   onCursor({ reveal });
+  if (session.meta.kind !== "offset") provisional = false;
+  updateTimingNote();
   if (session.meta.kind === "user") {
     saveUserTiming(serializeLrc(lines));
   } else if (shownEntry?.userSynced) {
@@ -1432,6 +1705,7 @@ async function loadForCurrentTrack() {
     syncOpen = false;
   }
   shownTrackId = info?.id ?? null;
+  selectKaraokeTrack(shownTrackId);
   nothingKnownFor = null;
   searchController?.abort();
   searchController = null;
@@ -1445,6 +1719,12 @@ async function loadForCurrentTrack() {
   let saved = null;
   try {
     saved = await storeGet(storeKey(info.id), null);
+    // Older Lyrics kept entries only in this browser. Copy them into the
+    // shared per-song store so edits survive opening the normal app shortcut.
+    if (!saved) {
+      saved = await storeGet(`stemdeck.lyrics.${info.id}`, null);
+      if (saved) await storeSet(storeKey(info.id), saved);
+    }
   } catch (err) {
     console.warn("lyrics store read failed", err);
   }
@@ -1520,7 +1800,7 @@ function tick() {
   if (!visible) return;
   const id = getCurrentTrackInfo()?.id ?? null;
   if (id !== shownTrackId) loadForCurrentTrack();
-  if (lines.length) {
+  if (lines.length && !provisional) {
     // 50ms ahead: a click on a line seeks to its exact stamp, and the time read
     // back can land a hair before it, which would mark the line above.
     const time = transport()?.getCurrentTime?.() ?? 0;
@@ -1574,6 +1854,7 @@ function fillWords(index, now) {
 }
 
 function setVisible(on) {
+  if (visible === on) return;
   visible = on;
   // Sync lines works with the list in view; another view of the sidebar
   // leaves it, and what it set is saved.
@@ -1600,8 +1881,77 @@ export function initLyrics() {
   });
   // Capture, on the window: ahead of the app's own keys (see onSyncKey).
   window.addEventListener("keydown", onSyncKey, true);
-  document.addEventListener("catalogviewchange", (e) => setVisible(e.detail?.view === "lyrics"));
+  document.addEventListener("catalogviewchange", (e) => {
+    sidebarVisible = e.detail?.view === "lyrics";
+    setVisible(sidebarVisible || karaokeVisible);
+  });
+  document.getElementById("lyricsGenerateKaraokeBtn")?.addEventListener("click", () => void generateKaraoke());
+  document.getElementById("lyricsRegenerateKaraokeBtn")?.addEventListener("click", () => void generateKaraoke({ replace: true }));
+  document.getElementById("lyricsCancelKaraokeBtn")?.addEventListener("click", () => void cancelKaraoke());
+  document.getElementById("lyricsEditBtn")?.addEventListener("click", editLyrics);
+  document.getElementById("lyricsAutoSyncBtn")?.addEventListener("click", () => {
+    openSync();
+    retimeFromVocals();
+  });
   document.addEventListener("tracktags", (e) => {
     if (visible && nothingKnownFor && e.detail?.id === nothingKnownFor) loadForCurrentTrack();
   });
+  onLanguageChange(() => {
+    updateKaraokeControls();
+    setKaraokeMessage(karaokeMessageKey, karaokeMessageKind);
+    updateTimingNote();
+  });
+}
+
+
+export function setLyricsPresentation(on) {
+  karaokeVisible = on;
+  setVisible(sidebarVisible || karaokeVisible);
+}
+
+function updateTimingNote() {
+  const note = document.getElementById("lyricsTimingNote");
+  if (note) note.textContent = shownFrom === "preview" && shownEntry?.machinePreview
+    ? t("karaokeTiming.preview")
+    : shownEntry ? t(lines.length && !provisional ? "karaoke.timed" : "karaoke.untimed")
+    : getCurrentTrackInfo() ? t("karaoke.addLyrics") : "";
+  const auto = document.getElementById("lyricsAutoSyncBtn");
+  if (auto) auto.disabled = !(shownEntry?.plain || shownEntry?.synced);
+  const edit = document.getElementById("lyricsEditBtn");
+  if (edit) edit.disabled = !getCurrentTrackInfo();
+}
+
+function editLyrics() {
+  const info = getCurrentTrackInfo();
+  if (!info || document.getElementById("lyricsEditor")) return;
+  const original = shownEntry || { track: info.audioTags?.title || info.title, artist: info.audioTags?.artist || "", duration: info.duration };
+  const dialog = el("dialog", "lyrics-editor"); dialog.id = "lyricsEditor";
+  const form = el("form", "lyrics-editor-form");
+  const title = el("h2", "", t("karaoke.edit")); title.id = "lyricsEditorTitle";
+  dialog.setAttribute("aria-labelledby", title.id);
+  const hint = el("p", "lyrics-note", t("karaoke.editHint"));
+  const text = el("textarea", "lyrics-editor-text"); text.value = lyricsEditorText(original);
+  text.setAttribute("aria-label", t("lyrics.title")); text.spellcheck = true;
+  const actions = el("div", "lyrics-editor-actions");
+  const cancel = el("button", "lyrics-align-btn", t("karaoke.cancel")); cancel.type = "button";
+  const save = el("button", "lyrics-align-btn", t("karaoke.save")); save.type = "submit";
+  const close = () => { dialog.close(); dialog.remove(); };
+  cancel.addEventListener("click", close);
+  dialog.addEventListener("cancel", (e) => { e.preventDefault(); close(); });
+  const error = el("p", "lyrics-status error"); error.setAttribute("role", "alert");
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (getCurrentTrackInfo()?.id !== info.id) { error.textContent = t("karaoke.changedTrack"); return; }
+    if (!text.value.trim()) { error.textContent = t("karaoke.emptyLyrics"); return; }
+    save.disabled = true;
+    closeSync(false);
+    await dropStoreSave();
+    const entry = editedLyrics(original, text.value);
+    await storeSet(storeKey(info.id), { entry, others: [] });
+    answered.delete(info.id);
+    if (getCurrentTrackInfo()?.id === info.id) { syncOpen = false; show(entry, [], "store"); }
+    close();
+  });
+  actions.append(cancel, save); form.append(title, hint, text, error, actions); dialog.append(form);
+  document.body.append(dialog); dialog.showModal(); text.focus();
 }

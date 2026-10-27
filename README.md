@@ -49,6 +49,8 @@ As 15 pistas incluem **12 grupos musicais e 3 resíduos**, não 15 instrumentos 
 ## Documentação e verificação
 
 - [Instalação AMD, arquitetura, modelos e validação](docs/N3LX_STEM.md)
+- [Detalhar guitarras com SAM Audio na AMD: uso, testes e limites das estimativas](docs/sam-audio-amd.md)
+- [Bateria na AMD: refinamento automático, validação e alternativa em CPU](docs/drumsep-amd.md)
 - [Créditos e documentação original](README-UPSTREAM.md)
 - [Modelos e seus termos](docs/models.md)
 - [Avisos de terceiros](THIRD_PARTY_NOTICES.txt)

@@ -7,7 +7,26 @@ import time
 
 from app.core.models import FINISHED_STATUSES, Job, _set
 
-COMPLETE_STEPS = ("prepare", "analyze", "separate", "vocals", "drums", "reconstruct", "finalize")
+LEGACY_COMPLETE_STEPS = (
+    "prepare",
+    "analyze",
+    "separate",
+    "vocals",
+    "drums",
+    "reconstruct",
+    "finalize",
+)
+PREVIOUS_COMPLETE_STEPS = (
+    "prepare",
+    "analyze",
+    "separate",
+    "vocals",
+    "drums",
+    "guitars",
+    "reconstruct",
+    "finalize",
+)
+COMPLETE_STEPS = ('prepare', 'analyze', 'separate', 'drums', 'reconstruct', 'finalize')
 BASIC_STEPS = ("prepare", "analyze", "separate", "finalize")
 
 
@@ -26,6 +45,9 @@ def begin_step(job: Job, step: str) -> None:
         step_started_at=now,
         finished=finished,
         counters=None,
+        device=None,
+        plan=value.get("plan")
+        or list(COMPLETE_STEPS if job.separation_profile == "complete" else BASIC_STEPS),
     )
     _set(job, processing=value)
 
@@ -49,11 +71,14 @@ def consume_progress(job: Job, line: str) -> bool:
 
     try:
         counters = json.loads(line[len("@@PROGRESS@@") :])
-        fraction = float(counters["fraction"])
-        if not math.isfinite(fraction) or not 0 <= fraction <= 1:
+        raw = counters["fraction"]
+        fraction = None if raw is None else float(raw)
+        if fraction is not None and (not math.isfinite(fraction) or not 0 <= fraction <= 1):
             return True
         if job.processing and job.status not in FINISHED_STATUSES:
             value = {**job.processing, "fraction": fraction, "counters": counters}
+            if counters.get("device") in ("cpu", "directml", "cuda"):
+                value["device"] = counters["device"]
             _set(job, processing=value)
     except (ValueError, KeyError, TypeError):
         pass
@@ -64,7 +89,12 @@ def snapshot(job: Job) -> dict | None:
     value = job.processing
     if not value or not isinstance(value, dict):
         return None
-    steps = COMPLETE_STEPS if job.separation_profile == "complete" else BASIC_STEPS
+    steps = tuple(
+        value.get("plan")
+        or (LEGACY_COMPLETE_STEPS if job.separation_profile == "complete" else BASIC_STEPS)
+    )
+    if steps not in (COMPLETE_STEPS, PREVIOUS_COMPLETE_STEPS, BASIC_STEPS, LEGACY_COMPLETE_STEPS):
+        return None
     current = value.get("step")
     if current not in steps:
         return None
@@ -92,4 +122,5 @@ def snapshot(job: Job) -> dict | None:
         "terminal": terminal,
         "steps": states,
         "counters": value.get("counters"),
+        "device": value.get("device"),
     }

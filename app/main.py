@@ -251,6 +251,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if HTTPS_PORT and SSL_CERTFILE and SSL_KEYFILE:
         await tls_listener.start(app, port=HTTPS_PORT, certfile=SSL_CERTFILE, keyfile=SSL_KEYFILE)
     yield
+    from app.pipeline.guitar_detail import shutdown as shutdown_guitar_detail
+
+    await shutdown_guitar_detail()
     await tls_listener.stop()
     # Stop taking new work. Deliberately not cancelling the in-flight job: it is
     # blocked in asyncio.to_thread, which cannot be cancelled, so it dies with

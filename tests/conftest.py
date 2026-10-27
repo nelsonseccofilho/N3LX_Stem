@@ -47,6 +47,12 @@ def _no_whisper(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_sam_model(monkeypatch):
+    """No unit test may launch the real 6 GB SAM model or touch local weights."""
+    monkeypatch.setattr("app.pipeline.guitar_detail.environment", lambda: (None, None, False))
+
+
+@pytest.fixture(autouse=True)
 def _no_acoustid_or_musicbrainz(monkeypatch, tmp_path):
     """No test reaches api.acoustid.org or musicbrainz.org. Every job with an
     artist tag is identified while it runs (app/pipeline/identify.py), and so

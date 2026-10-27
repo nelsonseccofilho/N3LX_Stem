@@ -290,14 +290,8 @@ def set_auto_delete_jobs(value: bool) -> bool:
 
 
 def _default_auto_sections() -> bool:
-    """Automatic song-structure detection, off until the user asks for it.
-
-    The stage costs a CPU inference pass per job and produces suggestions
-    rather than ground truth, so nobody should pay for it without having
-    chosen to. STEMDECK_AUTO_SECTIONS=1 turns it on for a deployment that
-    wants it from first boot.
-    """
-    return os.environ.get("STEMDECK_AUTO_SECTIONS", "").strip() == "1"
+    """Detect structure by default; saved choices and deployment overrides win."""
+    return os.environ.get("STEMDECK_AUTO_SECTIONS", "1").strip() == "1"
 
 
 def get_auto_sections() -> bool:

@@ -1772,7 +1772,7 @@ function _drawPlaceholderWave() {
     const x = Math.round(i * barW);
     const nextX = i === n - 1 ? canvas.width : Math.round((i + 1) * barW);
     const bw = Math.max(1, nextX - x - gap);
-    ctx.fillStyle = "rgba(255,255,255,0.07)";
+    ctx.fillStyle = (getComputedStyle(document.documentElement).getPropertyValue("--wave-placeholder").trim() || "rgba(255,255,255,0.07)");
     ctx.fillRect(x, cy - barH / 2, bw, barH);
   }
 }
@@ -1811,7 +1811,7 @@ function _drawFooterWave(progress) {
     const x = Math.round(i * barW);
     const nextX = i === n - 1 ? canvas.width : Math.round((i + 1) * barW);
     const bw = Math.max(1, nextX - x - gap);
-    ctx.fillStyle = i < playedIdx ? "#f4b740" : "rgba(255,255,255,0.13)";
+    ctx.fillStyle = i < playedIdx ? getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() : getComputedStyle(document.documentElement).getPropertyValue("--wave-unplayed").trim();
     ctx.fillRect(x, top, bw, barH);
   }
   if (progress > 0.001 && progress < 0.999) {

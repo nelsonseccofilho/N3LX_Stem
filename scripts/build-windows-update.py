@@ -39,7 +39,7 @@ def build(source: Path, installation: Path, output: Path) -> Path:
         default.unlink()
     shell = package / "resources/app"
     shell.mkdir()
-    for name in ("main.cjs", "package.json"):
+    for name in ("main.cjs", "preload.cjs", "package.json"):
         shutil.copy2(source / "desktop-app" / name, shell / name)
     backend = package / "resources/stemdeck"
     files = subprocess.check_output(["git", "-C", str(source), "ls-files", "-z"], text=True).split("\0")

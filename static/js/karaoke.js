@@ -47,7 +47,7 @@ export function initKaraoke() {
     const bars = Math.min(peaks.length, Math.floor(width / (3 * scale)));
     for (let i = 0; i < bars; i++) {
       const h = Math.max(2 * scale, peaks[Math.floor(i * peaks.length / bars)] / max * height * .85);
-      ctx.fillStyle = i / bars <= progress ? accent : "#5f798b";
+      ctx.fillStyle = i / bars <= progress ? accent : (getComputedStyle(app).getPropertyValue("--wave-unplayed").trim() || "#5f798b");
       ctx.fillRect(i * width / bars, (height - h) / 2, Math.max(scale, width / bars - scale), h);
     }
     ctx.fillStyle = accent;

@@ -15,6 +15,7 @@ KEYS = {
     "stemdeck.folders",
     "stemdeck.deleted_jobs",
     "stemdeck.language",
+    "stemdeck.theme",
     "stemdeck:selected-stems",
     "stemdeck:vocal-split-mode",
     "stemdeck:failures",

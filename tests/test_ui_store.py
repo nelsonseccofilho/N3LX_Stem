@@ -56,3 +56,13 @@ def test_setlists_and_per_playlist_mix_persist_without_replacing_song_mix(store)
     saved = store.read_values()
     assert saved["stemdeck:setlist"] == playlist
     assert saved["stemdeck:mix:song"] == song_mix
+
+
+def test_theme_preference_keeps_existing_mix_and_playlist(store):
+    original = {"stemdeck:mix:demo": {"bass": {"pan": -.2}}, "stemdeck:setlist": {"playlists": ["keep"]}}
+    store.update_values(original)
+    for theme in ("light", "dark", "system"):
+        store.update_values({"stemdeck.theme": theme})
+        result = store.read_values()
+        assert result["stemdeck.theme"] == theme
+        assert all(result[key] == value for key, value in original.items())

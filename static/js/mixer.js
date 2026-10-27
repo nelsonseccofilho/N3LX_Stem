@@ -725,7 +725,7 @@ export function renderMixerRow(stem) {
   nameVuCol.append(nameEl, vu);
 
   const pan = makeLanePan(stem.name, display);
-  nameVuCol.insertBefore(pan, nameEl);
+  nameVuCol.replaceChildren(nameEl, pan, vu);
   row.append(iconCell, nameVuCol, fader, val, key, muteBtn, soloBtn, dl);
 
   muteBtn.addEventListener("click", () => toggleStemMute(stem.name));

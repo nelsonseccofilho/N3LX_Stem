@@ -1,3 +1,4 @@
+import { initTheme } from "./theme.js";
 import {
   playBtn, loopBtn, totalDuration, loopEnabled, loopStart, loopEnd,
   setLoopStart, setLoopEnd, selectedStems, saveSelectedStems, stemSelectionReady,
@@ -399,7 +400,7 @@ function wireAllButton() {
 // static/index.html always ships pre-rendered in English).
 const i18nReady = initI18n().then(() => applyTranslations(document));
 // Dynamic controls must use the resolved language on their first render.
-await i18nReady;
+await Promise.all([i18nReady, initTheme()]);
 
 document.addEventListener("separationprofilechange", refreshStemChoiceVisuals);
 const stemNamesReady = syncStemNamesFromAPI().then(() => buildStripStems());

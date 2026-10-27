@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, shell } = require("electron");
+const { app, BrowserWindow, dialog, shell, nativeTheme, ipcMain } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 const { spawn } = require("node:child_process");
@@ -17,6 +17,12 @@ else app.setPath("userData", path.join(root, "data", "desktop"));
 fs.mkdirSync(app.getPath("userData"), { recursive: true });
 app.commandLine.appendSwitch("lang", "pt-BR");
 let win;
+ipcMain.on("n3lx:theme", (event, value) => {
+ if (event.sender !== win?.webContents || !["dark", "light", "system"].includes(value)) return;
+ nativeTheme.themeSource = value;
+ win.setBackgroundColor(nativeTheme.shouldUseDarkColors ? "#0b0f12" : "#f4f6f8");
+});
+nativeTheme.on("updated", () => { if(win && !win.isDestroyed()) win.setBackgroundColor(nativeTheme.shouldUseDarkColors ? "#0b0f12" : "#f4f6f8"); });
 async function health(url = origin) {
   try { const r = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(2500) }); return r.ok ? await r.json() : null; }
   catch { return null; }
@@ -69,7 +75,7 @@ else {
    await ensureBackend(config);
    win = new BrowserWindow({ title: "N3LX_Stem", width: 1440, height: 960, minWidth: 800, minHeight: 600,
      icon: path.join(root, "desktop", "src-tauri", "icons", "icon.ico"), backgroundColor: "#0a0d10", autoHideMenuBar: true,
-     webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true } });
+     webPreferences: { preload: path.join(__dirname, "preload.cjs"), nodeIntegration: false, contextIsolation: true, sandbox: true } });
    win.webContents.on("page-title-updated", event => { event.preventDefault(); win.setTitle("N3LX_Stem"); });
    win.webContents.setWindowOpenHandler(({ url }) => { openExternal(url); return { action: "deny" }; });
    win.webContents.on("will-navigate", (event, url) => { if (new URL(url).origin !== origin) { event.preventDefault(); openExternal(url); } });

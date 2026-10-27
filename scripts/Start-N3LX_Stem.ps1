@@ -23,8 +23,8 @@ if (-not $env:N3LX_WHISPER_CLI) {
     if (-not (Test-Path -LiteralPath $env:N3LX_WHISPER_CLI)) { $env:N3LX_WHISPER_CLI = Join-Path $env:USERPROFILE 'whisper.cpp\build-vulkan\bin\Release\whisper-cli.exe' }
 }
 if (-not $env:N3LX_WHISPER_MODEL) {
-    $env:N3LX_WHISPER_MODEL = Join-Path $RuntimeRoot 'tools\whisper.cpp\ggml-medium.bin'
-    if (-not (Test-Path -LiteralPath $env:N3LX_WHISPER_MODEL)) { $env:N3LX_WHISPER_MODEL = Join-Path $env:USERPROFILE 'whisper.cpp\models\ggml-medium.bin' }
+    $env:N3LX_WHISPER_MODEL = Join-Path $RuntimeRoot 'tools\whisper.cpp\ggml-large-v3.bin'
+    if (-not (Test-Path -LiteralPath $env:N3LX_WHISPER_MODEL)) { $env:N3LX_WHISPER_MODEL = Join-Path $env:USERPROFILE 'whisper.cpp\models\ggml-large-v3.bin' }
 }
 if (-not $env:STEMDECK_SAM_SOURCE) { $env:STEMDECK_SAM_SOURCE = Join-Path (Split-Path $RuntimeRoot -Parent) 'sam-audio-amd' }
 $env:STEMDECK_FFMPEG = (Get-Command ffmpeg.exe -ErrorAction Stop).Source

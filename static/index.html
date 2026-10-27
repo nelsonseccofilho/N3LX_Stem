@@ -4,12 +4,14 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>N3LX_Stem — split any track into stems</title>
+    <script src="/js/themeBoot.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/css/variables.css" />
     <link rel="stylesheet" href="/css/waves.css" />
     <link rel="stylesheet" href="/css/daw.css" />
+    <link rel="stylesheet" href="/css/themes.css" />
   </head>
   <body>
 
@@ -734,12 +736,20 @@
                 <button id="lyricsCancelKaraokeBtn" class="lyrics-align-btn" type="button" data-i18n="karaoke.cancel" hidden>Cancelar</button>
               </div>
               <p id="lyricsGeneratorStatus" class="lyrics-note" role="status" aria-live="polite"></p>
+              <div class="lyrics-generator-model">
+                <label for="lyricsKaraokeModel" data-i18n="karaokeTiming.model">Modelo de transcrição</label>
+                <select id="lyricsKaraokeModel">
+                  <option value="large-v3" data-i18n="karaokeTiming.modelLarge">Whisper Large v3 · maior precisão</option>
+                  <option value="medium" data-i18n="karaokeTiming.modelMedium">Whisper Medium · mais rápido</option>
+                </select>
+                <button id="lyricsRegenerateKaraokeBtn" class="lyrics-align-btn" type="button" data-i18n="karaokeTiming.regenerate" hidden>Gerar novamente</button>
+                <button id="lyricsDeleteKaraokeBtn" class="lyrics-align-btn" type="button" data-i18n="karaokeTiming.delete" hidden>Excluir karaokê gerado</button>
+              </div>
               <details class="lyrics-advanced" id="lyricsAdvanced">
                 <summary data-i18n="karaokeTiming.advanced">Ajustes da letra</summary>
                 <div class="lyrics-advanced-actions">
                   <button id="lyricsEditBtn" class="lyrics-align-btn" type="button" data-i18n="karaoke.edit">Editar letra</button>
                   <button id="lyricsAutoSyncBtn" class="lyrics-align-btn" type="button" data-i18n="karaoke.autoSync">Sincronizar pelos vocais</button>
-                  <button id="lyricsRegenerateKaraokeBtn" class="lyrics-align-btn" type="button" data-i18n="karaokeTiming.regenerate">Regenerar karaokê</button>
                   <a id="lyricsTimingJsonLink" class="lyrics-align-btn" download="lyrics_timing.json" data-i18n="karaokeTiming.download" hidden>Baixar sincronização</a>
                 </div>
               </details>

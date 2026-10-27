@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import shutil
+import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
@@ -17,9 +18,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app.core.config import JOB_ID_RE, JOBS_DIR, ffmpeg_executable
 from app.core.registry import get as registry_get
-from app.pipeline.karaoke_timing import (
-    MAX_BYTES, KaraokeTimingError, generate_timing, store_timing,
-)
+from app.pipeline.karaoke_timing import MAX_BYTES, KaraokeTimingError, generate_timing, store_timing
 from app.pipeline.lyrics_retime import cancel_run, claim_run, current_run
 from app.pipeline.runner import _pipeline_lock
 
@@ -50,9 +49,16 @@ def _vocals(job_dir: Path) -> Path:
     return stem
 
 
-def _configuration() -> tuple[str, Path, str]:
+def _configuration(model_name: str | None = None) -> tuple[str, Path, str]:
     cli = os.environ.get("N3LX_WHISPER_CLI", "").strip()
     model = Path(os.environ.get("N3LX_WHISPER_MODEL", "").strip())
+    if model_name is not None:
+        if model_name not in {"large-v3", "medium"}:
+            raise HTTPException(status_code=422, detail="unsupported Whisper model")
+        model = Path(os.environ.get(
+            "N3LX_WHISPER_LARGE_MODEL" if model_name == "large-v3" else "N3LX_WHISPER_MEDIUM_MODEL",
+            str(model.parent / f"ggml-{model_name}.bin"),
+        ))
     if not cli or not shutil.which(cli) or not model.is_file():
         raise HTTPException(status_code=503, detail="Vulkan Whisper worker not configured")
     return cli, model, ffmpeg_executable()
@@ -80,6 +86,7 @@ async def _generate(job, job_dir: Path, run, replace: bool, cli: str, model: Pat
             after = (audio.stat().st_size, audio.stat().st_mtime_ns)
             if before != after:
                 raise KaraokeTimingError("vocals changed during transcription")
+            timing["model"] = model.stem.removeprefix("ggml-")
             output = job_dir / _SIDE_CAR
             await asyncio.to_thread(store_timing, output, timing, replace=replace)
             run.state = "done"
@@ -103,10 +110,8 @@ async def generate_karaoke(job_id: str, request: Request) -> JSONResponse:
     if job.status != "done":
         raise HTTPException(status_code=409, detail="job not ready")
     _vocals(job_dir)
-    cli, model, ffmpeg = _configuration()
-    if request.headers.get("content-length", "").isdigit():
-        if int(request.headers["content-length"]) > 1024:
-            raise HTTPException(status_code=413, detail="request too large")
+    if request.headers.get("content-length", "").isdigit() and int(request.headers["content-length"]) > 1024:
+        raise HTTPException(status_code=413, detail="request too large")
     raw = await request.body()
     if len(raw) > 1024:
         raise HTTPException(status_code=413, detail="request too large")
@@ -115,9 +120,13 @@ async def generate_karaoke(job_id: str, request: Request) -> JSONResponse:
     except (ValueError, UnicodeDecodeError):
         raise HTTPException(status_code=422, detail="invalid JSON") from None
     if (not isinstance(body, dict) or
-            any(k not in {"replace"} for k in body) or
+            any(k not in {"replace", "model"} for k in body) or
             type(body.get("replace", False)) is not bool):
         raise HTTPException(status_code=422, detail="expected optional boolean replace")
+    model_name = body.get("model")
+    if model_name is not None and model_name not in ("large-v3", "medium"):
+        raise HTTPException(status_code=422, detail="unsupported Whisper model")
+    cli, model, ffmpeg = _configuration(model_name) if model_name is not None else _configuration()
     replace = body.get("replace", False)
     if (job_dir / _SIDE_CAR).exists() and not replace:
         raise HTTPException(status_code=409, detail="timing exists; request replace to regenerate")
@@ -138,7 +147,14 @@ def karaoke_status(job_id: str) -> dict:
     if run is not current_run(job_id):
         run = None
     output = job_dir / _SIDE_CAR
-    return {"state": run.state if run is not None else "idle", "available": output.is_file()}
+    models = []
+    for name in ("large-v3", "medium"):
+        try:
+            _configuration(name)
+            models.append(name)
+        except HTTPException:
+            pass
+    return {"state": run.state if run is not None else "idle", "available": output.is_file(), "models": models}
 
 
 @router.post("/{job_id}/karaoke/cancel")
@@ -177,3 +193,27 @@ def karaoke_lrc(job_id: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise HTTPException(status_code=404, detail="LRC preview not available")
     return value
+
+
+@router.delete("/{job_id}/karaoke/timing")
+def delete_karaoke(job_id: str) -> dict:
+    """Remove only the generated sidecar; preserve manual lyrics, stems and a backup."""
+    _, job_dir = _job(job_id)
+    run = claim_run(job_id)
+    if run is None:
+        raise HTTPException(status_code=409, detail="lyrics processing already running")
+    _karaoke_runs[job_id] = run
+    run.started = True
+    try:
+        path = job_dir / _SIDE_CAR
+        if path.is_symlink() or not path.resolve().is_relative_to(job_dir):
+            raise HTTPException(status_code=409, detail="invalid timing path")
+        if path.exists():
+            if not path.is_file():
+                raise HTTPException(status_code=409, detail="invalid timing sidecar")
+            backup = path.with_name(f"{path.stem}.deleted-{uuid.uuid4().hex}.json")
+            path.replace(backup)
+        return {"state": "idle", "available": False}
+    finally:
+        run.state = "idle"
+        run.ended.set()

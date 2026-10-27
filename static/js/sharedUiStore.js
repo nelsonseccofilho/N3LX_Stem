@@ -1,5 +1,5 @@
 // Only app preferences are shared; browser profiles, cookies and credentials stay untouched.
-const keys = new Set(["stemdeck.folders", "stemdeck.deleted_jobs", "stemdeck.language", "stemdeck:selected-stems", "stemdeck:vocal-split-mode", "stemdeck:failures", "stemdeck:beatgrid-prefs", "stemdeck:slow-speed", "stemdeck:metronome", "stemdeck:setlist"]);
+const keys = new Set(["stemdeck.folders", "stemdeck.deleted_jobs", "stemdeck.language", "stemdeck.theme", "stemdeck:selected-stems", "stemdeck:vocal-split-mode", "stemdeck:failures", "stemdeck:beatgrid-prefs", "stemdeck:slow-speed", "stemdeck:metronome", "stemdeck:setlist"]);
 const allowed = (key) => keys.has(key) || /^stemdeck:(mix|lyrics):[a-zA-Z0-9_-]{1,80}$/.test(key);
 let loading;
 let values;

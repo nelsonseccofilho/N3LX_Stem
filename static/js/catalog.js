@@ -1,3 +1,5 @@
+import { getTheme, setTheme } from "./theme.js";
+import { confirmAction } from "./confirmAction.js";
 import { enhanceSettings } from "./settingsAccessibility.js";
 import { initSetlist, renderSetlistPanel } from "./setlist.js";
 import { setDefaultSeparationProfile, defaultSeparationProfile } from "./constants.js";
@@ -185,15 +187,15 @@ function replaceTrackId(oldId, newId) {
   if (_currentTrackId === oldId) _currentTrackId = newId;
 }
 
-function purgeTrash() {
+function purgeTrash(confirmedIds = null) {
   const trash = folders.find((f) => f.id === TRASH_ID);
   if (!trash?.items.length) return false;
-  const trashIds = new Set(trash.items);
+  const trashIds = new Set(confirmedIds ? trash.items.filter(id => confirmedIds.includes(id)) : trash.items);
   for (const id of trashIds) delete tracks[id];
   for (const folder of folders) {
     folder.items = folder.items.filter((id) => !trashIds.has(id));
   }
-  trash.items = [];
+  trash.items = trash.items.filter(id => !trashIds.has(id));
   // Catches a job that errored after its track was trashed but before this
   // permanent delete — moveTrackToTrash's own dismiss already fired earlier
   // and can't have caught a failure that didn't exist yet (#401).
@@ -1588,12 +1590,14 @@ function wireTrashRow(el, trackId) {
     }, TRASH_HOLD_MS);
   };
   el.addEventListener("pointerdown", (e) => {
+    if (e.target.closest("button")) return;
     // Ctrl and Shift are for picking rows, not for restoring them.
     if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey) return;
     start();
   });
   for (const type of ["pointerup", "pointerleave", "pointercancel"]) el.addEventListener(type, cancel);
   el.addEventListener("keydown", (e) => {
+    if (e.target !== el) return;
     if ((e.key === "Enter" || e.key === " ") && !e.repeat) {
       e.preventDefault();
       start();
@@ -1603,10 +1607,11 @@ function wireTrashRow(el, trackId) {
     if (e.key === "Enter" || e.key === " ") cancel();
   });
   el.addEventListener("click", (e) => {
-    if (restored) return;
+    if (restored || e.target.closest("button")) return;
     selectTrashRow(trackId, e);
   });
   el.addEventListener("dragstart", (e) => {
+    if (e.target.closest("button")) { e.preventDefault(); return; }
     cancel();
     startDrag(trackId, el, e);
   });
@@ -1876,10 +1881,10 @@ function renderTrackItem(trackId, { inTrash = false, folderId = null } = {}) {
     ${compact ? `<span class="cat-number">${position + 1}.</span>` : `<div class="cat-thumb">${thumbHtml(track)}</div>`}
     <div class="cat-meta">
       <div class="cat-title">${esc(displayTitle(track.title))}</div>
-      <div class="cat-sub">${compact ? `${isUnavailable ? '<span aria-hidden="true">⚠</span> ' : ""}${esc(fmtTime(track.duration || 0))}` : trackSublineHtml(track, { inTrash })}</div>${inTrash ? `<div class="cat-sub trash-hint">${esc(i18nT("trash.holdToRestore"))}</div>` : ""}
+      <div class="cat-sub">${compact ? `${isUnavailable ? '<span aria-hidden="true">⚠</span> ' : ""}${esc(fmtTime(track.duration || 0))}` : trackSublineHtml(track, { inTrash })}</div>${inTrash ? `<div class="cat-sub trash-hint">${esc(i18nT("trash.restoreHint"))}</div>` : ""}
     </div>
     <div class="cat-status${PROCESSING_STATUSES.has(track.status) ? " processing" : isUnavailable ? " unavailable" : ""}"></div>
-    ${inTrash ? `<div class="trash-hold" aria-hidden="true"></div>` : `<div class="cat-actions">${compact ? `<button class="cat-order cat-up" type="button" aria-label="${esc(i18nT("setlist.up"))} · ${esc(track.title)}" title="${esc(i18nT("setlist.up"))}" ${position === 0 ? "disabled" : ""}>↑</button><button class="cat-order cat-down" type="button" aria-label="${esc(i18nT("setlist.down"))} · ${esc(track.title)}" title="${esc(i18nT("setlist.down"))}" ${position === ordered.length - 1 ? "disabled" : ""}>↓</button>` : ""}${track.status === "stopped" ? extractButtonHtml(track) : ""}${favButtonHtml(track)}<button class="cat-del" type="button" title="${esc(i18nT("track.moveToTrash"))}">
+    ${inTrash ? `<button class="cat-restore" type="button" aria-label="${esc(i18nT("trash.restoreTitle", { title: track.title }))}">${esc(i18nT("trash.restore"))}</button>` : `<div class="cat-actions">${compact ? `<button class="cat-order cat-up" type="button" aria-label="${esc(i18nT("setlist.up"))} · ${esc(track.title)}" title="${esc(i18nT("setlist.up"))}" ${position === 0 ? "disabled" : ""}>↑</button><button class="cat-order cat-down" type="button" aria-label="${esc(i18nT("setlist.down"))} · ${esc(track.title)}" title="${esc(i18nT("setlist.down"))}" ${position === ordered.length - 1 ? "disabled" : ""}>↓</button>` : ""}${track.status === "stopped" ? extractButtonHtml(track) : ""}${favButtonHtml(track)}<button class="cat-del" type="button" title="${esc(i18nT("track.moveToTrash"))}">
       ${TRASH_ICON_SVG}
     </button></div>`}
   `;
@@ -1901,8 +1906,11 @@ function renderTrackItem(trackId, { inTrash = false, folderId = null } = {}) {
   });
   wireFavButton(el, trackId);
 
+  el.querySelector(".cat-restore")?.addEventListener("click", event => {
+    event.stopPropagation(); restoreTracksFromTrash([trackId]);
+  });
   if (inTrash) {
-    el.title = i18nT("trash.holdToRestore");
+    el.title = i18nT("trash.restoreHint");
     el.setAttribute("aria-selected", String(_trashSelection.has(trackId)));
     wireTrashRow(el, trackId);
   } else {
@@ -2820,10 +2828,16 @@ function wireCatalogRailViews() {
     try {
       const trash = getTrashFolder();
       const toDelete = [...(trash?.items || [])];
+      if (!toDelete.length) return;
+      const confirmed = await confirmAction({ title: i18nT("trash.confirmTitle"),
+        message: i18nT(toDelete.length === 1 ? "trash.confirmOne" : "trash.confirmMany", {
+          title: tracks[toDelete[0]]?.title || i18nT("track.unknown"), count: toDelete.length }),
+        confirmLabel: i18nT("trash.deletePermanently") });
+      if (!confirmed) return;
       // Awaited: the tombstone has to be on disk before the tracks leave the
       // local index, or a reload re-imports them (#521).
       await markJobsDeleted(toDelete);
-      purgeTrash();
+      purgeTrash(toDelete);
       saveState();
       render();
 
@@ -4641,6 +4655,15 @@ function openLibraryEditor() {
       <div class="settings-pane" data-pane="general">
         <div class="settings-section">
           <div class="settings-row">
+            <div class="settings-row-text"><div class="settings-row-title" data-i18n="settings.theme.title">Theme</div><div class="settings-row-desc" data-i18n="settings.theme.desc">Follow the system or choose an appearance.</div></div>
+            <select class="settings-select settings-select-wide set-theme" data-i18n-aria-label="settings.theme.title">
+              <option value="system" data-i18n="settings.theme.system">System default</option><option value="dark" data-i18n="settings.theme.dark">Dark</option><option value="light" data-i18n="settings.theme.light">Light</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-row">
             <div class="settings-row-text">
               <div class="settings-row-title" data-i18n="settings.language.title">Language</div>
               <div class="settings-row-desc" data-i18n="settings.language.desc">Display language for this app.</div>
@@ -4979,6 +5002,9 @@ function openLibraryEditor() {
   refreshLibrarySyncSummary();
   const isDesktop = Boolean(window.__TAURI__?.core?.invoke);
   wireLanguageSetting(overlay);
+  const themeSelect = overlay.querySelector(".set-theme");
+  themeSelect.value = getTheme();
+  themeSelect.addEventListener("change", () => void setTheme(themeSelect.value));
   if (changingLanguage) overlay.querySelector(".set-language")?.focus();
   wireGeneralSettings(overlay);
   wireAcoustidSetting(overlay);

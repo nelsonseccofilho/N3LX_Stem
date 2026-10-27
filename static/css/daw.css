@@ -6945,3 +6945,5 @@ input, textarea { font-family: inherit; }
 .daw-meta-card[data-meta="chord"] button { font-size:10px; padding:3px 6px; }
 #chords-status { font-size:10px; overflow-wrap:anywhere; }
 @media(max-width:1250px) { .daw-info-row { grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); } }
+
+#metro-preview-status:empty { display:none; }

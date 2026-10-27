@@ -1769,6 +1769,62 @@ def get_beats(job_id: str) -> Response:
     return JSONResponse(grid, headers={"Cache-Control": "no-store"})
 
 
+def _preview_alternative_grid(job_id: str) -> dict:
+    """Analyze isolated drums on CPU without writing a grid or changing edits."""
+    import librosa
+    import numpy as np
+    import soundfile
+    from app.core.config import BEATGRID_HOP
+    from app.pipeline.beat_detect import _detect_librosa
+    from app.pipeline.beatgrid import (
+        _extend_to_track_edges, _fine_onset_env, _grid_confidence,
+        _interval_spread, _refine_beats, _sanitize,
+    )
+
+    if not JOB_ID_RE.fullmatch(job_id) or registry_get(job_id) is None:
+        raise HTTPException(404, "track not found")
+    folder = (JOBS_DIR / job_id).resolve()
+    source = (folder / "stems" / "drums.wav").resolve()
+    if not folder.is_relative_to(JOBS_DIR.resolve()) or not source.is_relative_to(folder) or not source.is_file():
+        raise HTTPException(404, "drums not available")
+    info = soundfile.info(str(source))
+    if info.duration > 1200:
+        raise HTTPException(422, "track exceeds 20 minutes")
+    y, sr = librosa.load(str(source), sr=22050, mono=True)
+    if len(y) < sr:
+        raise HTTPException(422, "audio too short")
+    env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=BEATGRID_HOP, aggregate=np.median)
+    if not np.any(env):
+        raise HTTPException(422, "no drum onsets")
+    beats, _ = _detect_librosa(y, sr, env)
+    beats = _sanitize(beats, len(y) / sr)
+    if len(beats) < 5:
+        raise HTTPException(422, "not enough beats")
+    fine = _fine_onset_env(y, sr)
+    beats, _ = _refine_beats(y, sr, beats, float(np.median(np.diff(beats))), env=fine)
+    beats = _sanitize(beats, len(y) / sr)
+    spread = _interval_spread(beats)
+    beats, head, tail = _extend_to_track_edges(beats, len(y) / sr, spread)
+    beats = _sanitize(beats, len(y) / sr)
+    onsets = librosa.onset.onset_detect(onset_envelope=env, sr=sr, hop_length=BEATGRID_HOP, units="time")
+    return {"beats": beats, "bars": [], "source": "drums", "detector": "librosa",
+            "device": "cpu", "preview": True, "irregularity": spread,
+            "confidence": _grid_confidence(beats, onsets, .07),
+            "extrapolated_head": head, "extrapolated_tail": tail}
+
+
+@router.post("/{job_id}/beats/preview")
+async def preview_alternative_grid(job_id: str):
+    """Compute a temporary candidate; no saved grid is modified."""
+    try:
+        return await asyncio.to_thread(_preview_alternative_grid, job_id)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("alternative beat grid failed")
+        raise HTTPException(500, "alternative beat analysis failed") from None
+
+
 def _reject_non_finite(_token: str) -> float:
     """`json.loads` parse_constant hook.
 

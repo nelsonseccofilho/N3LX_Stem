@@ -5,15 +5,16 @@
 
 import {
   bgToolbar, bgUndoBtn, bgRedoBtn, bgResetBtn, bgDoneBtn,
-  bgRippleEl, bgSnapEl, bgBarLenEl, bgHintEl, metronome, metroEditBtn,
+  bgRippleEl, bgSnapEl, bgBarLenEl, bgHintEl, metronome, metroEditBtn, currentJobId,
 } from "./state.js";
 import {
   setBeatGridEditing, isBeatGridEditing, setBeatGridTool, getBeatGridTool,
   setBeatGridRipple, getBeatGridRipple, setBeatGridSnap, getBeatGridSnap,
   undoBeatGrid, redoBeatGrid, resetBeatGrid, canUndo, canRedo,
-  barLengthAt, setBarLengthAt, getBeats,
+  barLengthAt, setBarLengthAt, getBeats, flushBeatGrid, beginBeatGridPreview, endBeatGridPreview, isBeatGridPreview,
 } from "./beatgrid.js";
 import { applyMetronomeAccent, toggleMetronome, onMetronomeToggle } from "./transport.js";
+import { t, onLanguageChange } from "./i18n.js";
 
 const TOOL_BTNS = [
   ["bg-tool-move", "move", "Drag a beat to retime the region. Alt-drag moves one beat."],
@@ -55,7 +56,7 @@ export function setBeatGridAvailable(on) {
 export function toggleBeatGridEditor(force) {
   if (!bgToolbar) return;
   const next = force === undefined ? !isBeatGridEditing() : !!force;
-  if (next && !_available) return;
+  if (next && (!_available || isBeatGridPreview())) return;
   // The editor is a click-track tool: it edits the beats the click plays, and
   // the way to check an edit is to hear it. So opening it switches the click
   // on, the same way choosing a vocal mode switches vocals on, and switching
@@ -82,6 +83,47 @@ export const isBeatGridEditorOpen = () => isBeatGridEditing();
 
 export function wireBeatGridUi() {
   if (!bgToolbar) return;
+  const preview = document.getElementById("t-metro-preview");
+  let pending = false;
+  const paintPreview = () => {
+    if (!preview) return;
+    preview.textContent = t(isBeatGridPreview() ? "metro.previewRestore" : pending ? "metro.previewRunning" : "metro.preview");
+    preview.disabled = pending || !_available;
+    preview.setAttribute("aria-pressed", String(isBeatGridPreview()));
+    preview.title = t("metro.previewHint");
+    if (metroEditBtn) metroEditBtn.disabled = !_available || isBeatGridPreview();
+    const note = document.getElementById("metro-preview-status");
+    if (note) note.textContent = isBeatGridPreview() ? t("metro.previewActive") : "";
+  };
+  document.addEventListener("trackwillopen", () => { pending = false; queueMicrotask(paintPreview); });
+  document.addEventListener("playbackready", paintPreview);
+  onLanguageChange(paintPreview);
+  paintPreview();
+  preview?.addEventListener("click", async () => {
+    if (isBeatGridPreview()) { endBeatGridPreview(); paintPreview(); return; }
+    if (pending || !_available || !currentJobId) return;
+    if (isBeatGridEditing()) toggleBeatGridEditor(false);
+    const id = currentJobId;
+    pending = true; paintPreview();
+    try {
+      const response = await fetch("/api/jobs/" + encodeURIComponent(id) + "/beats/preview", {method:"POST"});
+      if (!response.ok) throw new Error("preview unavailable");
+      const result = await response.json();
+      if (id !== currentJobId || !pending) return;
+      flushBeatGrid();
+      if (!beginBeatGridPreview(result.beats)) throw new Error("invalid preview");
+      toggleMetronome(true);
+    } catch {
+      if (id === currentJobId) {
+        const note = document.getElementById("metro-preview-status");
+        if (note) note.textContent = t("metro.previewFailed");
+      }
+    } finally {
+      const failed = !isBeatGridPreview() && id === currentJobId;
+      pending = false; paintPreview();
+      if (failed) { const note = document.getElementById("metro-preview-status"); if (note) note.textContent = t("metro.previewFailed"); }
+    }
+  });
 
   for (const [id, tool] of TOOL_BTNS) {
     document.getElementById(id)?.addEventListener("click", () => {

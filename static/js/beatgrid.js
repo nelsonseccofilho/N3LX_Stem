@@ -69,6 +69,7 @@ let _undo = [];
 let _redo = [];
 let _saveTimer = null;
 let _dirty = false;
+let _previewOriginal = null;
 
 // ─── geometry ───────────────────────────────────────────────
 
@@ -570,6 +571,7 @@ export function destroyBeatGrid() {
   _undo = [];
   _redo = [];
   _editing = false;
+  _previewOriginal = null;
   _hoverIdx = -1;
   _dragIdx = -1;
   _canvas = null;
@@ -613,3 +615,26 @@ export const getBeatGridSnap = () => _snap;
 export const getAnchors = () => [..._anchors].sort((a, b) => a - b);
 export const getBeats = () => _beats.slice();
 export const getBars = () => _bars.map((b) => ({ ...b }));
+
+// An audition is memory-only: never invoke _commit or change the saved grid.
+export function isBeatGridPreview() { return _previewOriginal !== null; }
+export function beginBeatGridPreview(beats) {
+  if (_editing || _previewOriginal || !_jobId || !Array.isArray(beats) || beats.length < 2 ||
+      beats.some((v, i) => !Number.isFinite(v) || v < 0 || (i && v <= beats[i - 1]))) return false;
+  _previewOriginal = _snapshot();
+  _beats = beats.slice();
+  _bars = [];
+  _anchors = new Set();
+  _onChange?.(_beats.slice(), []);
+  _render();
+  return true;
+}
+export function endBeatGridPreview() {
+  if (!_previewOriginal) return false;
+  const snapshot = _previewOriginal;
+  _previewOriginal = null;
+  _restore(snapshot);
+  _onChange?.(_beats.slice(), _bars.map(b => ({ ...b })));
+  _render();
+  return true;
+}

@@ -1540,9 +1540,11 @@ function _renderMetroNote(grid) {
   } else if (Number.isFinite(bpm)) {
     text = t("metro.note.fallback", { bpm: bpm.toFixed(1) });
   }
+  const irregular = !grid.edited && Number.isFinite(Number(grid.irregularity)) && Number(grid.irregularity) > 0.20;
+  if (irregular) text = t("metro.note.irregular");
   metroNoteEl.textContent = text;
-  metroNoteEl.title = text; // clipped to one line; the full text is a hover away
-  metroNoteEl.className = Number.isFinite(conf) && conf < 60 ? "metro-note warn" : "metro-note";
+  metroNoteEl.title = text;
+  metroNoteEl.className = irregular || (Number.isFinite(conf) && conf < 60) ? "metro-note warn" : "metro-note";
 }
 
 /**

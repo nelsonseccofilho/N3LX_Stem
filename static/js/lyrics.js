@@ -39,7 +39,7 @@ import { confirmAction } from "./confirmAction.js";
 // can reach the desktop app's native commands.
 
 import { lyricsEditorText, editedLyrics, untimedLines } from "./lyricsEditing.js";
-import { karaokePreviewFromTiming, hasProtectedLyrics } from "./karaokeTiming.js";
+import { karaokePreviewFromTiming, hasProtectedLyrics, timingForMatchingEditedLyrics } from "./karaokeTiming.js";
 import { t, getLanguage, onLanguageChange } from "./i18n.js";
 import { storeGet, storeSet } from "./utils.js";
 import { getCurrentTrackInfo, getCurrentTrackArtist } from "./catalog.js";
@@ -413,7 +413,7 @@ function updateKaraokeControls() {
     const activePreview = shownFrom === "preview" && shownEntry?.machinePreview;
     button.textContent = t(activePreview && karaokeBeforePreview ? "karaokeTiming.restore"
       : karaokeAvailable ? "karaokeTiming.view" : "karaokeTiming.generate");
-    button.hidden = same && karaokeAvailable && activePreview && !karaokeBeforePreview;
+    button.hidden = same && karaokeAvailable && ((activePreview && !karaokeBeforePreview) || shownEntry?.generatedTimingApplied === true);
     button.disabled = !same || busy || (!karaokeAvailable && modelUnavailable) || (activePreview && !karaokeBeforePreview);
     button.setAttribute("aria-busy", String(same && karaokeRunning));
   }
@@ -1858,7 +1858,22 @@ async function loadForCurrentTrack() {
     return;
   }
   if (saved?.entry && !keptForAnotherSong(saved.entry, info)) {
-    show(saved.entry, Array.isArray(saved.others) ? saved.others : []);
+    let entry = saved.entry;
+    // An untimed edited lyric can borrow the generated word stamps only when
+    // every word matches in sequence. Never replace or rewrite the saved text.
+    if (!timingOf(entry).lines.length && entry.plain?.trim()) {
+      try {
+        const response = await fetch(karaokeApi(info.id, "timing"), { cache: "no-store" });
+        if (response.ok) {
+          const generated = await response.json();
+          if (token !== loadToken || getCurrentTrackInfo()?.id !== info.id) return;
+          entry = timingForMatchingEditedLyrics(entry, generated) || entry;
+        }
+      } catch (err) { console.warn("generated timing unavailable", err); }
+    }
+    if (token !== loadToken || getCurrentTrackInfo()?.id !== info.id) return;
+    if (shownEntry || syncOpen || sync || document.getElementById("lyricsEditor")) return;
+    show(entry, Array.isArray(saved.others) ? saved.others : []);
     return;
   }
   // Preserve any rejected older match on disk. A local transcription can still
@@ -2074,7 +2089,7 @@ export function setLyricsPresentation(on) {
 function updateTimingNote() {
   const note = document.getElementById("lyricsTimingNote");
   if (note) note.textContent = shownFrom === "preview" && shownEntry?.machinePreview
-    ? t("karaokeTiming.preview")
+    ? ""
     : shownEntry ? t(lines.length && !provisional ? "karaoke.timed" : "karaoke.untimed")
     : getCurrentTrackInfo() ? t("karaoke.addLyrics") : "";
   const auto = document.getElementById("lyricsAutoSyncBtn");

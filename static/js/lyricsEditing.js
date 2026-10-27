@@ -15,6 +15,7 @@ export function editedLyrics(entry, text) {
   const synced = supplied.length ? plain : previous.length && texts.length === previous.length
     ? serializeLrc(previous.map((line, i) => ({ time: line.time, text: texts[i] }))) : "";
   const result = { ...entry, v: 1, source: "manual", plain: supplied.length ? supplied.map((line) => line.text).join("\n") : plain, synced, savedAt: Date.now() };
+  if (!synced) delete result.generatedTimingApplied;
   delete result.aligned;
   delete result.userSynced;
   delete result.offsetSec;

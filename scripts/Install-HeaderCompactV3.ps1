@@ -37,8 +37,8 @@ if ($oldCss.Contains($cssMarker) -or
 }
 if (-not $oldCss.Contains($v2Marker) -or
     -not (Test-Path -LiteralPath (Join-Path $Repo 'static\js\headerCompactV2.js')) -or
-    $oldLayout.Split($startImport).Length -ne 2 -or
-    $oldLayout.Split($startInit).Length -ne 2) {
+    [regex]::Matches($oldLayout, [regex]::Escape($startImport)).Count -ne 1 -or
+    [regex]::Matches($oldLayout, [regex]::Escape($startInit)).Count -ne 1) {
     throw 'Header v2 instalado nao corresponde ao esperado. Nada foi modificado.'
 }
 

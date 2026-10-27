@@ -313,48 +313,117 @@ def _run_command(
                 proc.wait(timeout=5)
 
 
+def aligned_worker_resources() -> tuple[Path, Path]:
+    """Use the already-installed NELX worker; never download or fall back."""
+    root = Path(os.environ.get("N3LX_WHISPER_GPU_HOME", str(Path.home() / "NELX-Whisper-GPU"))).expanduser().resolve()
+    python = root / "venv" / "Scripts" / "python.exe"
+    script = root / "transcrever_gpu.py"
+    required = (python, script, root / "alinhamento_directml.py",
+                root / "alinhamento_directml_worker.py",
+                root / "experimentos" / "diarizacao-directml" / "venv" / "Scripts" / "python.exe",
+                root / "experimentos" / "alinhamento-directml" / "modelo" / "onnx" / "model.onnx",
+                root / "experimentos" / "alinhamento-directml" / "modelo" / "vocab.json")
+    if not all(path.is_file() for path in required):
+        raise KaraokeTimingError("WhisperGPU alignment environment not configured")
+    return python, script
+
+
+def _terminate_worker_tree(proc: subprocess.Popen) -> None:
+    if proc.poll() is not None:
+        return
+    if os.name == "nt":
+        # The isolated worker launches whisper and DirectML children. Stop the
+        # entire tree before releasing the processing lock or removing temp files.
+        subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    else:
+        import signal
+        try:
+            os.killpg(proc.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait(timeout=10)
+
+
 def generate_timing(
     audio: Path, *, whisper_cli: str, model: Path, ffmpeg: str = "ffmpeg",
     timeout: int = 3600,
     cancelled: Callable[[], bool] | None = None,
     phase_changed: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
-    """Process isolated audio, with no automatic model install or CPU fallback."""
+    """Recognize Portuguese vocals with Vulkan, then align JSON via DirectML."""
     audio, model = Path(audio), Path(model)
     if not audio.is_file() or not model.is_file():
         raise KaraokeTimingError("audio or Whisper model not found")
     cli = _checked_executable(whisper_cli, "whisper-cli")
-    ffmpeg_bin = _checked_executable(ffmpeg, "ffmpeg")
-    with tempfile.TemporaryDirectory(prefix="n3lx-karaoke-") as tmp:
-        root = Path(tmp)
-        wav = root / "vocals16.wav"
-        result_prefix = root / "transcription"
+    _checked_executable(ffmpeg, "ffmpeg")
+    python, worker = aligned_worker_resources()
+    model_name = model.stem.removeprefix("ggml-")
+    if model_name not in {"large-v3", "medium"}:
+        raise KaraokeTimingError("unsupported Whisper model")
+    with tempfile.TemporaryDirectory(prefix="n3lx-whispergpu-") as tmp:
+        output = Path(tmp)
+        logfile = output / "worker.log"
+        command = [str(python), str(worker), str(audio), "--model", model_name,
+                   "--whisper-model", str(model), "--whisper-cli", cli,
+                   "--device", "vulkan", "--gpu", "0", "--language", "pt",
+                   "--threads", "6", "--no-diarize", "--no-preload-align",
+                   "--output-format", "json", "--output-profile", "quality",
+                   "--output-dir", str(output)]
+        env = os.environ.copy()
+        env.update({"HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1",
+                    "HF_HUB_DISABLE_TELEMETRY": "1", "PYTHONIOENCODING": "utf-8",
+                    "PYTHONDONTWRITEBYTECODE": "1", "PYTHONUNBUFFERED": "1"})
         if phase_changed:
             phase_changed("prepare")
-        ff_status = _run_command(
-            [ffmpeg_bin, "-nostdin", "-v", "error", "-y", "-i", str(audio),
-             "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(wav)],
-            timeout=180, cancelled=cancelled,
-        )
-        if ff_status or not wav.is_file():
-            raise KaraokeTimingError("ffmpeg failed to prepare vocal audio")
-        # Deliberately no --vad: known segment/token timestamp mapping issue.
-        args = [cli, "-m", str(model), "-f", str(wav), "-l", "auto", "-t", "4",
-                "-dev", "0", "-ml", "1", "-sow", "-ojf", "-of", str(result_prefix)]
-        if phase_changed:
-            phase_changed("transcribe")
-        code = _run_command(args, timeout=timeout, cancelled=cancelled)
-        json_path = result_prefix.with_suffix(".json")
-        if code or not json_path.is_file():
-            raise KaraokeTimingError("whisper-cli did not produce a valid JSON result")
-        if json_path.stat().st_size > MAX_BYTES:
-            raise KaraokeTimingError("Whisper JSON exceeds the size limit")
+        with logfile.open("w", encoding="utf-8") as log:
+            proc = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
+                                    env=env, start_new_session=os.name != "nt")
+            started = time.monotonic()
+            phase = "prepare"
+            try:
+                while proc.poll() is None:
+                    if cancelled is not None and cancelled():
+                        raise KaraokeTimingError("karaoke generation cancelled")
+                    if time.monotonic() - started > timeout:
+                        raise KaraokeTimingError("karaoke worker exceeded its timeout")
+                    # Only phase markers are read; no transcript text is logged.
+                    text = logfile.read_text(encoding="utf-8", errors="replace")
+                    current = "align" if "[3/4]" in text else "transcribe" if "[2/4]" in text else "prepare"
+                    if current != phase and phase_changed:
+                        phase_changed(current)
+                    phase = current
+                    time.sleep(0.3)
+                code = proc.returncode
+            finally:
+                _terminate_worker_tree(proc)
+        if code != 0:
+            raise KaraokeTimingError(f"WhisperGPU alignment failed (exit {code})")
+        results = list(output.glob("*.integrado.json"))
+        reports = list(output.glob("*.qualidade.json"))
+        if len(results) != 1 or len(reports) != 1 or results[0].stat().st_size > MAX_BYTES or reports[0].stat().st_size > MAX_BYTES:
+            raise KaraokeTimingError("WhisperGPU did not produce bounded JSON and quality report")
+        try:
+            result = json.loads(results[0].read_text(encoding="utf-8"))
+            report = json.loads(reports[0].read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise KaraokeTimingError("WhisperGPU returned unreadable JSON") from exc
+        if (report.get("etapas", {}).get("alinhamento") != "ok" or
+            report.get("backend_alinhamento") != "onnx_directml_confirmado" or
+            report.get("gpu_reconhecimento") != "vulkan_confirmado_pelo_log"):
+            raise KaraokeTimingError("Vulkan recognition or DirectML alignment not verified")
         if phase_changed:
             phase_changed("finalize")
-        timing = normalize_timing(json.loads(json_path.read_text(encoding="utf-8")))
-        timing["requested_device"] = "vulkan_device_0"
-        timing["gpu_verified"] = False  # Check independent hardware logs.
+        timing = normalize_timing(result)
         timing["lrc_preview"] = enhanced_lrc(timing["words"])
+        timing["requested_device"] = "vulkan_device_0"
+        timing["gpu_verified"] = True
+        timing["alignment_backend"] = "onnx_directml_confirmado"
+        timing["alignment_alerts"] = report.get("total_alertas")
         return timing
 
 

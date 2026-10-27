@@ -52,6 +52,7 @@ def test_delete_refuses_symlink_paths(prepared, monkeypatch):
 
 
 def test_explicit_models_are_resolved_without_silent_downgrade(tmp_path, monkeypatch):
+    monkeypatch.setattr(k, "aligned_worker_resources", lambda: (tmp_path / "python", tmp_path / "worker"))
     medium = tmp_path / "ggml-medium.bin"
     large = tmp_path / "ggml-large-v3.bin"
     medium.write_bytes(b"model")

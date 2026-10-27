@@ -19,7 +19,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app.core.config import JOB_ID_RE, JOBS_DIR, ffmpeg_executable
 from app.core.registry import get as registry_get
-from app.pipeline.karaoke_timing import MAX_BYTES, KaraokeTimingError, generate_timing, store_timing
+from app.pipeline.karaoke_timing import MAX_BYTES, KaraokeTimingError, aligned_worker_resources, generate_timing, store_timing
 from app.pipeline.lyrics_retime import cancel_run, claim_run, current_run
 from app.pipeline.runner import _pipeline_lock
 
@@ -62,6 +62,10 @@ def _configuration(model_name: str | None = None) -> tuple[str, Path, str]:
         ))
     if not cli or not shutil.which(cli) or not model.is_file():
         raise HTTPException(status_code=503, detail="Vulkan Whisper worker not configured")
+    try:
+        aligned_worker_resources()
+    except KaraokeTimingError:
+        raise HTTPException(status_code=503, detail="WhisperGPU alignment environment not configured") from None
     return cli, model, ffmpeg_executable()
 
 

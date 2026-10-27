@@ -1,7 +1,7 @@
 {
   "name": "n3lx-stem-desktop",
   "productName": "N3LX_Stem",
-  "version": "0.21.0-rc.6",
+  "version": "0.21.0-rc.7",
   "private": true,
   "license": "Apache-2.0",
   "description": "Native desktop window for N3LX_Stem",

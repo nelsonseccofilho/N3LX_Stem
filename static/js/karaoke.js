@@ -31,6 +31,34 @@ export function initKaraoke() {
   const canvas = document.getElementById("karaokeWave"), clock = document.getElementById("karaokeClock");
   if (!app || !stage || !panel || !host || !canvas) return;
   const home = panel.parentElement;
+  const settings = document.getElementById("karaokeSettings"), settingsOpen = document.getElementById("lyricsSettingsOpen");
+  const cinemaOpen = document.getElementById("karaokeCinemaOpen"), cinemaExit = document.getElementById("karaokeCinemaExit");
+  let cinemaReturnFocus = null;
+  settingsOpen?.addEventListener("click", () => { if (!settings.open) settings.showModal(); });
+  document.getElementById("lyricsSettingsClose")?.addEventListener("click", () => settings.close());
+  settings?.addEventListener("close", () => { if (settingsOpen?.isConnected) settingsOpen.focus(); });
+  new MutationObserver(() => { if (panel.classList.contains("is-karaoke-processing") && settings.open) settings.close(); })
+    .observe(panel, { attributes:true, attributeFilter:["class"] });
+  cinemaOpen?.addEventListener("click", async () => {
+    cinemaReturnFocus = cinemaOpen;
+    try { await stage.requestFullscreen(); }
+    catch { document.getElementById("lyricsGeneratorStatus").textContent = t("karaoke.cinemaUnavailable"); }
+  });
+  cinemaExit?.addEventListener("click", () => { if (document.fullscreenElement === stage) void document.exitFullscreen(); });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && document.fullscreenElement === stage) {
+      event.preventDefault(); event.stopPropagation();
+      void document.exitFullscreen();
+    }
+  }, true);
+  document.addEventListener("fullscreenchange", () => {
+    const on = document.fullscreenElement === stage;
+    stage.classList.toggle("cinema-mode", on);
+    cinemaExit.hidden = !on;
+    if (on) cinemaExit.focus();
+    else if (cinemaReturnFocus?.isConnected) { cinemaReturnFocus.focus(); cinemaReturnFocus = null; }
+    window.dispatchEvent(new Event("resize"));
+  });
   let active = false, trackId = null, duration = 0, peaks = [], frame = 0, request = 0;
   let controller = null, waveState = "", sidebarView = "library", lastSecond = -1;
   const fmt = (s) => `${Math.floor(Math.max(0, s) / 60)}:${String(Math.floor(Math.max(0, s) % 60)).padStart(2, "0")}`;
@@ -41,13 +69,13 @@ export function initKaraoke() {
     if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
     const ctx = canvas.getContext("2d");
     ctx.clearRect(0, 0, width, height);
-    const accent = getComputedStyle(app).getPropertyValue("--accent").trim() || "#f4b740";
+    const accent = getComputedStyle(stage).getPropertyValue("--accent").trim() || "#f4b740";
     const progress = duration ? Math.min(1, time / duration) : 0;
     const max = Math.max(.01, ...peaks);
     const bars = Math.min(peaks.length, Math.floor(width / (3 * scale)));
     for (let i = 0; i < bars; i++) {
       const h = Math.max(2 * scale, peaks[Math.floor(i * peaks.length / bars)] / max * height * .85);
-      ctx.fillStyle = i / bars <= progress ? accent : (getComputedStyle(app).getPropertyValue("--wave-unplayed").trim() || "#5f798b");
+      ctx.fillStyle = i / bars <= progress ? accent : (getComputedStyle(stage).getPropertyValue("--wave-unplayed").trim() || "#5f798b");
       ctx.fillRect(i * width / bars, (height - h) / 2, Math.max(scale, width / bars - scale), h);
     }
     ctx.fillStyle = accent;
@@ -90,6 +118,8 @@ export function initKaraoke() {
   }
   function select(on) {
     if (on && app.classList.contains("is-processing-track")) return;
+    if (!on && document.fullscreenElement === stage) void document.exitFullscreen();
+    if (!on && settings?.open) settings.close();
     active = on;
     stage.hidden = !on;
     document.getElementById("lanes").hidden = on;

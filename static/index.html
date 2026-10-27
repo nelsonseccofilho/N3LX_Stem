@@ -732,8 +732,8 @@
             <section class="lyrics-panel" id="lyricsPanel" aria-labelledby="lyricsTitle">
               <div class="lyrics-heading">
                 <h2 class="lyrics-title" id="lyricsTitle" data-i18n="lyrics.title">Lyrics</h2>
-                <button id="lyricsGenerateKaraokeBtn" class="lyrics-align-btn lyrics-generate-btn" type="button" data-i18n="karaokeTiming.generate">Gerar karaokê</button>
-                <button id="lyricsCancelKaraokeBtn" class="lyrics-align-btn" type="button" data-i18n="karaoke.cancel" hidden>Cancelar</button>
+                <button id="lyricsSettingsOpen" class="lyrics-align-btn" type="button" data-i18n="karaoke.settings">Ajustes do karaokê</button>
+                <button id="karaokeCinemaOpen" class="lyrics-align-btn lyrics-generate-btn" type="button" data-i18n="karaoke.cinema">Modo cinema</button>
               </div>
               <p id="lyricsGeneratorStatus" class="lyrics-note" role="status" aria-live="polite"></p>
               <section id="karaokeProcessing" class="karaoke-processing" hidden aria-labelledby="karaokeProcessingTitle">
@@ -747,6 +747,14 @@
                 <p data-i18n="karaokeTiming.noPercent">This stage does not report a percentage. You can listen to another song while it runs.</p>
                 <button id="karaokeProcessingCancel" class="lyrics-align-btn" type="button" data-i18n="karaoke.cancel">Cancel</button>
               </section>
+              <dialog id="karaokeSettings" class="karaoke-settings" aria-labelledby="karaokeSettingsTitle">
+                <div class="karaoke-settings-head">
+                  <h2 id="karaokeSettingsTitle" data-i18n="karaoke.settings">Ajustes do karaokê</h2>
+                  <button id="lyricsSettingsClose" class="lyrics-align-btn" type="button" data-i18n="karaoke.close">Fechar</button>
+                </div>
+                <div class="karaoke-settings-content">
+                  <button id="lyricsGenerateKaraokeBtn" class="lyrics-align-btn lyrics-generate-btn" type="button" data-i18n="karaokeTiming.generate">Gerar karaokê</button>
+                  <button id="lyricsCancelKaraokeBtn" class="lyrics-align-btn" type="button" data-i18n="karaoke.cancel" hidden>Cancelar</button>
               <div class="lyrics-generator-language">
                 <label for="lyricsKaraokeLanguage" data-i18n="karaokeTiming.language">Idioma da música</label>
                 <select id="lyricsKaraokeLanguage" aria-describedby="lyricsLanguageHelp">
@@ -765,14 +773,15 @@
                 <button id="lyricsDeleteKaraokeBtn" class="lyrics-align-btn" type="button" data-i18n="karaokeTiming.delete" hidden>Excluir JSON do karaokê</button>
               </div>
               <p id="karaokeModelUnavailable" class="lyrics-note" role="status" data-i18n="karaokeTiming.modelUnavailable" hidden>Selecione um modelo disponível para este idioma.</p>
-              <details class="lyrics-advanced" id="lyricsAdvanced">
-                <summary data-i18n="karaokeTiming.advanced">Ajustes da letra</summary>
-                <div class="lyrics-advanced-actions">
+              <div class="lyrics-advanced-actions">
                   <button id="lyricsEditBtn" class="lyrics-align-btn" type="button" data-i18n="karaoke.edit">Editar letra</button>
                   <button id="lyricsAutoSyncBtn" class="lyrics-align-btn" type="button" data-i18n="karaoke.autoSync">Sincronizar pelos vocais</button>
                   <a id="lyricsTimingJsonLink" class="lyrics-align-btn" download="lyrics_timing.json" data-i18n="karaokeTiming.download" hidden>Baixar sincronização</a>
+              </div>
+                  <div id="karaokeToolsHost"></div>
                 </div>
-              </details>
+              </dialog>
+              <p id="cinemaEmpty" class="cinema-empty" hidden data-i18n="karaoke.cinemaNoTiming">Gere ou sincronize uma letra para acompanhar as linhas neste modo.</p>
               <p id="lyricsTimingNote" class="lyrics-note" role="status"></p>
               <p class="lyrics-note" data-i18n="lyrics.privacy">Taken from the file itself, or found on LRCLIB by the song this track was identified as. If neither has any and the setting allows it, they are transcribed locally from the vocals. Nothing else is sent.</p>
               <p class="lyrics-status" id="lyricsStatus" aria-live="polite"></p>
@@ -789,6 +798,7 @@
           <button id="studioKaraokeTab" type="button" role="tab" aria-selected="false" aria-controls="karaokeStage" tabindex="-1" data-i18n="karaoke.title">Karaokê</button>
         </div>
         <section id="karaokeStage" role="tabpanel" aria-labelledby="studioKaraokeTab" hidden>
+          <button id="karaokeCinemaExit" class="cinema-exit" type="button" data-i18n="karaoke.cinemaExit" hidden>Sair do cinema</button>
           <div class="karaoke-overview">
             <div class="karaoke-wave-head"><span data-i18n="karaoke.overview">Visão geral da música</span><span id="karaokeClock">00:00 / 00:00</span></div>
             <canvas id="karaokeWave" role="slider" tabindex="0" aria-label="Posição na música" data-i18n-aria-label="karaoke.seek" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></canvas>

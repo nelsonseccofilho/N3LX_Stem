@@ -4,9 +4,9 @@
 
 Aplicativo local derivado do [StemDeck](https://github.com/stemdeckapp/stemdeck), com adaptações para GPU AMD, biblioteca persistente, playlists e uma interface de estúdio.
 
-[**Baixar para Windows — rc.6 (ZIP)**](https://github.com/nelsonseccofilho/N3LX_Stem/releases/download/v0.21.0-rc.6/N3LX_Stem-Windows-Update-0.21.0-rc.6.zip) · [Notas da versão e SHA-256](https://github.com/nelsonseccofilho/N3LX_Stem/releases/tag/v0.21.0-rc.6) · [Como atualizar](#atualizar-uma-instalação-existente)
+[**Baixar para Windows — rc.7 (ZIP)**](https://github.com/nelsonseccofilho/N3LX_Stem/releases/download/v0.21.0-rc.7/N3LX_Stem-Windows-Update-0.21.0-rc.7.zip) · [Notas da versão e SHA-256](https://github.com/nelsonseccofilho/N3LX_Stem/releases/tag/v0.21.0-rc.7) · [Como atualizar](#atualizar-uma-instalação-existente)
 
-> **0.21.0-rc.6 é uma pré-release.** O download é um pacote de atualização que usa os ambientes AMD e modelos de uma instalação existente. A validação de instalação limpa em outro computador e a aceitação musical completa continuam pendentes.
+> **0.21.0-rc.7 é uma pré-release.** O download é um pacote de atualização que usa os ambientes AMD e modelos de uma instalação existente. A validação de instalação limpa em outro computador e a aceitação musical completa continuam pendentes.
 
 ![Estúdio N3LX_Stem no tema escuro, com biblioteca, PAN, controles de mixagem e formas de onda](docs/images/studio-dark.png)
 
@@ -21,16 +21,16 @@ Aplicativo local derivado do [StemDeck](https://github.com/stemdeckapp/stemdeck)
 
 ## Atualizar uma instalação existente
 
-1. [Baixe o ZIP da rc.6](https://github.com/nelsonseccofilho/N3LX_Stem/releases/download/v0.21.0-rc.6/N3LX_Stem-Windows-Update-0.21.0-rc.6.zip) e extraia **todo o conteúdo em uma pasta nova**, mantendo o executável, a pasta `resources` e os demais arquivos juntos.
+1. [Baixe o ZIP da rc.7](https://github.com/nelsonseccofilho/N3LX_Stem/releases/download/v0.21.0-rc.7/N3LX_Stem-Windows-Update-0.21.0-rc.7.zip) e extraia **todo o conteúdo em uma pasta nova**, mantendo o executável, a pasta `resources` e os demais arquivos juntos.
 2. Feche o aplicativo anterior e encerre seu servidor com **Stop-N3LX_Stem.cmd**, na instalação atual.
 3. Abra **N3LX_Stem.exe** na pasta extraída.
 4. Na primeira abertura, selecione a pasta da instalação AMD existente — aquela que contém `.venv`, `.venv-directml` e sua biblioteca `data`.
 
 O pacote reutiliza os ambientes, ferramentas, pesos e biblioteca dessa instalação. Os áudios, modelos e configurações pessoais não estão incluídos no download. Preserve sua instalação anterior para poder retornar a ela. Evite substituir um checkout com alterações locais sem revisá-las primeiro.
 
-Para conferir o arquivo, compare seu SHA-256 com o arquivo `.zip.sha256` disponível na [release](https://github.com/nelsonseccofilho/N3LX_Stem/releases/tag/v0.21.0-rc.6).
+Para conferir o arquivo, compare seu SHA-256 com o arquivo `.zip.sha256` disponível na [release](https://github.com/nelsonseccofilho/N3LX_Stem/releases/tag/v0.21.0-rc.7).
 
-A rc.6 permite escolher português ou inglês no karaokê. Português usa WhisperGPU e alinhamento DirectML; inglês usa Whisper Vulkan com tempos por palavra, sem alinhamento avançado. Consulte [requisitos e validação](docs/KARAOKE_WHISPERGPU_RC5.md). A rc.4 reduz a largura dos controles de PAN e volume, mantendo o nome da pista acima do PAN. A rc.3 acrescentou uma tela de processamento do karaokê, com etapas reais, tempo decorrido e cancelamento. Gerar novamente retira o JSON anterior de uso antes de criar um novo; **Excluir JSON do karaokê** remove o resultado automático. Consulte a [validação desta correção](docs/KARAOKE_PROCESSING_RC3.md).
+A rc.7 reúne os ajustes do karaokê em um diálogo e oferece modo cinema em tela cheia escura com forma de onda e até três linhas sincronizadas. A rc.6 permite escolher português ou inglês no karaokê. Português usa WhisperGPU e alinhamento DirectML; inglês usa Whisper Vulkan com tempos por palavra, sem alinhamento avançado. Consulte [requisitos e validação](docs/KARAOKE_WHISPERGPU_RC5.md). A rc.4 reduz a largura dos controles de PAN e volume, mantendo o nome da pista acima do PAN. A rc.3 acrescentou uma tela de processamento do karaokê, com etapas reais, tempo decorrido e cancelamento. Gerar novamente retira o JSON anterior de uso antes de criar um novo; **Excluir JSON do karaokê** remove o resultado automático. Consulte a [validação desta correção](docs/KARAOKE_PROCESSING_RC3.md).
 
 ## O que você pode fazer
 
@@ -38,7 +38,7 @@ A rc.6 permite escolher português ou inglês no karaokê. Português usa Whispe
 | --- | --- |
 | **Separação local** | Extrair grupos de instrumentos e, quando disponíveis, detalhamentos de bateria, vozes e guitarras. A lista de pistas mostra o resultado efetivamente disponível. |
 | **Mixer e PAN** | Ajustar volume, mudo, solo, posição estéreo e transposição por pista. O nome aparece acima do PAN; pistas percussivas mantêm a proteção de tom. |
-| **Karaokê** | Alternar entre Formas de onda e Karaokê, editar e sincronizar letras, gerar novamente ou excluir o resultado automático preservando a letra manual e os stems. |
+| **Karaokê** | Alternar entre Formas de onda e Karaokê, usar o modo cinema, abrir ajustes, editar e sincronizar letras, gerar novamente ou excluir o resultado automático preservando a letra manual e os stems. |
 | **Whisper Large v3** | Escolher Large v3 ou Medium no karaokê. Large v3 é o padrão; a geração usa o idioma escolhido. Português requer o WhisperGPU instalado e o alinhador DirectML; inglês usa os tempos do Whisper Vulkan. |
 | **Temas** | Escolher Claro, Escuro ou Padrão do sistema em **Configurações → Geral → Tema**. A preferência é salva e o modo Sistema acompanha mudanças do computador. |
 | **Biblioteca e lixeira** | Organizar músicas, marcar favoritos, restaurar por botão e confirmar a exclusão definitiva pelo nome ou pela quantidade de itens. |

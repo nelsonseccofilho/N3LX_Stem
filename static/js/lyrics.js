@@ -193,6 +193,7 @@ function clearLyrics() {
   bodyEl.replaceChildren();
   bodyEl.classList.remove("synced", "aligning", "syncing");
   versionsEl.replaceChildren();
+  document.getElementById("karaokeToolsHost")?.replaceChildren();
   updateKaraokeControls();
 }
 
@@ -286,7 +287,8 @@ function show(entry, others = [], from = "store") {
     ].filter(Boolean).join(" · ")),
   );
   const tools = el("div", "lyrics-tools");
-  versionsEl.append(head, tools);
+  versionsEl.append(head);
+  document.getElementById("karaokeToolsHost").append(tools);
   baseLines = entry.synced ? parseLrc(entry.synced) : [];
   offset = clampOffset(entry.offsetSec);
   applyTiming();
@@ -302,7 +304,7 @@ function show(entry, others = [], from = "store") {
       toggle.textContent = t(list.hidden ? "lyrics.otherVersions" : "lyrics.hideVersions", { count: others.length });
     });
     tools.append(toggle);
-    versionsEl.append(list);
+    document.getElementById("karaokeToolsHost").append(list);
   }
   // Words to align, or to say why they cannot be: not for an instrumental.
   // The panel goes under the tools row, above the versions list.
@@ -424,6 +426,8 @@ function updateKaraokeControls() {
   if (language) language.disabled = !same || busy;
   const model = document.getElementById("lyricsKaraokeModel");
   if (model) model.disabled = !same || busy;
+  const cinema = document.getElementById("karaokeCinemaOpen");
+  if (cinema) cinema.disabled = busy;
   const link = document.getElementById("lyricsTimingJsonLink");
   if (link) {
     link.hidden = !same || !karaokeAvailable;
@@ -688,6 +692,7 @@ function renderLines() {
   currentIndex = -1;
   lineEls = lines.map((line, i) => lineButton(line, lines[i + 1]?.time ?? null, i));
   bodyEl.replaceChildren(...lineEls);
+  lineEls[0]?.classList.add("next");
   bodyEl.classList.add("synced");
   showLineTimes();
 }
@@ -1482,6 +1487,7 @@ async function retimeFromVocals() {
     if (!live()) return;
     sync.retimeBtn.removeAttribute("aria-busy");
     setSyncMessage(text, kind);
+    if (karaokeVisible && !document.getElementById("karaokeSettings")?.open) closeSync(false);
   };
   let started = false;
   try {
@@ -1551,7 +1557,7 @@ function isTyping(target) {
 /** Whether an editor, dialog or popover other than the Lyrics panel's own is
  * open, and so owns Escape and undo. */
 function anotherEditorOpen() {
-  if (document.querySelector('#t-metro-edit[aria-pressed="true"], dialog[open]')) return true;
+  if (document.querySelector('#t-metro-edit[aria-pressed="true"], dialog[open]:not(#karaokeSettings)')) return true;
   const panel = document.getElementById("lyricsPanel");
   // The app's dialogs are role="dialog" elements, hidden by a class or
   // removed when closed, not native <dialog>s: one showing owns the keys.
@@ -1567,6 +1573,7 @@ function anotherEditorOpen() {
  * arrows would scroll the list. */
 function onSyncKey(e) {
   if (!sync || !visible || isTyping(e.target)) return;
+  if (karaokeVisible && (!document.getElementById("karaokeSettings")?.open || e.key === "Escape")) return;
   const mod = e.ctrlKey || e.metaKey;
   // The keyboard belongs to whatever else is open on top: the beat-grid
   // editor, a dialog, a menu or panel outside the Lyrics panel. Heard first
@@ -1913,6 +1920,8 @@ function tick() {
   if (!visible) return;
   const id = getCurrentTrackInfo()?.id ?? null;
   if (id !== shownTrackId) loadForCurrentTrack();
+  const cinemaEmpty = document.getElementById("cinemaEmpty");
+  if (cinemaEmpty) cinemaEmpty.hidden = Boolean(lines.length && !provisional);
   if (lines.length && !provisional) {
     // 50ms ahead: a click on a line seeks to its exact stamp, and the time read
     // back can land a hair before it, which would mark the line above.
@@ -1938,7 +1947,9 @@ function moveTo(index) {
     }
   }
   lineEls[currentIndex + 1]?.classList.remove("next");
+  lineEls[currentIndex - 1]?.classList.remove("previous");
   currentIndex = index;
+  lineEls[index - 1]?.classList.add("previous");
   if (sync) setLaneCurrent(index);
   lineEls[index + 1]?.classList.add("next");
   const line = lineEls[index];
@@ -2005,6 +2016,10 @@ export function initLyrics() {
   document.getElementById("lyricsKaraokeLanguage")?.addEventListener("change", updateKaraokeModels);
   document.getElementById("lyricsKaraokeModel")?.addEventListener("change", updateKaraokeControls);
   document.getElementById("karaokeProcessingCancel")?.addEventListener("click", () => void cancelKaraoke());
+  document.getElementById("karaokeSettings")?.addEventListener("close", () => {
+    if (sync?.retimeBtn?.getAttribute("aria-busy") !== "true") closeSync(false);
+    if (alignOpen) closeAlign(false);
+  });
   document.getElementById("lyricsEditBtn")?.addEventListener("click", editLyrics);
   document.getElementById("lyricsAutoSyncBtn")?.addEventListener("click", () => {
     openSync();

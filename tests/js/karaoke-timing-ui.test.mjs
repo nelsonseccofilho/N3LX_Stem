@@ -40,7 +40,7 @@ assert.equal(hasProtectedLyrics({}, true), true, "active editor protects work in
 assert.equal(hasProtectedLyrics({ source: "lrclib", synced: "" }), false);
 
 const html = readFileSync(new URL("../../static/index.html", import.meta.url), "utf8");
-for (const id of ["lyricsGenerateKaraokeBtn", "lyricsCancelKaraokeBtn", "lyricsRegenerateKaraokeBtn", "lyricsTimingJsonLink", "lyricsAdvanced"]) {
+for (const id of ["lyricsGenerateKaraokeBtn", "lyricsCancelKaraokeBtn", "lyricsRegenerateKaraokeBtn", "lyricsTimingJsonLink", "karaokeSettings", "lyricsSettingsOpen", "karaokeCinemaOpen", "karaokeCinemaExit"]) {
   assert.equal((html.match(new RegExp(`id="${id}"`, "g")) || []).length, 1, `single ${id} control`);
 }
 const lyrics = readFileSync(new URL("../../static/js/lyrics.js", import.meta.url), "utf8");

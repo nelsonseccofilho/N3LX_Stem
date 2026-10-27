@@ -1,3 +1,5 @@
+import { onLanguageChange } from "./i18n.js";
+
 // Compact-header follow-up: non-destructive re-extraction of a finished local track.
 // Reuses job.js's existing resplit submit path, so queue, library registration and
 // source preservation stay with the code that already owns those operations.
@@ -19,6 +21,9 @@ export function initHeaderReextract() {
   let lockedFor = "";
   const sync = () => {
     const id = submit.dataset.resplitJob || "";
+    const pt = document.documentElement.lang?.toLowerCase().startsWith("pt");
+    button.textContent = pt ? "↻ Reextrair" : "↻ Re-extract";
+    button.setAttribute("aria-label", pt ? "Extrair novamente a música atual" : "Re-extract current track");
     const canResplit = /^[a-f0-9]{12}$/i.test(id);
     const staged = Boolean(
       document.getElementById("url")?.value.trim() ||
@@ -68,5 +73,6 @@ export function initHeaderReextract() {
     lockedFor = "";
     sync();
   });
+  onLanguageChange(sync);
   sync();
 }

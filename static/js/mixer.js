@@ -1,3 +1,4 @@
+import { refreshAnalysisKey } from "./analysisKey.js";
 import { nudgeVolumeGain } from "./volumeControl.js";
 import { clampStereoPan, panLabel } from "./stereoPan.js";
 import {
@@ -104,6 +105,7 @@ export function applyLanePitch(name) {
 
 /** Re-send every lane transpose. Called once an engine finishes starting. */
 export function applyAllLanePitches() {
+  refreshAnalysisKey();
   for (const name of allTrackNames()) {
     if (mixerState[name]) applyLanePitch(name);
     refreshLaneKeyVisual(name);
@@ -150,6 +152,7 @@ export function setLanePitch(name, semitones) {
   saveMix();
   applyLanePitch(name);
   refreshLaneKeyVisual(name);
+  refreshAnalysisKey();
 }
 
 /** Redraw one lane's key stepper from state. */
@@ -286,6 +289,7 @@ function refreshLanePanVisual(name) {
 }
 
 export function refreshMixerVisuals() {
+  refreshAnalysisKey();
   for (const name of allTrackNames()) {
     const state = mixerState[name];
     if (!state) continue;

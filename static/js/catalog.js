@@ -11,7 +11,7 @@ import { initSections } from "./sections.js";
 import { audioEngine, bpmChip, foregroundJobId, keyChip, multitrack, saveSelectedStems, selectedStems, titleEl, setCurrentJobId } from "./state.js";
 import { refreshStemChoiceVisuals } from "./stemChoice.js";
 import { trackFormat, formatIconSvg, paintNowPlayingArt } from "./formatIcon.js";
-import { formatKey } from "./keyLabel.js";
+import { setAnalyzedKey } from "./analysisKey.js";
 import { showError, importFromUrl, detachForegroundJob, runVocalSplitIfWanted } from "./job.js";
 import {
   cancelQueuedJob, currentIds, getQueueSnapshot, isPaused, onJobSettled, onQueueChange,
@@ -728,7 +728,7 @@ function applyTrackInfoToPanel(track) {
   const summaryPeak = document.getElementById("summary-peak");
   const summaryDuration = document.getElementById("summary-duration");
 
-  if (summaryKey) summaryKey.textContent = formatKey(track.key, track.scale, i18nT) || "—";
+  if (summaryKey) setAnalyzedKey(track.key, track.scale);
   if (summaryBpm) summaryBpm.textContent = track.bpm ? String(track.bpm) : "—";
   if (summaryLufs) summaryLufs.textContent = track.lufs != null ? Number(track.lufs).toFixed(1) : "—";
   if (summaryPeak) summaryPeak.textContent = track.peakDb != null ? i18nT("job.peakDb", { value: Number(track.peakDb).toFixed(1) }) : "";

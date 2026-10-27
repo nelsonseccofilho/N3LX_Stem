@@ -21,7 +21,7 @@ function render() {
   panel.querySelector(".studio-processing-song").textContent = selected.title || (pt ? "Nova música" : "New song");
   panel.querySelector(".studio-processing-detail").textContent = pending
     ? (waiting ? (pt ? "Aguardando a vez de processar." : "Waiting to be processed.") : runningLabel(selected))
-    : (selected.error || (pt ? "Nenhuma pista está disponível para reprodução." : "No tracks are available for playback."));
+    : (pt ? "Não foi possível concluir a extração. Consulte o diagnóstico nas Configurações." : "Extraction could not finish. Check diagnostics in Settings.");
   panel.querySelector(".studio-processing-hint").textContent = pt
     ? "Você pode selecionar e ouvir outra música pronta na biblioteca enquanto isso."
     : "You can select and play another finished song from your library in the meantime.";

@@ -1873,7 +1873,7 @@ export function updateFooterTrack({ title, thumbnail, key, bpm, stemCount } = {}
     const parts = [];
     if (key) parts.push(key);
     if (bpm) parts.push(`${Math.round(bpm)} BPM`);
-    if (stemCount != null) parts.push(`${stemCount} Stems`);
+    if (stemCount != null) parts.push(plural("footer.stemsCount", stemCount));
     if (key !== undefined || bpm !== undefined || stemCount !== undefined)
       footerMeta.textContent = parts.join(" • ");
   }

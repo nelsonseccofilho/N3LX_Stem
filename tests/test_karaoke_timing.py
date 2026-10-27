@@ -65,7 +65,12 @@ def test_symlink_target_is_rejected(tmp_path: Path):
     destination = tmp_path / "destination.json"
     target = tmp_path / "other.json"
     target.write_text("original", encoding="utf-8")
-    destination.symlink_to(target)
+    try:
+        destination.symlink_to(target)
+    except OSError as exc:
+        if getattr(exc, "winerror", None) == 1314:
+            pytest.skip("Windows account cannot create symbolic links")
+        raise
     with pytest.raises(KaraokeTimingError):
         store_timing(destination, {"v": 1}, replace=True)
     assert target.read_text(encoding="utf-8") == "original"

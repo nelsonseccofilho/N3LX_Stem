@@ -1,3 +1,4 @@
+import { enhanceSettings } from "./settingsAccessibility.js";
 import { initSetlist, renderSetlistPanel } from "./setlist.js";
 import { setDefaultSeparationProfile, defaultSeparationProfile } from "./constants.js";
 // catalog.js — library panel: folders, tracks, collapse, drag-and-drop
@@ -615,7 +616,7 @@ function fmtExtracted(ts) {
   // Short form ("Aug 14, 11:43 AM") -- this now lives in the footer's single
   // compact meta line (#269 follow-up rebuild), which has no room for the
   // long month name and year the summary panel's date affords.
-  return new Date(ts * 1000).toLocaleString("en-US", {
+  return new Date(ts * 1000).toLocaleString(getLanguage() === "pt" ? "pt-BR" : getLanguage(), {
     month: "short", day: "numeric",
     hour: "numeric", minute: "2-digit",
   });
@@ -3642,7 +3643,10 @@ onLanguageChange(() => {
 // generic applyTranslations() pass can't fix an already-rendered list --
 // rebuild it explicitly on language switch (same reasoning as the editor
 // listener above).
-onLanguageChange(() => render());
+onLanguageChange(() => {
+  render();
+  if (_currentTrackId && tracks[_currentTrackId]?.status === "done") paintFinishedTrackNames(_currentTrackId);
+});
 
 // Human-readable "Location" for a track: the imported filename for local
 // uploads, otherwise the source URL.
@@ -3677,6 +3681,7 @@ function closeLibraryEditor() {
     libraryEditorOnKey = null;
   }
   closeResetConfirm();
+  libraryEditor?._restoreFocus?.();
   libraryEditor?.remove();
   libraryEditor = null;
 }
@@ -4609,6 +4614,9 @@ function openResetConfirm() {
 }
 
 function openLibraryEditor() {
+  const opener = libraryEditor?._opener || document.activeElement;
+  const previousTab = libraryEditor?.querySelector(".settings-tab.active")?.dataset.tab;
+  const changingLanguage = libraryEditor?.contains(document.activeElement) && document.activeElement.matches(".set-language");
   closeFolderEditor();
   closeLibraryEditor();
 
@@ -4812,7 +4820,7 @@ function openLibraryEditor() {
               <div class="settings-row-desc" data-i18n="settings.transcribe.desc">When no lyrics are found for a track, transcribe them from its vocals locally with Whisper. Auto does this only on an NVIDIA GPU. The first run downloads a speech model (1.6 GB for an NVIDIA GPU, 0.5 GB otherwise). Applies to the next track.</div>
             </div>
             <select class="settings-select settings-select-wide set-transcribe-lyrics" aria-label="Transcribe lyrics" data-i18n-aria-label="settings.transcribe.title">
-              <option value="auto" data-i18n="settings.transcribe.auto">Auto (NVIDIA GPU only)</option>
+              <option value="auto" data-i18n="settings.transcribe.auto">Automatic</option>
               <option value="on" data-i18n="settings.transcribe.on">On</option>
               <option value="off" data-i18n="settings.transcribe.off">Off</option>
             </select>
@@ -4965,9 +4973,13 @@ function openLibraryEditor() {
 
   document.body.appendChild(overlay);
   libraryEditor = overlay;
+  overlay._opener = opener;
+  enhanceSettings(overlay, opener);
+  if (previousTab) overlay.querySelector(`[data-tab="${previousTab}"]`)?.click();
   refreshLibrarySyncSummary();
   const isDesktop = Boolean(window.__TAURI__?.core?.invoke);
   wireLanguageSetting(overlay);
+  if (changingLanguage) overlay.querySelector(".set-language")?.focus();
   wireGeneralSettings(overlay);
   wireAcoustidSetting(overlay);
   wireDiscogsSetting(overlay);

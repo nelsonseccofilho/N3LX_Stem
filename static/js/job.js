@@ -804,7 +804,7 @@ export function wireJobForm() {
       fileInput._clear?.();
       if (failure) {
         showError(
-          `Queued ${queued} of ${batch.length} files: ${failure.message}`,
+          t("job.batchFailed", { queued, total: batch.length, message: failure.message }),
           null,
           { retry: false },
         );

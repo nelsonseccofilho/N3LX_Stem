@@ -1,0 +1,74 @@
+/* N3LX_Stem compact header v2: use the free width, never overlap the song. */
+.app.daw.header-v2 .daw-topbar { gap: 10px; padding-right: 14px; }
+.app.daw.header-v2 .daw-composer.header-compact {
+  grid-template-columns: 118px minmax(0, 1fr);
+  column-gap: 12px;
+}
+.app.daw.header-v2 .daw-composer.header-compact > .import-layout-toggle {
+  min-width: 0; width: 100%; overflow: hidden; padding: 0 8px;
+  white-space: normal; line-height: 1.25; text-align: center;
+}
+.app.daw.header-v2 .daw-composer.header-compact > #nowPlayingPanel {
+  grid-template-columns: clamp(250px, 26%, 350px) minmax(0, 1fr);
+  column-gap: 12px;
+  padding-left: 10px; padding-right: 10px;
+}
+.app.daw.header-v2 #nowPlayingPanel .track-panel-head,
+.app.daw.header-v2 #nowPlayingPanel .track-panel-info {
+  min-width: 0; max-width: 100%; overflow: hidden;
+}
+.app.daw.header-v2 #nowPlayingPanel .track-panel-head .daw-fav-btn,
+.app.daw.header-v2 #nowPlayingPanel .track-panel-head .daw-details-btn,
+.app.daw.header-v2 #nowPlayingPanel .song-menu-button { flex-shrink: 0; }
+.app.daw.header-v2 #nowPlayingPanel .track-panel-title,
+.app.daw.header-v2 #nowPlayingPanel .np-artist { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app.daw.header-v2 #nowPlayingPanel .song-controls { min-width: 0; padding-left: 12px; }
+.app.daw.header-v2 #nowPlayingPanel .footer-clusters {
+  grid-template-columns: max-content minmax(0, 1fr) max-content max-content;
+  gap: 2px 8px;
+}
+.app.daw.header-v2 #nowPlayingPanel .footer-group-position { min-width: 0; }
+.app.daw.header-v2 #nowPlayingPanel .footer-group-position .footer-group-body { min-width: 0; }
+.app.daw.header-v2 #nowPlayingPanel .footer-group-key { min-width: 0; justify-self: start; }
+.app.daw.header-v2 #nowPlayingPanel .footer-group-click,
+.app.daw.header-v2 #nowPlayingPanel .footer-track-actions { justify-self: end; }
+/* Keep lane badges visible and clickable, but not trapped behind the song card. */
+.app.daw.header-v2 .studio-view-tools { flex-wrap: nowrap; gap: 8px; min-width: 0; }
+.app.daw.header-v2 .studio-view-tools > .view-control-group { flex: 0 0 auto; }
+.app.daw.header-v2 .available-lanes-in-toolbar {
+  display: flex; flex: 1 1 260px; flex-wrap: nowrap; min-width: 90px;
+  height: 30px; min-height: 30px; align-items: center;
+  overflow-x: auto; overflow-y: hidden; gap: 5px;
+  padding: 0 3px; margin: 0 0 0 6px;
+  scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent;
+}
+.app.daw.header-v2 .available-lanes-in-toolbar[hidden] { display: none; }
+.app.daw.header-v2 .available-lanes-in-toolbar > * { flex: 0 0 auto; }
+.app.daw.header-v2 .available-lanes-in-toolbar .available-lane {
+  display: inline-flex; align-items: center; min-height: 25px; padding: 3px 7px;
+  white-space: nowrap;
+}
+.app.daw.header-v2 .available-lanes-in-toolbar .available-lanes-notice {
+  flex-basis: auto; margin-left: 2px; white-space: nowrap;
+}
+.app.daw.header-v2 .view-shortcuts { display: none; }
+.app.daw.header-v2 .available-lanes-in-toolbar .available-lane:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
+/* Below desktop widths, grant the title a smaller share without clipping actions. */
+@media (max-width: 1340px) {
+  .app.daw.header-v2 .daw-composer.header-compact > #nowPlayingPanel {
+    grid-template-columns: clamp(180px, 24%, 255px) minmax(0, 1fr);
+    gap: 2px 8px;
+  }
+  .app.daw.header-v2 #nowPlayingPanel .song-controls { padding-left: 8px; }
+  .app.daw.header-v2 .studio-view-tools { flex-wrap: wrap; }
+  .app.daw.header-v2 .available-lanes-in-toolbar { flex-basis: 100%; margin-left: 0; }
+}
+@media (max-width: 1120px) {
+  .app.daw.header-v2 .daw-composer.header-compact { grid-template-columns: 110px minmax(0, 1fr); }
+  .app.daw.header-v2 .daw-composer.header-compact > #nowPlayingPanel {
+    grid-template-columns: minmax(0, 1fr); grid-template-rows: 27px 13px 60px;
+  }
+  .app.daw.header-v2 #nowPlayingPanel .song-controls { padding: 2px 0 0; }
+}

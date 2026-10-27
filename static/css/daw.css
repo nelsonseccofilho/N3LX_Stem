@@ -6825,3 +6825,43 @@ input, textarea { font-family: inherit; }
   display: none !important;
 }
 
+
+/* Release UX: readable settings at 200% zoom and on compact windows. */
+.library-editor { box-sizing: border-box; width: min(780px, calc(100vw - 24px)); height: min(82dvh, 720px); max-height: calc(100dvh - 24px); font-family: var(--font-sans, system-ui, sans-serif); }
+.library-editor-head, .settings-tabs { flex-shrink: 0; }
+.settings-tabs { overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; }
+.settings-tab { flex: 0 0 auto; white-space: nowrap; min-height: 40px; }
+.settings-pane > * { flex-shrink: 0; }
+.settings-pane[hidden], #lanes[hidden] { display: none !important; }
+.settings-row-text { flex: 1 1 0; overflow-wrap: anywhere; }
+.settings-row-desc { font-size: 12px; line-height: 1.55; }
+.settings-select-wide { box-sizing: border-box; width: 240px; max-width: 100%; }
+.settings-select, .settings-num-input, .settings-done, .library-editor-close { min-height: 36px; }
+.library-editor-close { min-width: 36px; }
+:where(button, a, input, select, textarea, summary, [tabindex]):focus-visible { outline: 2px solid var(--accent, #f4b740); outline-offset: 2px; }
+.settings-switch:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 99px; }
+.settings-pane { scroll-padding-block: 12px; }
+.studio-mode-tabs button { min-height: 36px; white-space: nowrap; }
+#karaokeStage { overflow-y: auto; }
+@media (max-width: 700px) {
+  .library-editor { padding: 10px; }
+  .settings-row { flex-wrap: wrap; gap: 8px; }
+  .settings-row-text { flex-basis: 100%; }
+  .settings-select-wide { width: 100%; }
+  .settings-tabs { gap: 0; }
+  .settings-tab { padding-inline: 10px; }
+  #karaokeStage { padding: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
+}
+
+.library-editor .settings-pane { margin-right: 0; min-width: 0; }
+
+/* Analysis names stay readable beside an expanded library. */
+.meta-card-label, .stem-card-label { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.3; overflow-wrap: anywhere; }
+.stem-card { align-items: center; }
+@media (max-width: 1400px) {
+ .daw-info-row, .stem-presence-panel { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+ .daw-meta-card[data-meta="key"], .stem-card[data-stem="vocals"] { grid-column: auto; }
+}

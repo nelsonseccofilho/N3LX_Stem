@@ -92,6 +92,7 @@ export function initKaraoke() {
     if (on && app.classList.contains("is-processing-track")) return;
     active = on;
     stage.hidden = !on;
+    document.getElementById("lanes").hidden = on;
     app.classList.toggle("karaoke-mode", on);
     waveTab.setAttribute("aria-selected", String(!on)); singTab.setAttribute("aria-selected", String(on));
     waveTab.tabIndex = on ? -1 : 0; singTab.tabIndex = on ? 0 : -1;
@@ -107,8 +108,8 @@ export function initKaraoke() {
   waveTab.addEventListener("click", () => select(false)); singTab.addEventListener("click", () => select(true));
   for (const tab of [waveTab, singTab]) tab.addEventListener("keydown", (e) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
-    e.preventDefault(); const on = e.key === "End" || e.key === "ArrowRight";
-    select(on); (on ? singTab : waveTab).focus();
+    e.preventDefault(); const on = e.key === "End" || (e.key !== "Home" && !active);
+    select(on); (active ? singTab : waveTab).focus();
   });
   canvas.addEventListener("click", (e) => {
     if (!duration) return;

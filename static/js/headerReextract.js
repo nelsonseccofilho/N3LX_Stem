@@ -1,78 +1,39 @@
-import { onLanguageChange } from "./i18n.js";
+import { t, onLanguageChange } from "./i18n.js";
 
-// Compact-header follow-up: non-destructive re-extraction of a finished local track.
-// Reuses job.js's existing resplit submit path, so queue, library registration and
-// source preservation stay with the code that already owns those operations.
+// Delegate submission to the existing non-destructive resplit flow.
 export function initHeaderReextract() {
   const form = document.querySelector("#job-form.header-compact");
   const toggle = form?.querySelector(".import-layout-toggle");
   const submit = form?.querySelector("#submit");
-  if (!form || !toggle || !submit) return;
-  if (form.querySelector("#reextractCurrentTrack")) return;
-
+  if (!form || !toggle || !submit || form.querySelector("#reextractCurrentTrack")) return;
   const button = document.createElement("button");
   button.type = "button";
   button.id = "reextractCurrentTrack";
   button.className = "reextract-action";
-  button.setAttribute("aria-label", "Extrair novamente a música atual");
-  button.textContent = "↻ Reextrair";
   toggle.insertAdjacentElement("afterend", button);
-
-  let lockedFor = "";
   const sync = () => {
     const id = submit.dataset.resplitJob || "";
-    const pt = document.documentElement.lang?.toLowerCase().startsWith("pt");
-    button.textContent = pt ? "↻ Reextrair" : "↻ Re-extract";
-    button.setAttribute("aria-label", pt ? "Extrair novamente a música atual" : "Re-extract current track");
-    const canResplit = /^[a-f0-9]{12}$/i.test(id);
-    const staged = Boolean(
-      document.getElementById("url")?.value.trim() ||
-      document.querySelector(".url-wrap.has-file") ||
-      document.getElementById("fileInput")?._files?.length
-    );
-    const eligible = canResplit && !staged;
-    button.disabled = !eligible || lockedFor === id;
-    const title = submit.dataset.resplitTitle || "esta música";
-    button.title = !canResplit
-      ? "Reextração disponível para músicas locais concluídas cuja fonte original foi preservada"
-      : staged
-        ? "Conclua ou limpe a nova importação antes de reextrair"
-        : lockedFor === id
-          ? "Reextração solicitada: consulte a fila ou a Biblioteca"
-          : `Criar uma nova extração de ${title} sem substituir a versão atual. Usa o modo de separação configurado.`;
+    const valid = /^[a-f0-9]{12}$/i.test(id);
+    const picker = document.getElementById("fileInput");
+    const staged = Boolean(document.getElementById("url")?.value.trim() ||
+      document.querySelector(".url-wrap.has-file") || picker?._file || picker?._files?.length || picker?.files?.length);
+    const pending = submit.classList.contains("loading");
+    button.textContent = t("reextract.action");
+    button.setAttribute("aria-label", t("reextract.aria"));
+    button.disabled = !valid || staged || submit.disabled || pending;
+    button.setAttribute("aria-busy", String(pending));
+    button.title = t(!valid ? "reextract.unavailable" : staged ? "reextract.staged" : pending ? "reextract.pending" : "reextract.ready", { title: submit.dataset.resplitTitle || "♪" });
   };
-
   button.addEventListener("click", () => {
-    if (button.disabled) return;
-    const id = submit.dataset.resplitJob || "";
-    if (!/^[a-f0-9]{12}$/i.test(id)) return;
-    // Never bypass the existing safe /api/jobs/{id}/resplit flow. Unlike a
-    // reimport of a URL, the server gives the copy a unique source identity,
-    // preserving the original track and its playlist/folder references.
-    lockedFor = id;
-    sync();
-    try {
-      form.requestSubmit(submit);
-    } catch (error) {
-      lockedFor = "";
-      sync();
-      console.warn("[reextract] could not submit:", error);
-    }
+    if (!button.disabled) form.requestSubmit(submit);
   });
-
-  new MutationObserver(sync).observe(submit, {
-    attributes: true,
-    attributeFilter: ["data-resplit-job", "data-resplit-title", "data-resplit-source"],
-  });
+  new MutationObserver(sync).observe(submit, { attributes: true,
+    attributeFilter: ["data-resplit-job", "data-resplit-title", "data-resplit-source", "disabled", "class"] });
   document.getElementById("url")?.addEventListener("input", sync);
-  document.querySelector(".url-wrap") &&
-    new MutationObserver(sync).observe(document.querySelector(".url-wrap"), {
-      attributes: true, attributeFilter: ["class"],
-    });
-  document.addEventListener("trackopen", () => {
-    lockedFor = "";
-    sync();
-  });
+  document.getElementById("fileInput")?.addEventListener("change", sync);
+  const wrap = document.querySelector(".url-wrap");
+  if (wrap) new MutationObserver(sync).observe(wrap, { attributes: true, attributeFilter: ["class"] });
+  document.addEventListener("trackopen", sync);
   onLanguageChange(sync);
   sync();
 }

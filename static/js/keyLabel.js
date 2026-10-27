@@ -46,3 +46,12 @@ export function transposeKey(key, semitones) {
   if (semitones === 0) return text;
   return names[((natural[match[1]] + accidental + semitones) % 12 + 12) % 12] + match[3];
 }
+
+/** Chord-style shorthand for the detected tonic and major/minor mode. */
+export function keySymbol(key, scale) {
+  const match = /^([A-G][#b♯♭]?)\s+(maj|min)$/.exec(String(key ?? "").trim());
+  if (!match) return "";
+  const minor = scale === "Natural Minor" || scale === "Harmonic Minor" || (!scale && match[2] === "min");
+  const major = scale === "Major" || (!scale && match[2] === "maj");
+  return minor ? match[1] + "m" : major ? match[1] : "";
+}

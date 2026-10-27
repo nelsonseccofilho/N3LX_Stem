@@ -1,3 +1,5 @@
+import { setAnalyzedKey } from "./analysisKey.js";
+import { refreshAnalysisMeter } from "./analysisMeter.js";
 import Multitrack from "/vendor/multitrack.js";
 import { fmtTime } from "./utils.js";
 // job.js imports this module in turn. The cycle is pre-existing (catalog.js does
@@ -222,7 +224,9 @@ function resetAnalysisCards() {
   const summaryBpm = document.getElementById("summary-bpm");
   const summaryConfidence = document.getElementById("summary-confidence");
   const loudnessCard = document.getElementById("loudness-card");
-  if (summaryKey) summaryKey.textContent = "—";
+  if (summaryKey) setAnalyzedKey("", "");
+  const summaryMeter = document.getElementById("summary-meter");
+  if (summaryMeter) { summaryMeter.textContent = "—"; summaryMeter.title = ""; }
   if (summaryBpm) summaryBpm.innerHTML = "— <small>BPM</small>";
   if (summaryConfidence) {
     summaryConfidence.textContent = "";
@@ -1642,11 +1646,13 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
               duration: totalDuration,
               onChange: (nextBeats, nextBars) => {
                 m?.setBeats?.(nextBeats);
+                refreshAnalysisMeter();
                 setMetronomeHasBars(Array.isArray(nextBars) && nextBars.length > 0);
                 applyMetronomeAccent();
                 syncBeatGridButtons();
               },
             });
+            refreshAnalysisMeter();
             setBeatGridAvailable(!!editable && !!m);
             setExportClickAvailable(!!beats?.length);
             // One place decides how accents are driven; the panel's Accent

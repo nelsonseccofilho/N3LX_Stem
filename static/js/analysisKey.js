@@ -1,6 +1,6 @@
 import { mixerState, trackIndex } from "./state.js";
 import { isPercussion } from "./constants.js";
-import { formatKey, transposeKey } from "./keyLabel.js";
+import { formatKey, transposeKey, keySymbol } from "./keyLabel.js";
 import { t, onLanguageChange } from "./i18n.js";
 
 let originalKey = "", originalScale = "";
@@ -19,6 +19,11 @@ export function refreshAnalysisKey() {
   const original = formatKey(originalKey, originalScale, t);
   const adjusted = transposeKey(originalKey, shift);
   node.textContent = mixed && originalKey ? t("key.mixed") : formatKey(adjusted, originalScale, t) || "—";
+  const symbol = document.getElementById("summary-key-symbol");
+  if (symbol) {
+    symbol.textContent = mixed ? "—" : keySymbol(adjusted, originalScale) || "—";
+    symbol.title = t("meta.keySymbol");
+  }
   node.title = original ? t("key.originalHint", { key: original }) : "";
   const confidence = document.getElementById("summary-confidence");
   if (confidence) confidence.title = original ? t("key.originalConfidence") : "";

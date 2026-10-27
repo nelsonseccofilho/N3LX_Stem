@@ -22,7 +22,12 @@ export function setDefaultSeparationProfile(profile) {
 let importedPercussion = [];
 export const DRUM_STEMS = ["drum_kick", "drum_snare", "drum_toms", "drum_hh", "drum_ride", "drum_crash"];
 export function applyStudioLayout(layout) { importedLabels = layout?.labels || {}; importedActiveNames = layout?.profile === "complete" ? (layout.active_names || []) : []; importedPercussion = layout?.percussion_names || []; }
-export function isPercussion(name) { return name === "drums" || name === "residual_drums" || name === "residual_mix" || DRUM_STEMS.includes(name) || importedPercussion.includes(name); }
+// A separation residual can include tonal material; percussion-only lanes stay fixed.
+// This shared predicate governs mixer buttons, global pitch and the audio worklet.
+export function isPercussion(name) {
+  if (name === "residual_mix") return false;
+  return name === "drums" || name === "residual_drums" || name === "drum_recovery" || name === "residual_drums_refined" || DRUM_STEMS.includes(name) || importedPercussion.includes(name);
+}
 export async function syncStemNamesFromAPI() {
   try {
     const res = await fetch("/api/config");

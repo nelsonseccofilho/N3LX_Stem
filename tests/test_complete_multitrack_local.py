@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 import subprocess
+import sys
 
 import numpy as np
 import pytest
@@ -43,46 +45,43 @@ def audio(tmp_path, monkeypatch):
 def test_complete_pipeline_reconstructs_audio_and_excludes_parents(audio, monkeypatch):
     source, stems = audio
 
-    def vocals(job, directory):
-        data, sr = sf.read(directory / "vocals.wav", always_2d=True)
-        for name, gain in zip(mod.VOICE_STEMS, [0.85, 0.12], strict=True):
-            # A slightly short output verifies padding without shifting its start.
-            sf.write(directory / (name + ".wav"), data[:-3] * gain, sr, subtype="PCM_24")
-
     def drums(job, directory, scratch):
         data, sr = sf.read(directory / "drums.wav", always_2d=True)
         for name in DRUM_STEMS:
             sf.write(scratch / (name + ".wav"), data * 0.15, sr, subtype="PCM_24")
 
-    monkeypatch.setattr(mod, "split_vocals", vocals)
     monkeypatch.setattr(mod, "_split_drums", drums)
     job = Job(id="abcdef123456", separation_profile="complete")
     mod.complete_multitrack(job, source, stems)
     layout = json.loads((stems.parent / "studio.json").read_text(encoding="utf-8"))
     names = layout["active_names"]
-    assert len(names) == 15 and "vocals" not in names and "drums" not in names
+    assert len(names) == 14 and "vocals" in names and "drums" not in names
+    assert "residual_drums" not in names
+    assert {"drum_recovery", "residual_drums_refined"} <= set(names)
+    assert set(DRUM_STEMS) <= set(names)
+    assert {"drum_recovery", "residual_drums_refined"} <= set(layout["percussion_names"])
     total = sum(sf.read(stems / (n + ".wav"), always_2d=True)[0] for n in names)
     original, _ = sf.read(source, always_2d=True)
-    assert np.max(np.abs(total - original)) < 1e-7
+    assert np.max(np.abs(total - original)) < 1e-6
     assert len({sf.info(stems / (n + ".wav")).frames for n in names}) == 1
-    assert job.vocal_split == "done" and not job.separation_warnings
+    assert job.vocal_split == "none" and not job.separation_warnings
 
 
 def test_optional_model_failures_keep_base_groups_and_report_warnings(audio, monkeypatch):
     source, stems = audio
 
     def fail(*args):
-        raise RuntimeError("model failure")
+        raise RuntimeError("drum model failure")
 
-    monkeypatch.setattr(mod, "split_vocals", fail)
     monkeypatch.setattr(mod, "_split_drums", fail)
     job = Job(id="abcdef123456", separation_profile="complete")
     mod.complete_multitrack(job, source, stems)
-    assert job.vocal_split == "error" and len(job.separation_warnings) == 2
+    assert job.vocal_split == "none" and len(job.separation_warnings) == 1
     assert set(STEM_NAMES) <= set(mod.active_names(stems))
     layout = json.loads((stems.parent / "studio.json").read_text(encoding="utf-8"))
     assert "Atenção" in layout["notice"]
     assert len(layout["active_names"]) == 7
+    assert not (stems / "drum_recovery.wav").exists()
 
 
 def test_cancellation_never_becomes_an_optional_warning(audio, monkeypatch):
@@ -91,11 +90,12 @@ def test_cancellation_never_becomes_an_optional_warning(audio, monkeypatch):
     def cancel(*args):
         raise JobCancelled()
 
-    monkeypatch.setattr(mod, "split_vocals", cancel)
+    monkeypatch.setattr(mod, "_split_drums", cancel)
     job = Job(id="abcdef123456", separation_profile="complete")
     with pytest.raises(JobCancelled):
         mod.complete_multitrack(job, source, stems)
     assert not (stems.parent / "studio.json").exists()
+    assert not (stems / "drum_recovery.wav").exists()
 
 
 def test_default_profile_is_persisted_and_captured_on_submission(monkeypatch):
@@ -142,7 +142,7 @@ def test_already_cancelled_job_never_launches_an_extra_model(audio, monkeypatch)
     def unexpected(*args):
         pytest.fail("Cancelled job must not launch a worker")
 
-    monkeypatch.setattr(mod, "split_vocals", unexpected)
+    monkeypatch.setattr(mod, "_split_drums", unexpected)
     job = Job(id="abcdef123456", separation_profile="complete", cancel_requested=True)
     with pytest.raises(JobCancelled):
         mod.complete_multitrack(job, source, stems)
@@ -156,6 +156,74 @@ def test_launcher_profile_default_respects_saved_choice(monkeypatch):
     assert settings.get_separation_profile() == "complete"
     monkeypatch.setattr(settings, "_ensure", lambda: {"separation_profile": "standard"})
     assert settings.get_separation_profile() == "standard"
+
+
+def test_complete_mode_keeps_guitar_and_vocals_grouped_without_automatic_refinement(audio, monkeypatch):
+    source, stems = audio
+    original_vocals = (stems / "vocals.wav").read_bytes()
+    original_guitar = (stems / "guitar.wav").read_bytes()
+
+    def drums(job, directory, scratch):
+        data, rate = sf.read(directory / "drums.wav", always_2d=True)
+        for name in DRUM_STEMS:
+            sf.write(scratch / f"{name}.wav", data / 6, rate, subtype="FLOAT")
+
+    monkeypatch.setattr(mod, "_split_drums", drums)
+    job = Job(id="abcdef123456", separation_profile="complete")
+    mod.complete_multitrack(job, source, stems)
+
+    layout = json.loads((stems.parent / "studio.json").read_text(encoding="utf-8"))
+    names = layout["active_names"]
+    assert "guitar" in names and "vocals" in names
+    assert "lead_vocals" not in names and "backing_vocals" not in names
+    assert "drums" not in names and "residual_drums" not in names
+    assert set(DRUM_STEMS) <= set(names)
+    assert {"drum_recovery", "residual_drums_refined"} <= set(names)
+    assert len(names) == 14
+    assert (stems / "vocals.wav").read_bytes() == original_vocals
+    assert (stems / "guitar.wav").read_bytes() == original_guitar
+    assert job.vocal_split == "none"
+    assert not (stems.parent / "guitar-details").exists()
+    assert not (stems / "guitar_lead.wav").exists()
+    assert not (stems / "lead_vocals.wav").exists()
+    assert not job.separation_warnings
+
+
+@pytest.mark.parametrize("failure", ["error", "timeout", "cancel"])
+def test_drum_gpu_failure_retries_cpu_but_cancellation_never_does(audio, monkeypatch, failure):
+    from app.core import amd_directml, settings
+
+    source, stems = audio
+    scratch = stems.parent / "drum-retry"
+    scratch.mkdir()
+    calls = []
+    monkeypatch.setattr(amd_directml, "directml_python", lambda: "gpu-python")
+    monkeypatch.setattr(settings, "get_demucs_device", lambda: "directml")
+
+    def worker(job, cmd, timeout):
+        calls.append(cmd)
+        if len(calls) == 1:
+            (scratch / "drum_kick.wav").write_bytes(b"partial GPU output")
+            if failure == "cancel":
+                job.cancel_requested = True
+                return subprocess.CompletedProcess(cmd, 1, b"", b"")
+            if failure == "timeout":
+                raise subprocess.TimeoutExpired(cmd, timeout)
+            return subprocess.CompletedProcess(cmd, 1, b"", b"GPU failed")
+        assert not (scratch / "drum_kick.wav").exists()
+        assert job.processing["device"] == "cpu"
+        return subprocess.CompletedProcess(cmd, 0, b"", b"")
+
+    monkeypatch.setattr(mod, "run_progress_worker", worker)
+    job = Job(id="abcdef123456", status="separating", separation_profile="complete")
+    if failure == "cancel":
+        with pytest.raises(JobCancelled):
+            mod._split_drums(job, stems, scratch)
+        assert len(calls) == 1 and not job.separation_warnings
+    else:
+        mod._split_drums(job, stems, scratch)
+        assert len(calls) == 2 and calls[0][0] == "gpu-python" and calls[1][0] == sys.executable
+        assert len(job.separation_warnings) == 1
     monkeypatch.setattr(settings, "_ensure", lambda: {})
     monkeypatch.setenv("STEMDECK_SEPARATION_PROFILE", "invalid")
     assert settings.get_separation_profile() == "standard"

@@ -28,7 +28,7 @@ function wav(bits, format = 1, channels = 2) {
 class Context {
   constructor() {
     this.currentTime = 0; this.sampleRate = rate; this.state = "running";
-    this.destination = {}; this.sources = []; this.audioWorklet = null;
+    this.destination = {}; this.sources = []; this.panners = []; this.audioWorklet = null;
   }
   addEventListener() {}
   removeEventListener() {}
@@ -37,6 +37,15 @@ class Context {
     return { gain: param, connect(target) { this.target = target; }, disconnect() {} };
   }
   createAnalyser() { return { connect() {}, disconnect() {} }; }
+  createStereoPanner() {
+    const node = {
+      pan: { value: 0, setTargetAtTime(v) { this.value = v; } },
+      connect(target) { this.target = target; },
+      disconnect() {},
+    };
+    this.panners.push(node);
+    return node;
+  }
   createBuffer(channels, length, sampleRate) {
     const data = Array.from({ length: channels }, () => new Float32Array(length));
     return { length, sampleRate, numberOfChannels: channels, duration: length / sampleRate,
@@ -139,3 +148,41 @@ console.log("PASS: neither engine silently accepts missing or unreadable playbac
   eng.destroy();
 }
 console.log("PASS: visual-only decode failure does not disable audio");
+
+for (const create of [createChunkedAudioEngine, createAudioEngine]) {
+  // A visible lane can be reconstructed from multiple physical playback stems
+  // (original complement): one PAN command must affect all its sources.
+  const ctx = new Context();
+  const group = [
+    { name: "guitar", controlName: "strings", url: "/guitar.wav" },
+    { name: "piano", controlName: "strings", url: "/piano.wav" },
+    { name: "bass", url: "/bass.wav" },
+  ];
+  const eng = create(group, { context: ctx });
+  assert.equal(await eng.ready, true);
+  assert.equal(eng.supportsStereoPan(), true);
+  assert.equal(ctx.panners.length, 3, "each audible source needs its own panner");
+  assert.equal(eng.setStemPan("strings", -.65), true);
+  assert.deepEqual(ctx.panners.map(p => p.pan.value), [-.65, -.65, 0],
+    "PAN must not leak to another lane or pitch bus");
+  assert.equal(eng.setStemPan("bass", .4), true);
+  assert.deepEqual(ctx.panners.map(p => p.pan.value), [-.65, -.65, .4]);
+  assert.equal(eng.setStemPan("bass", Number.NaN), true);
+  assert.equal(ctx.panners[2].pan.value, 0, "non-finite pan must center safely");
+  assert.equal(eng.setStemPan("missing", 1), false);
+  eng.destroy();
+}
+console.log("PASS: grouped lanes pan independently in both Web Audio engines");
+
+// Do not reject valid old browsers. Engines retain stereo playback without
+// pan support and declare the control unavailable to the mixer.
+for (const create of [createChunkedAudioEngine, createAudioEngine]) {
+  const ctx = new Context();
+  ctx.createStereoPanner = undefined;
+  const eng = create([stems[0]], { context: ctx });
+  assert.equal(await eng.ready, true);
+  assert.equal(eng.supportsStereoPan(), false);
+  assert.equal(eng.setStemPan("bass", -.9), false);
+  eng.destroy();
+}
+console.log("PASS: older Web Audio contexts keep playback without PAN support");

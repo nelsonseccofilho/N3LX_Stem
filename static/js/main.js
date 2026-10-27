@@ -1,8 +1,8 @@
+import { initTheme } from "./theme.js";
 import {
   playBtn, loopBtn, totalDuration, loopEnabled, loopStart, loopEnd,
   setLoopStart, setLoopEnd, selectedStems, saveSelectedStems, stemSelectionReady,
   currentJobId, vocalSplitMode, vocalSplitModeReady, setVocalSplitMode,
-  setAutoSectionsResetFn,
 } from "./state.js";
 import { STEM_NAMES, syncStemNamesFromAPI } from "./constants.js";
 import { refreshStemChoiceVisuals } from "./stemChoice.js";
@@ -20,9 +20,12 @@ import { runStoreMigrationIfNeeded } from "./utils.js";
 import { initI18n, applyTranslations, t, plural, onLanguageChange } from "./i18n.js";
 import { initFooterFit, refitFooter } from "./footerFit.js";
 import { initArtistInfo } from "./artistInfo.js";
+import { initKaraoke } from "./karaoke.js";
 import { initLyrics } from "./lyrics.js";
 import { initProcessingProgress } from "./processingProgress.js";
 import { initHelpMode } from "./helpMode.js";
+import { initSongPanel } from "./songPanel.js";
+import { initStudioLayout } from "./studioLayout.js";
 
 // ─── Stem choice toggles on the import page ───
 //
@@ -100,11 +103,13 @@ function wireVocalModeToggle() {
 function wireAutoSectionsToggle() {
   const btn = document.getElementById("autoSectionsBtn");
   if (!btn) return;
+  let revision = 0;
   const paint = (on) => btn.setAttribute("aria-pressed", String(!!on));
 
   // Bound before the state is fetched, so an early click is never dropped and
   // a settings request that never returns cannot leave the button inert.
   btn.addEventListener("click", async () => {
+    ++revision;
     const next = btn.getAttribute("aria-pressed") !== "true";
     paint(next);
     btn.disabled = true;
@@ -124,37 +129,13 @@ function wireAutoSectionsToggle() {
     }
   });
 
-  // Off is the only state this starts in. It is a choice about the next import,
-  // not a preference: an inference pass costs minutes of CPU, so it should
-  // always be something the user asked for just now rather than something a
-  // previous session, or the previous song, left switched on.
-  //
-  // The server is what the runner actually reads, so turning the button off is
-  // not enough on its own -- the setting has to go with it, or the next import
-  // would still pay for a pass nobody asked for.
-  const forceOff = async () => {
-    if (btn.getAttribute("aria-pressed") !== "true") return;
-    paint(false);
-    try {
-      await fetch("/api/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ auto_sections: false }),
-      });
-    } catch (e) {
-      console.warn("[structure] could not clear the setting:", e);
-    }
-  };
-  setAutoSectionsResetFn(forceOff);
-
-  // Read it once at startup only to find out whether it needs clearing: a
-  // setting left on by an earlier session must not survive into this one.
+  // The user's saved choice applies to future imports and survives song changes.
+  const startupRevision = revision;
   fetch("/api/settings", { cache: "no-store" })
     .then((r) => (r.ok ? r.json() : null))
     .then((d) => {
-      if (!d) return;
+      if (!d || revision !== startupRevision) return;
       paint(d.auto_sections);
-      return forceOff();
     })
     .catch((e) => console.warn("[structure] could not read the setting:", e));
 }
@@ -418,6 +399,8 @@ function wireAllButton() {
 // gets its real language (unavoidable without server-side rendering, since
 // static/index.html always ships pre-rendered in English).
 const i18nReady = initI18n().then(() => applyTranslations(document));
+// Dynamic controls must use the resolved language on their first render.
+await Promise.all([i18nReady, initTheme()]);
 
 document.addEventListener("separationprofilechange", refreshStemChoiceVisuals);
 const stemNamesReady = syncStemNamesFromAPI().then(() => buildStripStems());
@@ -437,6 +420,8 @@ initSearch((item) => {
   urlInput.focus();
   urlInput.setSelectionRange(urlInput.value.length, urlInput.value.length);
 });
+initSongPanel();
+initStudioLayout();
 wireTransportButtons();
 // Sections deliberately does not import the transport, so that it stays
 // loadable without a DOM. This is the one place that owns both.
@@ -459,6 +444,7 @@ wireAppShellControls();
 initFooterFit();
 initArtistInfo();
 initLyrics();
+initKaraoke();
 initHelpMode();
 // Re-measure after a language switch. Measured across en/fr/de/pl the strip
 // came out the same width in all four, because the group labels are 10px
@@ -530,6 +516,7 @@ function wireFooterControls() {
 
   const panelOpen = () => exportPanel && !exportPanel.classList.contains("hidden");
   function openPanel() {
+    document.dispatchEvent(new Event("songpanelclose"));
     closeAllChipPanels();
     // A previous (video) job may have left MP4 selected; revert if unavailable now.
     if (format === "mp4" && !videoAvailable()) setFormat("wav");
@@ -540,6 +527,7 @@ function wireFooterControls() {
     exportPanel?.classList.add("hidden");
     exportBtn?.setAttribute("aria-expanded", "false");
   }
+  document.addEventListener("songpanelclose", closePanel);
 
   function setFormat(f) {
     format = f;
@@ -723,6 +711,13 @@ function wireFooterControls() {
   // ── Scrub bar seek ──
   const scrub = document.getElementById("footer-scrub");
   if (scrub) {
+    scrub.addEventListener("keydown", event => {
+      if (!totalDuration || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      event.preventDefault(); event.stopPropagation();
+      const current = Number(scrub.getAttribute("aria-valuenow") || 0) / 100 * totalDuration;
+      const next = event.key === "Home" ? 0 : event.key === "End" ? totalDuration : current + (event.key === "ArrowRight" ? 1 : -1) * (event.shiftKey ? 10 : 1);
+      setPlayheadTime(Math.max(0, Math.min(totalDuration, next)));
+    });
     function seekToX(clientX) {
       // setPlayheadTime, not multitrack.setTime: on the default chunked engine
       // the multitrack is silent and this whole bar did nothing. It also moves

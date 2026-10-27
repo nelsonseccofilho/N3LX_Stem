@@ -234,32 +234,34 @@ def test_post_toggles_off_then_blocks():
         assert c.get("/api/settings").status_code == 403
 
 
-# ── auto_sections (experimental song-structure extraction) ──
+# ── auto_sections (automatic song-structure extraction) ──
 
 
-def test_auto_sections_defaults_off(_isolated_settings):
-    """Experimental, and it costs an inference pass. Nobody pays by default."""
-    assert settings_mod.get_auto_sections() is False
+def test_auto_sections_defaults_on(_isolated_settings):
+    """New imports include structure detection unless explicitly disabled."""
+    assert settings_mod.get_auto_sections() is True
 
 
 def test_auto_sections_env_can_turn_it_on(monkeypatch, _isolated_settings):
-    """A deployment that wants it from first boot opts in explicitly."""
+    """A deployment can explicitly enable or disable the default."""
     monkeypatch.setenv("STEMDECK_AUTO_SECTIONS", "1")
     assert settings_mod.get_auto_sections() is True
-    # Anything else still means off, so a malformed value cannot silently
-    # enable a cost the user never asked for.
+    monkeypatch.setenv("STEMDECK_AUTO_SECTIONS", "0")
+    assert settings_mod.get_auto_sections() is False
+    # Invalid explicit overrides also disable it.
     monkeypatch.setenv("STEMDECK_AUTO_SECTIONS", "yes please")
     assert settings_mod.get_auto_sections() is False
 
 
 def test_auto_sections_api_round_trip(_isolated_settings):
     with TestClient(app) as c:
-        assert c.get("/api/settings").json()["auto_sections"] is False
-        r = c.post("/api/settings", json={"auto_sections": True})
-        assert r.status_code == 200
-        assert r.json()["auto_sections"] is True
         assert c.get("/api/settings").json()["auto_sections"] is True
-        assert settings_mod.get_auto_sections() is True
+        r = c.post("/api/settings", json={"auto_sections": False})
+        assert r.status_code == 200
+        assert r.json()["auto_sections"] is False
+        settings_mod._state = None
+        assert c.get("/api/settings").json()["auto_sections"] is False
+        assert settings_mod.get_auto_sections() is False
 
 
 def test_auto_sections_saved_choice_beats_the_env_default(monkeypatch, _isolated_settings):
@@ -267,3 +269,10 @@ def test_auto_sections_saved_choice_beats_the_env_default(monkeypatch, _isolated
     settings_mod.set_auto_sections(True)
     monkeypatch.setenv("STEMDECK_AUTO_SECTIONS", "")
     assert settings_mod.get_auto_sections() is True
+
+
+def test_auto_sections_saved_off_survives_restart(monkeypatch, _isolated_settings):
+    settings_mod.set_auto_sections(False)
+    monkeypatch.setenv("STEMDECK_AUTO_SECTIONS", "1")
+    settings_mod._state = None
+    assert settings_mod.get_auto_sections() is False

@@ -53,7 +53,11 @@ def run_progress_worker(job, cmd, timeout):
     from app.core.processing_progress import consume_progress
     from app.core.registry import set_proc
 
-    env = {**os.environ, "PYTHONIOENCODING": "utf-8:replace"}
+    env = {
+        **os.environ,
+        "PYTHONIOENCODING": "utf-8:replace",
+        "STEMDECK_PARENT_PID": str(os.getpid()),
+    }
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.DEVNULL,

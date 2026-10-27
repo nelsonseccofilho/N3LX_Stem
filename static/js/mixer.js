@@ -1,4 +1,5 @@
 import { nudgeVolumeGain } from "./volumeControl.js";
+import { clampStereoPan, panLabel } from "./stereoPan.js";
 import {
   isPercussion, STEM_NAMES, TRACK_NAMES, EXTRA_STEM_NAMES, STEM_COLORS, STEM_DISPLAY, LANE_VOLUME_MAX,
 } from "./constants.js";
@@ -17,7 +18,7 @@ import {
   mixerState, mixerEl, stemListEl, currentJobId, multitrack, trackIndex,
   masterVolume, audioEngine,
 } from "./state.js";
-import { storeGet, storeSetDebounced } from "./utils.js";
+import { storeGet, storeSetDebounced, flushStoreWrites } from "./utils.js";
 import { t } from "./i18n.js";
 import { PITCH_MAX, PITCH_MIN, clampPitch, pitchBlockedKey } from "./pitchBus.js";
 
@@ -27,7 +28,7 @@ function defaultMixerEntry() {
   // control, so the number on a lane never has to be added to another number to
   // know what you are hearing. It rides along in the same per-track store as
   // volume and mute, so a lane's key survives a reload.
-  return { volume: 1, muted: false, soloed: false, pitch: 0 };
+  return { volume: 1, muted: false, soloed: false, pitch: 0, pan: 0 };
 }
 
 export function ensureMixerStateDefaults() {
@@ -39,6 +40,15 @@ export function ensureMixerStateDefaults() {
 let _mixContext = null;
 let _mixJobId = null;
 let _mixLoadToken = 0;
+let _mixExplicitNames = new Set();
+const guitarPart = name => name.startsWith("guitar_") || name === "residual_guitar";
+function mixSnapshot() {
+  const result = structuredClone(mixerState);
+  for (const name of Object.keys(result)) {
+    if (guitarPart(name) && !_mixExplicitNames.has(name)) delete result[name];
+  }
+  return result;
+}
 export async function loadMixIntoState(jobId, loadedStemNames = STEM_NAMES, context = null) {
   const token = ++_mixLoadToken;
   _mixContext = context;
@@ -49,15 +59,19 @@ export async function loadMixIntoState(jobId, loadedStemNames = STEM_NAMES, cont
     if (data && typeof data === "object") stored = data;
   } catch (e) { console.warn("[mixer] failed to load mix state:", e); }
   if (token !== _mixLoadToken || currentJobId !== jobId) return;
+  _mixExplicitNames = new Set([...Object.keys(stored), ...loadedStemNames]);
+  ensureMixerStateDefaults();
   for (const name of allTrackNames()) {
-    Object.assign(mixerState[name], defaultMixerEntry(), stored[name] || {});
+    Object.assign(mixerState[name], defaultMixerEntry(), stored[name] || (guitarPart(name) ? stored.guitar : {}) || {});
+    mixerState[name].pan = clampStereoPan(mixerState[name].pan);
   }
   // A playlist may intentionally silence every stem; preserve that choice.
-  context?.save?.(structuredClone(mixerState));
+  context?.save?.(mixSnapshot());
 }
 
 export function resetMixerState() {
   _mixContext = null; _mixJobId = null; _mixLoadToken++;
+  _mixExplicitNames.clear();
   for (const name of allTrackNames()) {
     Object.assign(mixerState[name], defaultMixerEntry());
   }
@@ -65,8 +79,21 @@ export function resetMixerState() {
 
 function saveMix() {
   if (!currentJobId) return;
-  if (_mixContext && _mixJobId === currentJobId) _mixContext.save(structuredClone(mixerState));
-  else storeSetDebounced(`stemdeck:mix:${currentJobId}`, mixerState);
+  if (_mixContext && _mixJobId === currentJobId) _mixContext.save(mixSnapshot());
+  else storeSetDebounced(`stemdeck:mix:${currentJobId}`, mixSnapshot());
+}
+
+export function getMixerReloadContext(jobId) {
+  if (jobId !== currentJobId || _mixJobId !== jobId || !_mixContext) return null;
+  return { ..._mixContext, mix: mixSnapshot() };
+}
+
+export async function prepareGuitarMix(jobId, names = []) {
+  if (jobId !== currentJobId) return;
+  const original = { ...defaultMixerEntry(), ...mixerState.guitar };
+  for (const name of names) { mixerState[name] = { ...original }; _mixExplicitNames.add(name); }
+  saveMix();
+  await flushStoreWrites();
 }
 
 /** Push one lane's transpose into whichever engine is playing. */
@@ -187,6 +214,7 @@ export function applyMix() {
       // cap, so >1.0 lane boost works), and skip the streaming volume path —
       // the multitrack is mounted for visuals only and never plays.
       audioEngine.setGain(name, targetGain);
+      audioEngine.setStemPan?.(name, clampStereoPan(s.pan));
       continue;
     }
 
@@ -232,6 +260,31 @@ export function setLaneVolume(name, v) {
   saveMix();
 }
 
+export function setLanePan(name, value) {
+  const state = mixerState[name];
+  if (!state) return;
+  const pan = clampStereoPan(value);
+  if (state.pan === pan) return;
+  state.pan = pan;
+  applyMix();
+  refreshLanePanVisual(name);
+  saveMix();
+}
+
+function refreshLanePanVisual(name) {
+  const row = mixerEl?.querySelector(`.lane-header[data-stem="${name}"]`);
+  const control = row?.querySelector(".lane-pan-input");
+  const value = row?.querySelector(".lane-pan-value");
+  const state = mixerState[name];
+  if (!state) return;
+  const pan = clampStereoPan(state.pan);
+  if (control) {
+    control.value = String(Math.round(pan * 100));
+    control.setAttribute("aria-valuetext", panLabel(pan));
+  }
+  if (value) value.textContent = panLabel(pan);
+}
+
 export function refreshMixerVisuals() {
   for (const name of allTrackNames()) {
     const state = mixerState[name];
@@ -253,6 +306,7 @@ export function refreshMixerVisuals() {
       row.classList.toggle("muted", state.muted);
       const knob = row.querySelector(".lane-knob");
       if (knob) updateLaneKnobVisual(knob, state.volume);
+      refreshLanePanVisual(name);
     }
     // Stems-list panel row (mirrors the mixer column buttons)
     if (stemListEl) {
@@ -282,7 +336,26 @@ export function refreshMixerVisuals() {
   }
 }
 
+let _panSupported = false;
+let _laneControlsEnabled = false;
+
+function refreshPanAvailability() {
+  const available = _panSupported && _laneControlsEnabled;
+  for (const input of mixerEl?.querySelectorAll(".lane-pan-input, .lane-pan-center") || []) {
+    input.disabled = !available;
+    input.title = available ? (input.classList.contains("lane-pan-center")
+      ? "Centralizar PAN" : "Esquerda - Centro - Direita")
+      : "PAN disponível no motor Web Audio";
+  }
+}
+
+export function setLanePanAvailability(supported) {
+  _panSupported = supported === true;
+  refreshPanAvailability();
+}
+
 export function setLaneControlsEnabled(enabled) {
+  _laneControlsEnabled = !!enabled;
   for (const b of mixerEl.querySelectorAll(".ms-btn")) b.disabled = !enabled;
   for (const b of mixerEl.querySelectorAll(".lane-icon-toggle")) b.disabled = !enabled;
   for (const a of mixerEl.querySelectorAll(".lane-dl")) {
@@ -295,6 +368,7 @@ export function setLaneControlsEnabled(enabled) {
       a.removeAttribute("tabindex");
     }
   }
+  refreshPanAvailability();
   for (const k of mixerEl.querySelectorAll(".lane-knob")) {
     k.classList.toggle("disabled", !enabled);
     k.setAttribute("aria-disabled", String(!enabled));
@@ -529,6 +603,47 @@ export function laneDragIcon(stemName) {
   }
 }
 
+function makeLanePan(name, display) {
+  const wrap = document.createElement("div");
+  wrap.className = "lane-pan-wrap";
+  wrap.dataset.stem = name;
+  const heading = document.createElement("span");
+  heading.className = "lane-pan-heading";
+  heading.textContent = "PAN";
+  const value = document.createElement("span");
+  value.className = "lane-pan-value";
+  value.textContent = panLabel(mixerState[name]?.pan ?? 0);
+  value.setAttribute("aria-hidden", "true");
+  const slider = document.createElement("input");
+  slider.className = "lane-pan-input";
+  slider.type = "range";
+  slider.min = "-100";
+  slider.max = "100";
+  slider.step = "1";
+  slider.value = String(Math.round(clampStereoPan(mixerState[name]?.pan ?? 0) * 100));
+  slider.setAttribute("aria-label", `Pan L/R: ${display}`);
+  slider.setAttribute("aria-valuetext", panLabel(mixerState[name]?.pan ?? 0));
+  slider.title = "Esquerda - Centro - Direita";
+  slider.addEventListener("input", () => setLanePan(name, Number(slider.value) / 100));
+  slider.addEventListener("dblclick", () => setLanePan(name, 0));
+  const center = document.createElement("button");
+  center.type = "button";
+  center.className = "lane-pan-center";
+  center.textContent = "C";
+  center.title = "Centralizar PAN";
+  center.setAttribute("aria-label", `Centralizar PAN: ${display}`);
+  center.addEventListener("click", () => setLanePan(name, 0));
+  const labels = document.createElement("div");
+  labels.className = "lane-pan-labels";
+  const left = document.createElement("span");
+  left.textContent = "L";
+  const right = document.createElement("span");
+  right.textContent = "R";
+  labels.append(left, value, right);
+  wrap.append(heading, center, slider, labels);
+  return wrap;
+}
+
 export function renderMixerRow(stem) {
   const state = mixerState[stem.name];
   const color = STEM_COLORS[stem.name] || "#a0a0a0";
@@ -609,6 +724,8 @@ export function renderMixerRow(stem) {
   nameVuCol.className = "lane-name-vu";
   nameVuCol.append(nameEl, vu);
 
+  const pan = makeLanePan(stem.name, display);
+  nameVuCol.replaceChildren(nameEl, pan, vu);
   row.append(iconCell, nameVuCol, fader, val, key, muteBtn, soloBtn, dl);
 
   muteBtn.addEventListener("click", () => toggleStemMute(stem.name));
@@ -734,6 +851,7 @@ export function resetMixer() {
     s.volume = 1;
     s.muted = false;
     s.soloed = false;
+    s.pan = 0;
   }
   refreshMixerVisuals();
   applyMix();

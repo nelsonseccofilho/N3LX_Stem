@@ -24,6 +24,8 @@ let lastStatus = null;
 let jobPollTimerId = null;
 const renderedJobs = new Set();
 const jobSources = new Map();
+let studioSelectionRevision = 0;
+document.addEventListener("trackwillopen", () => { studioSelectionRevision += 1; });
 // On-demand lead/backing vocal split (#275): which jobs asked for it at
 // submit time (via the Extract bar's Vocals "Combined / Lead + Backing" toggle).
 // Exported so catalog.js's completeSettledJob (the background-job path --
@@ -375,6 +377,7 @@ function applyStudioSummary(state) {
 // the already-done job. Best-effort: any failure just proceeds with the base
 // stems (the vocals lane), same as if the user had never asked for a split.
 async function finishDoneJob(state) {
+  const selectionRevision = studioSelectionRevision;
   let finalState = await runVocalSplitIfWanted(state);
   if (finalState.separation_profile === "complete") {
     try {
@@ -382,6 +385,7 @@ async function finishDoneJob(state) {
       if (res.ok) finalState = await res.json();
     } catch (error) { console.warn("[job] could not refresh detailed layout", error); }
   }
+  if (selectionRevision !== studioSelectionRevision) return;
   wireUpAudio(
     finalState.job_id,
     finalState.stems || [],
@@ -655,7 +659,7 @@ async function postFileJob(file) {
 
 /** Give an accepted upload its library row straight away, so a batch appears as
  *  rows the moment each file lands rather than only once every upload is done. */
-function registerUploadRow(jobId, file) {
+function registerUploadRow(jobId, file, activate = false) {
   const title = sanitizeFilename(file.name);
   const sourceUrl = `local:${title}`;
   jobSources.set(jobId, sourceUrl);
@@ -676,7 +680,7 @@ function registerUploadRow(jobId, file) {
     peakDb: null,
     sourceUrl,
   });
-  armAutoOpen(jobId);
+  armAutoOpen(jobId, { activate });
 }
 
 function sanitizeFilename(name) {
@@ -754,10 +758,8 @@ export function wireJobForm() {
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
 
-    // An import never takes the studio, loaded or empty (#747). It runs in the
-    // background and reports on its library row and the queue; the card and the
-    // loading overlay stay as they are. If the studio is still empty when it
-    // finishes, catalog.js opens it then (see armAutoOpen).
+    // Once accepted, select the new song with an empty processing studio.
+    // Extraction continues in the background if another library song is opened.
     //
     // Deliberately NOT resetImportUi(): that closes the event stream of an
     // import still holding the foreground (a "Sync again" restore), which would
@@ -782,7 +784,8 @@ export function wireJobForm() {
     // Several files dropped at once: upload them one after another. Parallel
     // uploads of several 400 MB bodies would thrash memory on both ends, and
     // the endpoint takes exactly one file per request anyway. All of them run
-    // in the background; the first to finish opens if the studio is still empty.
+    // in the background; select the first accepted file only, so subsequent
+    // uploads do not override a library choice made while the batch uploads.
     const batch = fileInput?._files ?? null;
     if (batch && batch.length > 1) {
       let queued = 0;
@@ -790,7 +793,7 @@ export function wireJobForm() {
       for (const item of batch) {
         try {
           const id = await postFileJob(item);
-          registerUploadRow(id, item);
+          registerUploadRow(id, item, queued === 0);
           queued += 1;
         } catch (err) {
           failure = err;
@@ -801,7 +804,7 @@ export function wireJobForm() {
       fileInput._clear?.();
       if (failure) {
         showError(
-          `Queued ${queued} of ${batch.length} files: ${failure.message}`,
+          t("job.batchFailed", { queued, total: batch.length, message: failure.message }),
           null,
           { retry: false },
         );
@@ -900,6 +903,6 @@ export function wireJobForm() {
     // browser's ~6 connections per origin and starve stem loading. The shared
     // queue stream drives the row, and catalog.js completes the library entry
     // when the job leaves the queue.
-    armAutoOpen(jobId);
+    armAutoOpen(jobId, { activate: true });
   });
 }

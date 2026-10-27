@@ -1,24 +1,41 @@
-param([switch]$NoBrowser, [switch]$Browser, [int]$Port = 8000, [string]$Adapter = 'RX 6600M')
+param([switch]$NoBrowser, [switch]$Browser, [int]$Port = 8000, [string]$Adapter = 'RX 6600M', [string]$RuntimeRoot = '', [string]$DataDir = '')
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $repo
-$env:STEMDECK_DATA_DIR = Join-Path $repo 'data'
-$env:STEMDECK_DIRECTML_PYTHON = Join-Path $repo '.venv-directml\Scripts\python.exe'
+if (-not $RuntimeRoot) { $RuntimeRoot = $repo }
+if (-not $DataDir) { $DataDir = Join-Path $RuntimeRoot 'data' }
+$env:STEMDECK_DATA_DIR = $DataDir
+$env:STEMDECK_DIRECTML_PYTHON = Join-Path $RuntimeRoot '.venv-directml\Scripts\python.exe'
 $env:STEMDECK_DIRECTML_ADAPTER = $Adapter
 $env:STEMDECK_DEMUCS_DEVICE = 'directml'
-$env:TORCH_HOME = Join-Path $repo 'data\cache\torch'
+$env:STEMDECK_DEFAULT_JOBS_DIR = Join-Path $DataDir 'jobs'
+$env:STEMDECK_CACHE_DIR = Join-Path $DataDir 'cache'
+$env:STEMDECK_MODELS_DIR = Join-Path $DataDir 'models'
+$env:STEMDECK_LOGS_DIR = Join-Path $DataDir 'logs'
+$env:STEMDECK_DOWNLOADS_DIR = Join-Path $DataDir 'downloads'
+$env:TORCH_HOME = Join-Path $DataDir 'cache\torch'
 $env:PYTHONIOENCODING = 'utf-8'
 $env:STEMDECK_SEPARATION_PROFILE = 'complete'
 $env:STEMDECK_SEPARATION_QUALITY = 'best'
 $env:STEMDECK_PERSIST_LIBRARY = '1'
+if (-not $env:N3LX_WHISPER_CLI) {
+    $env:N3LX_WHISPER_CLI = Join-Path $RuntimeRoot 'tools\whisper.cpp\whisper-cli.exe'
+    if (-not (Test-Path -LiteralPath $env:N3LX_WHISPER_CLI)) { $env:N3LX_WHISPER_CLI = Join-Path $env:USERPROFILE 'whisper.cpp\build-vulkan\bin\Release\whisper-cli.exe' }
+}
+if (-not $env:N3LX_WHISPER_MODEL) {
+    $env:N3LX_WHISPER_MODEL = Join-Path $RuntimeRoot 'tools\whisper.cpp\ggml-large-v3.bin'
+    if (-not (Test-Path -LiteralPath $env:N3LX_WHISPER_MODEL)) { $env:N3LX_WHISPER_MODEL = Join-Path $env:USERPROFILE 'whisper.cpp\models\ggml-large-v3.bin' }
+}
+if (-not $env:STEMDECK_SAM_SOURCE) { $env:STEMDECK_SAM_SOURCE = Join-Path (Split-Path $RuntimeRoot -Parent) 'sam-audio-amd' }
 $env:STEMDECK_FFMPEG = (Get-Command ffmpeg.exe -ErrorAction Stop).Source
 $env:STEMDECK_FFPROBE = Join-Path (Split-Path $env:STEMDECK_FFMPEG) 'ffprobe.exe'
-$python = Join-Path $repo '.venv\Scripts\python.exe'
-$logDir = Join-Path $repo 'data\logs'
+$python = Join-Path $RuntimeRoot '.venv\Scripts\python.exe'
+$logDir = Join-Path $DataDir 'logs'
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 $url = "http://127.0.0.1:$Port"
 $health = $null
 try { $health = Invoke-RestMethod "$url/api/health" -TimeoutSec 2 } catch {}
+if ($health -and $env:STEMDECK_INSTANCE_TOKEN -and $health.instance -ne $env:STEMDECK_INSTANCE_TOKEN) { throw "Outro servidor ocupa a porta $Port. Feche a outra instancia ou escolha outra porta." }
 if (-not $health) {
     $connection = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
     if ($connection) { throw "Porta $Port ocupada. Use -Port para escolher outra." }

@@ -135,6 +135,12 @@ function overrun() {
 function apply() {
   queued = false;
   if (!strip || !strip.isConnected) return;
+  // The song panel has a fixed two-row grid; click options always use a popover.
+  if (strip.closest(".song-controls")) {
+    strip.classList.remove("collapse-wrap", "collapse-tight");
+    strip.classList.add("collapse-click");
+    return;
+  }
 
   const was = level;
 

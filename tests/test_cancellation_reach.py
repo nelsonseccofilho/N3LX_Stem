@@ -9,6 +9,7 @@ looks at it until the call returns.
 from __future__ import annotations
 
 import os
+import sys
 
 import pytest
 
@@ -33,7 +34,7 @@ def test_ffmpeg_is_registered_so_cancel_can_reach_it(tmp_path, monkeypatch):
     monkeypatch.setattr(_cancel, "set_proc", _capture)
 
     job = _job()
-    rc = _cancel.run_registered(job, ["sh", "-c", "exit 0"], 30).returncode
+    rc = _cancel.run_registered(job, [sys.executable, "-c", "raise SystemExit(0)"], 30).returncode
 
     assert rc == 0
     assert seen["during"] is not None, "cancel could not have reached this process"
@@ -45,7 +46,11 @@ def test_a_failing_command_still_deregisters(tmp_path, monkeypatch):
     monkeypatch.setattr(_cancel, "set_proc", lambda job_id, proc: cleared.append(proc))
 
     job = _job()
-    result = _cancel.run_registered(job, ["sh", "-c", "echo boom >&2; exit 3"], 30)
+    result = _cancel.run_registered(
+        job,
+        [sys.executable, "-c", "import sys; sys.stderr.write('boom\\n'); raise SystemExit(3)"],
+        30,
+    )
     rc, stderr = result.returncode, result.stderr
 
     assert rc == 3

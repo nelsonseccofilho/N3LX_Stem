@@ -206,9 +206,18 @@ def _run_common(job: Job, source: Path, job_dir: Path) -> None:
         cleanup_source(job_dir)
     job.stems = [{"name": name, "url": f"/api/jobs/{job.id}/stems/{name}.wav"} for name in found]
     if job.separation_profile == "complete":
-        from app.core.studio import STUDIO_NAMES
+        from app.core.studio import STUDIO_NAMES, read_layout
 
+        published = set((read_layout(job_dir) or {}).get("active_names", []))
+        refined = {"drum_recovery", "residual_drums_refined"}
+        recovery_ready = refined <= published and all(
+            (stems_dir / f"{name}.wav").is_file() for name in refined
+        )
         for name in ("lead_vocals", "backing_vocals", *STUDIO_NAMES):
+            if name in refined and not recovery_ready:
+                continue
+            if name == "residual_drums" and recovery_ready:
+                continue
             if (stems_dir / f"{name}.wav").is_file():
                 job.stems.append({"name": name, "url": f"/api/jobs/{job.id}/stems/{name}.wav"})
     _check_cancel(job)

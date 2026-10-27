@@ -5784,7 +5784,7 @@ input, textarea { font-family: inherit; }
 }
 
 /* Compact gain control: resizing the mixer gives room to names, not a longer fader. */
-.daw .lane-knob.mx-fader { flex:0 0 64px; width:64px; }
+.daw .lane-knob.mx-fader { flex:0 0 52px; width:52px; }
 .daw .lane-name-vu { flex:1 1 auto; min-width:124px; }
 .mx-fader-input:focus-visible { outline:2px solid var(--fader-color, var(--accent)); outline-offset:3px; border-radius:4px; }
 .app.daw:not(.is-import) .wave-scroll { overflow-x:scroll; overflow-y:scroll; scrollbar-width:auto; }
@@ -6086,7 +6086,7 @@ input, textarea { font-family: inherit; }
   justify-content: center;
   position: relative;
   width: 100%;
-  max-width: 100%;
+  max-width: 100px;
   min-width: 0;
   height: 25px;
   color: var(--fg-2);

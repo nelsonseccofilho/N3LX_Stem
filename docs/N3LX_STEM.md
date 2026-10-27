@@ -1,5 +1,7 @@
 # N3LX_Stem: instalação e alterações
 
+> Há um [pacote Windows de atualização rc.2](https://github.com/nelsonseccofilho/N3LX_Stem/releases/tag/v0.21.0-rc.2), que usa uma instalação AMD existente. Consulte o [README](../README.md#atualizar-uma-instalação-existente) para baixar e abrir o executável. A instalação limpa em outro computador continua pendente de validação.
+
 ## Ambientes
 
 - Aplicação: Python 3.12, dependências em `uv.lock`, Torch 2.6.
@@ -19,13 +21,14 @@ O nome interno do pacote, variáveis `STEMDECK_*`, chaves do navegador e o campo
 | --- | --- | --- |
 | Seis grupos | Demucs `htdemucs_6s` | RX 6600M / DirectML |
 | Voz principal e apoio | `UVR_MDXNET_KARA_2.onnx` | CPU / ONNX |
-| Seis peças da bateria | `MDX23C-DrumSep-aufr33-jarredou.ckpt` | CPU / PyTorch |
+| Seis peças da bateria | `MDX23C-DrumSep-aufr33-jarredou.ckpt` | DirectML quando configurado; CPU como alternativa sinalizada |
+| Transcrição do karaokê | Whisper Large v3 / Medium, via whisper.cpp | Vulkan; teste curto do Large v3 na RX 6600M |
 
-DrumSep é dos autores aufr33 e jarredou; a configuração e os pesos vêm do catálogo público de audio-separator. Consulte os termos e a ficha do modelo na origem antes de outros usos. Os pesos não estão incluídos neste repositório e a licença do aplicativo não altera os termos deles. A bateria detalhada não usa DirectML nesta instalação.
+DrumSep é dos autores aufr33 e jarredou; a configuração e os pesos vêm do catálogo público de audio-separator. Consulte os termos e a ficha do modelo na origem antes de outros usos. Os pesos não estão incluídos neste repositório e a licença do aplicativo não altera os termos deles. A rota de bateria tenta o worker DirectML quando configurado e pode recorrer à CPU com aviso; veja [drumsep-amd.md](drumsep-amd.md).
 
 ## Fluxo e integridade
 
-O modo Completo é capturado ao entrar na fila, força os seis grupos base e executa as passagens especializadas. A interface mostra a etapa extra em andamento, sem um percentual final artificial. Cancelamento interrompe os workers; falhas opcionais preservam o grupo original. Pistas detalhadas são alinhadas ao grupo pai; resíduos usam WAV float para evitar clipping. A exportação usa somente as pistas ativas e mantém nomes legíveis. Bateria e resíduos de mistura/bateria não recebem transposição tonal.
+O modo Completo é capturado ao entrar na fila, força os seis grupos base e executa as passagens especializadas. A interface mostra a etapa extra em andamento, sem um percentual final artificial. Cancelamento interrompe os workers; falhas opcionais preservam o grupo original. Pistas detalhadas são alinhadas ao grupo pai; resíduos usam WAV float para evitar clipping. A exportação usa somente as pistas ativas e mantém nomes legíveis. Bateria e resíduos percussivos não recebem transposição tonal. O resíduo tonal da separação pode ser transposto.
 
 O layout `studio.json` também permite carregar pistas renderizadas externamente e indicar nomes e percussão. A renderização de uma sessão REAPER continua sendo uma preparação externa específica de cada projeto; o aplicativo não interpreta automaticamente plugins ou arquivos RPP.
 
@@ -37,13 +40,19 @@ Testes: `python -m pytest tests/test_directml_local.py tests/test_studio_local.p
 
 ## Distribuição
 
-Esta versão é distribuída como código-fonte para o fluxo Windows acima. O novo shell Electron foi validado localmente no Windows. Scripts, shell Tauri, Docker e empacotamento herdados permanecem para referência e evolução, sem validação dos novos recursos nesses formatos. Os workflows herdados só executam no repositório original; o workflow N3LX executa verificações focadas sem publicar binários ou containers. Atualizações binárias automáticas foram desativadas para não substituir o worker AMD por uma distribuição incompatível. Para atualizar o código, revise as alterações locais antes de usar Git.
+A [pré-release rc.2](https://github.com/nelsonseccofilho/N3LX_Stem/releases/tag/v0.21.0-rc.2) contém o executável Electron e o código da aplicação em um ZIP de atualização. O pacote exige os ambientes AMD, FFmpeg, ferramentas e pesos já instalados. Extraia-o em uma pasta nova, encerre a instância anterior e selecione a instalação existente na primeira abertura. O pacote preserva a biblioteca externa e usa seu próprio perfil de interface. Não é feita substituição automática de um checkout com alterações locais.
+
+O fluxo por código-fonte continua disponível. Shell Tauri, Docker e empacotamento herdados permanecem para referência, sem validação dos novos recursos nesses formatos. Atualizações binárias automáticas continuam desativadas para preservar o runtime AMD. O procedimento atual usa [validação local reproduzível](LOCAL_RELEASE_VALIDATION.md); o workflow N3LX hospedado é opcional e manual. A evidência de testes locais não é apresentada como execução bem-sucedida do CI hospedado.
 
 
 ## Progresso e continuidade
 
-O modo Completo tem sete etapas; o Básico tem quatro. A fila e a API do trabalho expõem `processing` com etapa atual, total, estados, timestamps e fração medida quando disponível. Os contadores vêm dos iteradores dos modelos: Demucs considera modelos e shifts, Karaoke considera as duas passagens MDX, DrumSep conta seus batches. O percentual representa o processamento do modelo; leitura e gravação das pistas podem continuar sem percentual. Falhas opcionais mantêm aviso na etapa e preservam o grupo original.
+O plano de etapas é salvo por extração; trabalhos novos e históricos podem ter planos diferentes. A fila e a API do trabalho expõem `processing` com etapa atual, total, estados, timestamps e fração medida quando disponível. Os contadores vêm dos iteradores dos modelos: Demucs considera modelos e shifts, Karaoke considera as duas passagens MDX, DrumSep conta seus batches. O percentual representa o processamento do modelo; leitura e gravação das pistas podem continuar sem percentual. Falhas opcionais mantêm aviso na etapa e preservam o grupo original.
 
 A janela e o navegador compartilham preferências próprias do aplicativo em `data/ui-store.json`, incluindo organização, lixeira e mixagens. Credenciais e perfis do navegador não são copiados. Para migrar explicitamente a organização de uma sessão antiga do navegador, abra nela `http://127.0.0.1:8000/?migrate-ui=1` uma vez e reabra o aplicativo. O parâmetro desaparece ao terminar; preferências anteriores do servidor recebem uma cópia de segurança. Somente chaves permitidas do N3LX_Stem são lidas e o destino é o servidor local.
 
 A extração de teste de 12 segundos foi concluída após a mudança, com os sete estados, contadores intermediários nos três modelos, DirectML sem fallback, 15 pistas alinhadas, erro máximo de reconstrução 0.0 e ZIP íntegro. Isso não é um benchmark de tempo nem prova de isolamento perfeito dos instrumentos.
+
+## Interface atual
+
+A rc.2 oferece temas Claro/Escuro/Sistema, PAN por pista, Restaurar na lixeira, confirmação de exclusão e controles para excluir/regenerar karaokê. Large v3 é o modelo padrão de transcrição; Medium é uma escolha explícita. Os detalhes e limites dessa revisão estão em [UX_UI_RC2_QA.md](UX_UI_RC2_QA.md).

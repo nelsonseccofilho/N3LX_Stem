@@ -64,3 +64,13 @@ def test_missing_worker_resources_fail_without_download(tmp_path, monkeypatch):
     monkeypatch.setenv("N3LX_WHISPER_GPU_HOME", str(tmp_path))
     with pytest.raises(k.KaraokeTimingError, match="not configured"):
         k.aligned_worker_resources()
+
+
+def test_language_routes_explicitly_and_rejects_unknown(worker, monkeypatch):
+    audio, model, _ = worker
+    calls = []
+    monkeypatch.setattr(k, "_generate_english_timing", lambda *args: calls.append(args) or {"language": "en"})
+    result = k.generate_timing(audio, whisper_cli=sys.executable, model=model, ffmpeg=sys.executable, language="en")
+    assert result["language"] == "en" and len(calls) == 1
+    with pytest.raises(k.KaraokeTimingError, match="unsupported"):
+        k.generate_timing(audio, whisper_cli=sys.executable, model=model, ffmpeg=sys.executable, language="es")

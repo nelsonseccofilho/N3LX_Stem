@@ -747,6 +747,14 @@
                 <p data-i18n="karaokeTiming.noPercent">This stage does not report a percentage. You can listen to another song while it runs.</p>
                 <button id="karaokeProcessingCancel" class="lyrics-align-btn" type="button" data-i18n="karaoke.cancel">Cancel</button>
               </section>
+              <div class="lyrics-generator-language">
+                <label for="lyricsKaraokeLanguage" data-i18n="karaokeTiming.language">Idioma da música</label>
+                <select id="lyricsKaraokeLanguage" aria-describedby="lyricsLanguageHelp">
+                  <option value="pt" data-i18n="karaokeTiming.languagePt">Português</option>
+                  <option value="en" data-i18n="karaokeTiming.languageEn">Inglês</option>
+                </select>
+                <span id="lyricsLanguageHelp" class="lyrics-note" data-i18n="karaokeTiming.languageHelp">Português usa alinhamento avançado; inglês usa os tempos do Whisper.</span>
+              </div>
               <div class="lyrics-generator-model">
                 <label for="lyricsKaraokeModel" data-i18n="karaokeTiming.model">Modelo de transcrição</label>
                 <select id="lyricsKaraokeModel">
@@ -756,6 +764,7 @@
                 <button id="lyricsRegenerateKaraokeBtn" class="lyrics-align-btn" type="button" data-i18n="karaokeTiming.regenerate" hidden>Gerar novamente</button>
                 <button id="lyricsDeleteKaraokeBtn" class="lyrics-align-btn" type="button" data-i18n="karaokeTiming.delete" hidden>Excluir JSON do karaokê</button>
               </div>
+              <p id="karaokeModelUnavailable" class="lyrics-note" role="status" data-i18n="karaokeTiming.modelUnavailable" hidden>Selecione um modelo disponível para este idioma.</p>
               <details class="lyrics-advanced" id="lyricsAdvanced">
                 <summary data-i18n="karaokeTiming.advanced">Ajustes da letra</summary>
                 <div class="lyrics-advanced-actions">

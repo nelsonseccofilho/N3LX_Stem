@@ -50,7 +50,7 @@ def _vocals(job_dir: Path) -> Path:
     return stem
 
 
-def _configuration(model_name: str | None = None) -> tuple[str, Path, str]:
+def _configuration(model_name: str | None = None, language: str = "pt") -> tuple[str, Path, str]:
     cli = os.environ.get("N3LX_WHISPER_CLI", "").strip()
     model = Path(os.environ.get("N3LX_WHISPER_MODEL", "").strip())
     if model_name is not None:
@@ -62,10 +62,13 @@ def _configuration(model_name: str | None = None) -> tuple[str, Path, str]:
         ))
     if not cli or not shutil.which(cli) or not model.is_file():
         raise HTTPException(status_code=503, detail="Vulkan Whisper worker not configured")
-    try:
-        aligned_worker_resources()
-    except KaraokeTimingError:
-        raise HTTPException(status_code=503, detail="WhisperGPU alignment environment not configured") from None
+    if language not in {"pt", "en"}:
+        raise HTTPException(status_code=422, detail="unsupported karaoke language")
+    if language == "pt":
+        try:
+            aligned_worker_resources()
+        except KaraokeTimingError:
+            raise HTTPException(status_code=503, detail="WhisperGPU alignment environment not configured") from None
     return cli, model, ffmpeg_executable()
 
 
@@ -85,7 +88,7 @@ def _phase(run, phase: str) -> None:
     run.karaoke_phase_started = time.monotonic()
 
 
-async def _generate(job, job_dir: Path, run, replace: bool, cli: str, model: Path, ffmpeg: str) -> None:
+async def _generate(job, job_dir: Path, run, replace: bool, cli: str, model: Path, ffmpeg: str, language: str = "pt") -> None:
     def cancelled() -> bool:
         return run.cancel.is_set() or registry_get(job.id) is not job
 
@@ -100,7 +103,7 @@ async def _generate(job, job_dir: Path, run, replace: bool, cli: str, model: Pat
             before = (audio.stat().st_size, audio.stat().st_mtime_ns)
             timing = await asyncio.to_thread(
                 generate_timing, audio, whisper_cli=cli, model=model,
-                ffmpeg=ffmpeg, cancelled=cancelled, phase_changed=lambda phase: _phase(run, phase),
+                ffmpeg=ffmpeg, cancelled=cancelled, phase_changed=lambda phase: _phase(run, phase), language=language,
             )
             if cancelled():
                 run.state = "idle"
@@ -144,13 +147,16 @@ async def generate_karaoke(job_id: str, request: Request) -> JSONResponse:
     except (ValueError, UnicodeDecodeError):
         raise HTTPException(status_code=422, detail="invalid JSON") from None
     if (not isinstance(body, dict) or
-            any(k not in {"replace", "model"} for k in body) or
+            any(k not in {"replace", "model", "language"} for k in body) or
             type(body.get("replace", False)) is not bool):
         raise HTTPException(status_code=422, detail="expected optional boolean replace")
     model_name = body.get("model")
     if model_name is not None and model_name not in ("large-v3", "medium"):
         raise HTTPException(status_code=422, detail="unsupported Whisper model")
-    cli, model, ffmpeg = _configuration(model_name) if model_name is not None else _configuration()
+    language = body.get("language", "pt")
+    if not isinstance(language, str) or language not in {"pt", "en"}:
+        raise HTTPException(status_code=422, detail="unsupported karaoke language")
+    cli, model, ffmpeg = _configuration(model_name, language)
     replace = body.get("replace", False)
     if (job_dir / _SIDE_CAR).exists() and not replace:
         raise HTTPException(status_code=409, detail="timing exists; request replace to regenerate")
@@ -164,10 +170,11 @@ async def generate_karaoke(job_id: str, request: Request) -> JSONResponse:
         run.state = "idle"
         run.ended.set()
         raise
+    run.karaoke_language = language
     run.karaoke_started = time.monotonic()
     _phase(run, "queued")
     _karaoke_runs[job_id] = run
-    task = asyncio.create_task(_generate(job, job_dir, run, replace, cli, model, ffmpeg))
+    task = asyncio.create_task(_generate(job, job_dir, run, replace, cli, model, ffmpeg, language))
     _active_tasks.add(task)
     task.add_done_callback(_active_tasks.discard)
     return JSONResponse({"state": "running", "job_id": job_id}, status_code=202)
@@ -180,17 +187,21 @@ def karaoke_status(job_id: str) -> dict:
     if run is not current_run(job_id):
         run = None
     output = job_dir / _SIDE_CAR
-    models = []
-    for name in ("large-v3", "medium"):
-        try:
-            _configuration(name)
-            models.append(name)
-        except HTTPException:
-            pass
+    language_models = {}
+    for language in ("pt", "en"):
+        language_models[language] = []
+        for name in ("large-v3", "medium"):
+            try:
+                _configuration(name, language)
+                language_models[language].append(name)
+            except HTTPException:
+                pass
+    models = language_models["pt"]
     now = time.monotonic()
     return {
         "state": run.state if run is not None else "idle",
-        "available": output.is_file(), "models": models,
+        "available": output.is_file(), "models": models, "language_models": language_models,
+        "language": getattr(run, "karaoke_language", None) if run is not None else None,
         "phase": getattr(run, "karaoke_phase", "queued") if run is not None else None,
         "elapsed_seconds": round(max(0, now - getattr(run, "karaoke_started", now))),
         "phase_elapsed_seconds": round(max(0, now - getattr(run, "karaoke_phase_started", now))),

@@ -39,7 +39,7 @@ import { confirmAction } from "./confirmAction.js";
 // can reach the desktop app's native commands.
 
 import { lyricsEditorText, editedLyrics, untimedLines } from "./lyricsEditing.js";
-import { karaokePreviewFromTiming, hasProtectedLyrics } from "./karaokeTiming.js";
+import { karaokePreviewFromTiming, hasProtectedLyrics, timingForMatchingEditedLyrics } from "./karaokeTiming.js";
 import { t, getLanguage, onLanguageChange } from "./i18n.js";
 import { storeGet, storeSet } from "./utils.js";
 import { getCurrentTrackInfo, getCurrentTrackArtist } from "./catalog.js";
@@ -413,6 +413,7 @@ function updateKaraokeControls() {
     const activePreview = shownFrom === "preview" && shownEntry?.machinePreview;
     button.textContent = t(activePreview && karaokeBeforePreview ? "karaokeTiming.restore"
       : karaokeAvailable ? "karaokeTiming.view" : "karaokeTiming.generate");
+    button.hidden = same && karaokeAvailable && ((activePreview && !karaokeBeforePreview) || shownEntry?.generatedTimingApplied === true);
     button.disabled = !same || busy || (!karaokeAvailable && modelUnavailable) || (activePreview && !karaokeBeforePreview);
     button.setAttribute("aria-busy", String(same && karaokeRunning));
   }
@@ -1687,7 +1688,10 @@ function lookAgainButton() {
     const info = getCurrentTrackInfo();
     if (!info) return;
     await storeSet(storeKey(info.id), null);
-    loadForCurrentTrack();
+    if (getCurrentTrackInfo()?.id !== info.id) return;
+    const { song } = knownSong(info);
+    if (song) void lookUp(info, { song });
+    else setStatus(t("lyrics.nothingKnown"), "muted");
   });
   return again;
 }
@@ -1854,14 +1858,48 @@ async function loadForCurrentTrack() {
     return;
   }
   if (saved?.entry && !keptForAnotherSong(saved.entry, info)) {
-    show(saved.entry, Array.isArray(saved.others) ? saved.others : []);
+    let entry = saved.entry;
+    // An untimed edited lyric can borrow the generated word stamps only when
+    // every word matches in sequence. Never replace or rewrite the saved text.
+    if (!timingOf(entry).lines.length && entry.plain?.trim()) {
+      try {
+        const response = await fetch(karaokeApi(info.id, "timing"), { cache: "no-store" });
+        if (response.ok) {
+          const generated = await response.json();
+          if (token !== loadToken || getCurrentTrackInfo()?.id !== info.id) return;
+          entry = timingForMatchingEditedLyrics(entry, generated) || entry;
+        }
+      } catch (err) { console.warn("generated timing unavailable", err); }
+    }
+    if (token !== loadToken || getCurrentTrackInfo()?.id !== info.id) return;
+    if (shownEntry || syncOpen || sync || document.getElementById("lyricsEditor")) return;
+    show(entry, Array.isArray(saved.others) ? saved.others : []);
     return;
   }
-  if (saved?.entry) {
-    // Kept by the tab before a lookup was held to the track's own song:
-    // another song's lyrics, dropped so the track is looked up again.
-    await storeSet(storeKey(info.id), null);
-    if (token !== loadToken) return;
+  // Preserve any rejected older match on disk. A local transcription can still
+  // be used without deleting the saved entry.
+
+  // A generated sidecar is local to this recording. Read it before any search
+  // and never let a slow response replace a newly opened editor or track.
+  try {
+    const response = await fetch(karaokeApi(info.id, "timing"), { cache: "no-store" });
+    if (token !== loadToken || getCurrentTrackInfo()?.id !== info.id) return;
+    if (response.ok) {
+      const timing = await response.json();
+      if (token !== loadToken || getCurrentTrackInfo()?.id !== info.id) return;
+      if (shownEntry || syncOpen || sync || document.getElementById("lyricsEditor")) return;
+      previewKaraoke(info.id, timing);
+      return;
+    }
+    if (response.status !== 404) {
+      setKaraokeMessage("karaokeTiming.failed", "error");
+      return;
+    }
+  } catch (err) {
+    if (token !== loadToken || getCurrentTrackInfo()?.id !== info.id) return;
+    console.warn("local karaoke load failed", err);
+    setKaraokeMessage("karaokeTiming.failed", "error");
+    return;
   }
 
   // What the server found while the track was separated. Shown, not saved:
@@ -1908,7 +1946,8 @@ async function loadForCurrentTrack() {
     showAnswer(answered.get(info.id));
     return;
   }
-  lookUp(info, { song });
+  setStatus(t("karaoke.localMissing"), "muted");
+  versionsEl.append(lookAgainButton());
 }
 
 // While the tab is on screen: notice a different track being opened, mark the
@@ -1921,7 +1960,13 @@ function tick() {
   const id = getCurrentTrackInfo()?.id ?? null;
   if (id !== shownTrackId) loadForCurrentTrack();
   const cinemaEmpty = document.getElementById("cinemaEmpty");
-  if (cinemaEmpty) cinemaEmpty.hidden = Boolean(lines.length && !provisional);
+  const cinemaUntimed = document.getElementById("cinemaUntimed");
+  const hasUntimed = Boolean(shownEntry?.plain?.trim() && (!lines.length || provisional));
+  const stage = document.getElementById("karaokeStage");
+  stage?.classList.toggle("cinema-untimed", hasUntimed);
+  if (cinemaEmpty) cinemaEmpty.hidden = Boolean((lines.length && !provisional) || hasUntimed);
+  if (cinemaUntimed) cinemaUntimed.hidden = !hasUntimed;
+  if (bodyEl) bodyEl.tabIndex = hasUntimed ? 0 : -1;
   if (lines.length && !provisional) {
     // 50ms ahead: a click on a line seeks to its exact stamp, and the time read
     // back can land a hair before it, which would mark the line above.
@@ -1984,7 +2029,7 @@ function setVisible(on) {
   // leaves it, and what it set is saved.
   if (!on) closeSync(false);
   if (on) {
-    loadForCurrentTrack();
+    if (!shownEntry || (getCurrentTrackInfo()?.id ?? null) !== shownTrackId) loadForCurrentTrack();
     if (!frame) frame = requestAnimationFrame(tick);
   } else if (frame) {
     cancelAnimationFrame(frame);
@@ -2044,7 +2089,7 @@ export function setLyricsPresentation(on) {
 function updateTimingNote() {
   const note = document.getElementById("lyricsTimingNote");
   if (note) note.textContent = shownFrom === "preview" && shownEntry?.machinePreview
-    ? t("karaokeTiming.preview")
+    ? ""
     : shownEntry ? t(lines.length && !provisional ? "karaoke.timed" : "karaoke.untimed")
     : getCurrentTrackInfo() ? t("karaoke.addLyrics") : "";
   const auto = document.getElementById("lyricsAutoSyncBtn");

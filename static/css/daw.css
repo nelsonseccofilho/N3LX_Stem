@@ -6908,7 +6908,7 @@ input, textarea { font-family: inherit; }
 #karaokeStage:fullscreen .cinema-exit { position:absolute; top:24px; right:24px; min-height:40px; padding:8px 14px; color:#fff; background:#1c2a34; border:1px solid #526675; border-radius:7px; cursor:pointer; }
 #karaokeStage:fullscreen #karaokeLyricsHost { min-height:0; }
 #karaokeStage:fullscreen .lyrics-panel { justify-content:center; }
-#karaokeStage:fullscreen .lyrics-panel > :not(#lyricsBody):not(#cinemaEmpty) { display:none!important; }
+#karaokeStage:fullscreen .lyrics-panel > :not(#lyricsBody):not(#cinemaEmpty):not(#cinemaUntimed) { display:none!important; }
 #karaokeStage:fullscreen .lyrics-body { display:grid; grid-template-rows:repeat(3,minmax(0,1fr)); align-items:center; padding:0; overflow:hidden; }
 #karaokeStage:fullscreen .lyrics-body::after { display:none; }
 #karaokeStage:fullscreen .lyrics-line,#karaokeStage:fullscreen .lyrics-text { display:none; transition:none; }
@@ -6919,3 +6919,67 @@ input, textarea { font-family: inherit; }
 #karaokeStage:fullscreen .cinema-empty:not([hidden]) { display:block; margin:auto; color:var(--fg-2); text-align:center; font-size:clamp(18px,2vw,28px); }
 #karaokeStage:fullscreen .cinema-empty:not([hidden]) ~ .lyrics-body { display:none; }
 @media (max-width:600px) { #karaokeStage:fullscreen { padding:16px; } #karaokeStage:fullscreen .karaoke-overview { padding-top:48px; padding-right:0; } #karaokeStage:fullscreen .cinema-exit { top:10px; right:10px; } }
+
+/* Plain lyrics remain readable in cinema without implying invented timestamps. */
+.cinema-untimed-note { display:none; }
+#karaokeStage.cinema-untimed:fullscreen .lyrics-panel > .cinema-untimed-note:not([hidden]) { display:block!important; text-align:center; color:var(--fg-2); margin:0 0 12px; }
+#karaokeStage.cinema-untimed:fullscreen .lyrics-body { display:block; overflow-y:auto; padding:12px max(12px,6%) 24px; }
+#karaokeStage.cinema-untimed:fullscreen .lyrics-text,
+#karaokeStage.cinema-untimed:fullscreen .lyrics-line { display:block; width:100%; text-align:center; color:var(--fg); font-size:clamp(22px,3.2vw,54px); line-height:1.4; padding:8px; }
+#karaokeStage.cinema-untimed:fullscreen .lyrics-line { pointer-events:none; }
+#karaokeStage.cinema-untimed:fullscreen .lyrics-body:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+
+/* Keep the playback position visible above the section blocks without
+   intercepting their pointer gestures. */
+.daw-ruler-area > .lanes-ruler { position:relative; z-index:2; }
+.daw-info-row { grid-template-columns:repeat(8,minmax(0,1fr)); }
+#summary-key-symbol { font-family:var(--font-mono); font-weight:700; white-space:nowrap; }
+@media (max-width:1250px) {
+  .daw-info-row { grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); }
+}
+
+.daw-info-row .meta-card-label { white-space:normal; overflow:visible; line-height:1.1; }
+#summary-key-symbol { font-size:clamp(12px,1vw,15px); color:var(--fg-2); }
+
+.daw-info-row { grid-template-columns:repeat(9,minmax(0,1fr)); }
+.daw-meta-card[data-meta="chord"] button { font-size:10px; padding:3px 6px; }
+#chords-status { font-size:10px; overflow-wrap:anywhere; }
+@media(max-width:1250px) { .daw-info-row { grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); } }
+
+#metro-preview-status:empty { display:none; }
+
+/* The grid is a passive visual guide until the user opens the editor. */
+.beatgrid-canvas:not(.is-editing) { opacity:0.4; }
+/* Keep all metronome options readable in the compact popover. */
+.footer-clusters.collapse-click .footer-metro-panel {
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  width:min(320px,calc(100vw - 16px));
+  box-sizing:border-box;
+  align-items:center;
+}
+.footer-clusters.collapse-click .footer-metro-panel > .metro-select-wrap:has(#t-metro-countin),
+.footer-clusters.collapse-click .metro-countin-hint,
+.footer-clusters.collapse-click #t-metro-preview,
+.footer-clusters.collapse-click #metro-preview-status,
+.footer-clusters.collapse-click .metro-mult,
+.footer-clusters.collapse-click #t-metro-note { grid-column:1 / -1; }
+.footer-clusters.collapse-click .footer-metro-panel button,
+.footer-clusters.collapse-click .footer-metro-panel select { max-width:100%; }
+.footer-clusters.collapse-click #t-metro-preview { width:100%; min-height:34px; white-space:normal; }
+.footer-clusters.collapse-click #metro-preview-status:not(:empty),
+.footer-clusters.collapse-click #t-metro-note:not(:empty) {
+  display:block; margin:0; white-space:normal; overflow:visible;
+  overflow-wrap:anywhere; line-height:1.4; font-size:11px;
+}
+.footer-clusters.collapse-click .metro-mult { justify-self:start; }
+
+.footer-clusters.collapse-click .footer-metro-panel { max-height:calc(100vh - 16px); overflow-y:auto; }
+
+.footer-clusters.collapse-click .metro-select-wrap:has(#t-metro-countin) select { width:100%; }
+
+/* Section labels share the overview's full-song coordinate system. */
+.karaoke-sections { position:relative; height:26px; margin-bottom:4px; overflow:hidden; }
+.karaoke-sections[hidden] { display:none; }
+.karaoke-section { position:absolute; top:0; bottom:0; box-sizing:border-box; display:flex; align-items:center; padding:0 7px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; border:1px solid var(--section-color,var(--border)); border-radius:4px; color:var(--section-color,var(--fg-2)); background:var(--bg-2); font-size:10px; font-weight:700; }
+.karaoke-section.is-active { box-shadow:inset 0 -2px 0 var(--section-color,var(--accent)); }

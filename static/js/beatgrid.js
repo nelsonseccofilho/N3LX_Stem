@@ -69,6 +69,7 @@ let _undo = [];
 let _redo = [];
 let _saveTimer = null;
 let _dirty = false;
+let _previewOriginal = null;
 
 // ─── geometry ───────────────────────────────────────────────
 
@@ -368,6 +369,7 @@ function _render() {
   // zoomed-out click can still grab one.
   const spacingPx = w / Math.max(1, _beats.length);
   const beatsVisible = spacingPx >= DENSE_MIN_PX;
+  const sparseStride = Math.max(1, Math.ceil(DENSE_MIN_PX / Math.max(spacingPx, 0.001)));
 
   const minPx = 2;
   let lastX = -Infinity;
@@ -376,7 +378,7 @@ function _render() {
     const isBar = _bars.some((b) => b.beat === i)
       || (_bars.length > 0 && _isDownbeat(i));
     const isAnchor = _anchors.has(i);
-    if (!isBar && !isAnchor && !beatsVisible) continue;
+    if (!isBar && !isAnchor && !beatsVisible && (_bars.length || i % sparseStride !== 0)) continue;
     if (!isBar && !isAnchor && x - lastX < minPx) continue;
     lastX = x;
 
@@ -527,6 +529,8 @@ export function initBeatGrid({ jobId, grid, duration, onChange }) {
   _host = document.querySelector(".waves-column");
   _canvas = document.getElementById("beatgrid-canvas");
   if (!_host || !_canvas) return false;
+  _canvas.classList.remove("hidden", "is-editing");
+  _canvas.style.pointerEvents = "none";
 
   _canvas.addEventListener("pointermove", _onPointerMove);
   _canvas.addEventListener("pointerdown", _onPointerDown);
@@ -570,6 +574,7 @@ export function destroyBeatGrid() {
   _undo = [];
   _redo = [];
   _editing = false;
+  _previewOriginal = null;
   _hoverIdx = -1;
   _dragIdx = -1;
   _canvas = null;
@@ -580,7 +585,8 @@ export function destroyBeatGrid() {
 export function setBeatGridEditing(on) {
   _editing = !!on;
   if (!_canvas) return;
-  _canvas.classList.toggle("hidden", !_editing);
+  _canvas.classList.remove("hidden");
+  _canvas.classList.toggle("is-editing", _editing);
   _canvas.style.pointerEvents = _editing ? "auto" : "none";
   if (!_editing) { _hoverIdx = -1; _dragIdx = -1; flushBeatGrid(); }
   _render();
@@ -613,3 +619,26 @@ export const getBeatGridSnap = () => _snap;
 export const getAnchors = () => [..._anchors].sort((a, b) => a - b);
 export const getBeats = () => _beats.slice();
 export const getBars = () => _bars.map((b) => ({ ...b }));
+
+// An audition is memory-only: never invoke _commit or change the saved grid.
+export function isBeatGridPreview() { return _previewOriginal !== null; }
+export function beginBeatGridPreview(beats) {
+  if (_editing || _previewOriginal || !_jobId || !Array.isArray(beats) || beats.length < 2 ||
+      beats.some((v, i) => !Number.isFinite(v) || v < 0 || (i && v <= beats[i - 1]))) return false;
+  _previewOriginal = _snapshot();
+  _beats = beats.slice();
+  _bars = [];
+  _anchors = new Set();
+  _onChange?.(_beats.slice(), []);
+  _render();
+  return true;
+}
+export function endBeatGridPreview() {
+  if (!_previewOriginal) return false;
+  const snapshot = _previewOriginal;
+  _previewOriginal = null;
+  _restore(snapshot);
+  _onChange?.(_beats.slice(), _bars.map(b => ({ ...b })));
+  _render();
+  return true;
+}

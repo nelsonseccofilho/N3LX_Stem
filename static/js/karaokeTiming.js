@@ -53,3 +53,32 @@ export function hasProtectedLyrics(entry, editing = false) {
   return Boolean(editing || entry?.source === "manual" ||
     (typeof entry?.userSynced === "string" && entry.userSynced.trim()));
 }
+
+/**
+ * Reuse generated word times only for an exact, in-order match. This preserves
+ * edited punctuation and line breaks, never invents a timestamp for a changed
+ * word, and leaves the stored entry untouched.
+ */
+export function timingForMatchingEditedLyrics(entry, timing) {
+  if (typeof entry?.plain !== "string" || !entry.plain.trim() ||
+      !karaokePreviewFromTiming(timing)) return null;
+  const lines = entry.plain.normalize("NFC").split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  const words = lines.flatMap(line => line.split(/\s+/));
+  const normal = value => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+  if (!words.length || words.length > timing.words.length ||
+      words.some((word, i) => /[<>\[\]]/.test(word) || !normal(word) ||
+        normal(word) !== normal(timing.words[i].text))) return null;
+  let index = 0;
+  const synced = lines.map(line => {
+    const parts = line.split(/\s+/);
+    const first = timing.words[index];
+    const fragments = parts.map((word, i) => {
+      const item = timing.words[index++];
+      return `<${stamp(item.start)}>${word}${i + 1 < parts.length ? " " : ""}`;
+    });
+    const last = timing.words[index - 1];
+    return `[${stamp(first.start)}]${fragments.join("")}<${stamp(last.end)}>`;
+  }).join("\n");
+  return { ...entry, synced, generatedTimingApplied: true };
+}

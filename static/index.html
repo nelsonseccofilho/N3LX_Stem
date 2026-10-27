@@ -392,6 +392,8 @@
                   </svg>
                   <span data-i18n="click.grid">Grid</span>
                 </button>
+                <button class="click-toggle-btn" id="t-metro-preview" type="button" data-i18n="metro.preview">Testar outra grade</button>
+                <span id="metro-preview-status" class="metro-note warn" role="status"></span>
                 <div class="footer-seg metro-mult" role="radiogroup" aria-label="Click rate" data-i18n-aria-label="click.rateAria" title="Halve or double the click rate" data-i18n-title="click.rateTitle">
                   <button class="metro-mult-btn" id="t-metro-half" type="button" role="radio" aria-checked="false" title="Half time" data-i18n-title="click.half">/2</button>
                   <button class="metro-mult-btn active" id="t-metro-one" type="button" role="radio" aria-checked="true" title="Detected tempo" data-i18n-title="click.detected">1x</button>
@@ -782,6 +784,7 @@
                 </div>
               </dialog>
               <p id="cinemaEmpty" class="cinema-empty" hidden data-i18n="karaoke.cinemaNoTiming">Gere ou sincronize uma letra para acompanhar as linhas neste modo.</p>
+              <p id="cinemaUntimed" class="cinema-untimed-note" role="status" hidden data-i18n="karaoke.cinemaUntimed">Letra sem sincronização. Role para acompanhar; sincronize a letra para avançar automaticamente.</p>
               <p id="lyricsTimingNote" class="lyrics-note" role="status"></p>
               <p class="lyrics-note" data-i18n="lyrics.privacy">Taken from the file itself, or found on LRCLIB by the song this track was identified as. If neither has any and the setting allows it, they are transcribed locally from the vocals. Nothing else is sent.</p>
               <p class="lyrics-status" id="lyricsStatus" aria-live="polite"></p>
@@ -801,6 +804,7 @@
           <button id="karaokeCinemaExit" class="cinema-exit" type="button" data-i18n="karaoke.cinemaExit" hidden>Sair do cinema</button>
           <div class="karaoke-overview">
             <div class="karaoke-wave-head"><span data-i18n="karaoke.overview">Visão geral da música</span><span id="karaokeClock">00:00 / 00:00</span></div>
+            <div id="karaokeSections" class="karaoke-sections" role="list" aria-label="Song sections" data-i18n-aria-label="karaoke.sections" hidden></div>
             <canvas id="karaokeWave" role="slider" tabindex="0" aria-label="Posição na música" data-i18n-aria-label="karaoke.seek" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></canvas>
             <p id="karaokeWaveStatus" class="lyrics-note"></p>
           </div>
@@ -821,7 +825,24 @@
                 <span class="meta-card-label" data-i18n="meta.key">KEY</span>
                 <div class="meta-card-main">
                   <span class="meta-card-value" id="summary-key">—</span>
+                  <span class="meta-card-sub" id="summary-key-symbol" aria-label="Key symbol" data-i18n-aria-label="meta.keySymbol">—</span>
                   <div class="daw-camelot-ring hidden" id="summary-confidence"></div>
+                </div>
+              </div>
+
+              <div class="daw-meta-card" data-meta="chord">
+                <span class="meta-card-label" data-i18n="chords.label">ACORDE ESTIMADO</span>
+                <div class="meta-card-main">
+                  <span class="meta-card-value" id="summary-chord">—</span>
+                  <button type="button" class="lyrics-align-btn" id="chords-analyze" data-i18n="chords.analyze">Analisar</button>
+                </div>
+                <span class="meta-card-sub" id="chords-status" role="status"></span>
+              </div>
+
+              <div class="daw-meta-card" data-meta="meter">
+                <span class="meta-card-label" data-i18n="meta.meter">COMPASSO</span>
+                <div class="meta-card-main">
+                  <span class="meta-card-value" id="summary-meter">—</span>
                 </div>
               </div>
 

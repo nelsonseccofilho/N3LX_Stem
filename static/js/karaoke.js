@@ -2,6 +2,7 @@ import { getCurrentTrackInfo, setCatalogView } from "./catalog.js";
 import { setLyricsPresentation } from "./lyrics.js";
 import { transport, setPlayheadTime } from "./transport.js";
 import { t, onLanguageChange } from "./i18n.js";
+import { getSectionsSnapshot, sectionDisplayName } from "./sections.js";
 
 // A single visual envelope across the entire recording, derived from every
 // stem's peaks. This is an overview, not a second audio player or mix render.
@@ -61,8 +62,47 @@ export function initKaraoke() {
   });
   let active = false, trackId = null, duration = 0, peaks = [], frame = 0, request = 0;
   let controller = null, waveState = "", sidebarView = "library", lastSecond = -1;
+  const sectionHost = document.getElementById("karaokeSections");
+  let visibleSections = [], activeSection = -1;
   const fmt = (s) => `${Math.floor(Math.max(0, s) / 60)}:${String(Math.floor(Math.max(0, s) % 60)).padStart(2, "0")}`;
   const message = () => { document.getElementById("karaokeWaveStatus").textContent = waveState ? t(waveState) : ""; };
+  function renderSections() {
+    if (!sectionHost) return;
+    const snapshot = getSectionsSnapshot();
+    sectionHost.replaceChildren();
+    visibleSections = []; activeSection = -1;
+    if (!trackId || snapshot.trackId !== trackId || !(duration > 0)) {
+      sectionHost.hidden = true;
+      return;
+    }
+    const all = snapshot.sections;
+    for (const section of all) {
+      const start = Math.max(0, Number(section.start));
+      const end = Math.min(duration, Number(section.end));
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+      const label = sectionDisplayName(section, all);
+      const item = document.createElement("span");
+      item.className = "karaoke-section";
+      item.setAttribute("role", "listitem");
+      item.setAttribute("aria-label", label + ", " + fmt(start) + "–" + fmt(end));
+      item.title = label + " · " + fmt(start) + "–" + fmt(end);
+      item.textContent = label;
+      item.style.left = (start / duration * 100) + "%";
+      item.style.width = ((end - start) / duration * 100) + "%";
+      if (/^#[0-9a-f]{6}$/i.test(String(section.color || ""))) item.style.setProperty("--section-color", section.color);
+      sectionHost.append(item);
+      visibleSections.push({ start, end, element: item });
+    }
+    sectionHost.hidden = visibleSections.length === 0;
+  }
+  function markSection(time) {
+    const index = visibleSections.findIndex(s => time >= s.start && time < s.end);
+    if (index === activeSection) return;
+    if (visibleSections[activeSection]) visibleSections[activeSection].element.classList.remove("is-active");
+    activeSection = index;
+    if (visibleSections[index]) visibleSections[index].element.classList.add("is-active");
+  }
+  document.addEventListener("sectionschange", () => { if (active) renderSections(); });
   const draw = (time) => {
     const box = canvas.getBoundingClientRect(), scale = window.devicePixelRatio || 1;
     const width = Math.max(1, Math.round(box.width * scale)), height = Math.max(1, Math.round(box.height * scale));
@@ -85,6 +125,7 @@ export function initKaraoke() {
     const token = ++request;
     controller?.abort(); controller = new AbortController();
     trackId = info?.id ?? null; duration = info?.duration || 0; peaks = []; lastSecond = -1;
+    renderSections();
     canvas.setAttribute("aria-valuemax", String(duration));
     canvas.setAttribute("aria-disabled", String(!duration));
     waveState = info ? "karaoke.loadingWave" : "lyrics.noTrack"; message();
@@ -107,6 +148,7 @@ export function initKaraoke() {
     const info = getCurrentTrackInfo();
     if ((info?.id ?? null) !== trackId) load(info);
     const time = transport()?.getCurrentTime?.() || 0;
+    markSection(time);
     draw(time);
     if (Math.floor(time) !== lastSecond) {
       lastSecond = Math.floor(time);
@@ -166,5 +208,5 @@ export function initKaraoke() {
   new MutationObserver(availability).observe(app, { attributes: true, attributeFilter: ["class"] });
   availability();
   new ResizeObserver(() => { if (active) draw(transport()?.getCurrentTime?.() || 0); }).observe(canvas);
-  onLanguageChange(message);
+  onLanguageChange(() => { message(); if (active) renderSections(); });
 }

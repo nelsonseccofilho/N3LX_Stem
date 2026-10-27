@@ -13,7 +13,7 @@ import { addTrackToLibrary, setCurrentTrack, updateTrackStatus, applyStemPresenc
 import { initSections } from "./sections.js";
 import { importPlaylist, looksLikePlaylist } from "./playlist.js";
 import { t } from "./i18n.js";
-import { formatKey } from "./keyLabel.js";
+import { setAnalyzedKey } from "./analysisKey.js";
 
 // Playful stage label rotation (Claude-Code-style flair). The backend
 // emits truthful stage strings; we surface them in the small #job-detail
@@ -331,7 +331,7 @@ function applyStudioSummary(state) {
   const summaryLufs = document.getElementById("summary-lufs");
   const summaryPeak = document.getElementById("summary-peak");
   const summaryDuration = document.getElementById("summary-duration");
-  if (summaryKey && state.key) summaryKey.textContent = formatKey(state.key, state.scale, t);
+  if (summaryKey && state.key) setAnalyzedKey(state.key, state.scale);
   if (summaryBpm && state.bpm) summaryBpm.textContent = String(state.bpm);
   if (summaryLufs && state.lufs != null) summaryLufs.textContent = state.lufs.toFixed(1);
   if (summaryPeak && state.peak_db != null) summaryPeak.textContent = t("job.peakDb", { value: state.peak_db.toFixed(1) });

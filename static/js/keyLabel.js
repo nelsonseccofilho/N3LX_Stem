@@ -33,3 +33,25 @@ export function formatKey(key, scale, t) {
   if (!modeKey) return text;
   return t("key.label", { tonic, mode: t(modeKey) });
 }
+
+// Transpose only known chromatic tonics; leave analysis data unchanged.
+export function transposeKey(key, semitones) {
+  const text = String(key ?? "").trim();
+  if (!text) return "";
+  const match = /^([A-G])([#b♯♭]?)(.*)$/.exec(text);
+  if (!match || !Number.isInteger(semitones)) return semitones === 0 ? text : "";
+  const natural = { C:0, D:2, E:4, F:5, G:7, A:9, B:11 };
+  const accidental = match[2] === "#" || match[2] === "♯" ? 1 : match[2] === "b" || match[2] === "♭" ? -1 : 0;
+  const names = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
+  if (semitones === 0) return text;
+  return names[((natural[match[1]] + accidental + semitones) % 12 + 12) % 12] + match[3];
+}
+
+/** Chord-style shorthand for the detected tonic and major/minor mode. */
+export function keySymbol(key, scale) {
+  const match = /^([A-G][#b♯♭]?)\s+(maj|min)$/.exec(String(key ?? "").trim());
+  if (!match) return "";
+  const minor = scale === "Natural Minor" || scale === "Harmonic Minor" || (!scale && match[2] === "min");
+  const major = scale === "Major" || (!scale && match[2] === "maj");
+  return minor ? match[1] + "m" : major ? match[1] : "";
+}

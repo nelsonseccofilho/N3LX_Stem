@@ -69,3 +69,54 @@ def test_explicit_models_are_resolved_without_silent_downgrade(tmp_path, monkeyp
     with pytest.raises(HTTPException) as problem:
         k._configuration("../../other")
     assert problem.value.status_code == 422
+
+
+@pytest.mark.parametrize("outcome", ["done", "failed", "cancelled"])
+def test_regeneration_removes_old_result_before_worker_and_never_reuses_it(prepared, monkeypatch, outcome):
+    import asyncio
+    from pathlib import Path
+    from starlette.requests import Request
+    from tests.test_karaoke_service import _fake_timing
+    client, job, work = prepared
+    original = (work / "lyrics_timing.json").read_bytes()
+    preserved = {p: p.read_bytes() for p in [work / "lyrics.json", work / "stems/vocals.wav"]}
+    monkeypatch.setattr(k, "_configuration", lambda name: ("worker", Path("ggml-large-v3.bin"), "ffmpeg"))
+    def generate(*args, **kwargs):
+        assert not (work / "lyrics_timing.json").exists()
+        kwargs["phase_changed"]("transcribe")
+        if outcome == "failed":
+            raise k.KaraokeTimingError("synthetic failure")
+        return _fake_timing()
+    monkeypatch.setattr(k, "generate_timing", generate)
+    async def scenario():
+        monkeypatch.setattr(k, "_pipeline_lock", asyncio.Lock())
+        async def receive():
+            return {"type": "http.request", "body": b'{"replace": true, "model": "large-v3"}'}
+        request = Request({"type": "http", "headers": []}, receive)
+        response = await k.generate_karaoke(job.id, request)
+        assert response.status_code == 202
+        assert not (work / "lyrics_timing.json").exists()
+        status = k.karaoke_status(job.id)
+        assert status["state"] == "running" and status["phase"] == "queued"
+        assert status["available"] is False and status["elapsed_seconds"] >= 0
+        if outcome == "cancelled":
+            assert k.cancel_karaoke(job.id)["cancel_requested"]
+        await asyncio.gather(*list(k._active_tasks))
+    asyncio.run(scenario())
+    assert list(work.glob("lyrics_timing.regenerated-*.json"))[0].read_bytes() == original
+    assert all(p.read_bytes() == value for p, value in preserved.items())
+    status = k.karaoke_status(job.id)
+    assert status["state"] == {"cancelled": "idle"}.get(outcome, outcome)
+    assert status["available"] is (outcome == "done")
+    if outcome == "done":
+        assert json.loads((work / "lyrics_timing.json").read_text())["model"] == "large-v3"
+
+
+def test_regeneration_configuration_failure_keeps_existing_result(prepared, monkeypatch):
+    client, job, work = prepared
+    def unavailable(name):
+        raise HTTPException(503, "worker unavailable")
+    monkeypatch.setattr(k, "_configuration", unavailable)
+    assert client.post(f"/api/jobs/{job.id}/karaoke/generate", json={"replace": True, "model": "large-v3"}).status_code == 503
+    assert (work / "lyrics_timing.json").exists()
+    assert not list(work.glob("lyrics_timing.regenerated-*.json"))

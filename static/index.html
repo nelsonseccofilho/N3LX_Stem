@@ -736,6 +736,17 @@
                 <button id="lyricsCancelKaraokeBtn" class="lyrics-align-btn" type="button" data-i18n="karaoke.cancel" hidden>Cancelar</button>
               </div>
               <p id="lyricsGeneratorStatus" class="lyrics-note" role="status" aria-live="polite"></p>
+              <section id="karaokeProcessing" class="karaoke-processing" hidden aria-labelledby="karaokeProcessingTitle">
+                <div class="karaoke-processing-symbol" aria-hidden="true">▂ ▆ █ ▆ ▂</div>
+                <h3 id="karaokeProcessingTitle" data-i18n="karaokeTiming.processing">Generating your karaoke…</h3>
+                <strong id="karaokeProcessingTrack"></strong>
+                <p id="karaokeProcessingPhase" role="status" aria-live="polite"></p>
+                <progress data-i18n-aria-label="karaokeTiming.processing" aria-label="Generating karaoke"></progress>
+                <p id="karaokeProcessingElapsed"></p>
+                <ol id="karaokeProcessingSteps"></ol>
+                <p data-i18n="karaokeTiming.noPercent">This stage does not report a percentage. You can listen to another song while it runs.</p>
+                <button id="karaokeProcessingCancel" class="lyrics-align-btn" type="button" data-i18n="karaoke.cancel">Cancel</button>
+              </section>
               <div class="lyrics-generator-model">
                 <label for="lyricsKaraokeModel" data-i18n="karaokeTiming.model">Modelo de transcrição</label>
                 <select id="lyricsKaraokeModel">
@@ -743,7 +754,7 @@
                   <option value="medium" data-i18n="karaokeTiming.modelMedium">Whisper Medium · mais rápido</option>
                 </select>
                 <button id="lyricsRegenerateKaraokeBtn" class="lyrics-align-btn" type="button" data-i18n="karaokeTiming.regenerate" hidden>Gerar novamente</button>
-                <button id="lyricsDeleteKaraokeBtn" class="lyrics-align-btn" type="button" data-i18n="karaokeTiming.delete" hidden>Excluir karaokê gerado</button>
+                <button id="lyricsDeleteKaraokeBtn" class="lyrics-align-btn" type="button" data-i18n="karaokeTiming.delete" hidden>Excluir JSON do karaokê</button>
               </div>
               <details class="lyrics-advanced" id="lyricsAdvanced">
                 <summary data-i18n="karaokeTiming.advanced">Ajustes da letra</summary>

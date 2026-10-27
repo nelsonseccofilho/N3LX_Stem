@@ -4,9 +4,9 @@
 
 Aplicativo local derivado do [StemDeck](https://github.com/stemdeckapp/stemdeck), com adaptações para GPU AMD, biblioteca persistente, playlists e uma interface de estúdio.
 
-[**Baixar para Windows — rc.7 (ZIP)**](https://github.com/nelsonseccofilho/N3LX_Stem/releases/download/v0.21.0-rc.7/N3LX_Stem-Windows-Update-0.21.0-rc.7.zip) · [Notas da versão e SHA-256](https://github.com/nelsonseccofilho/N3LX_Stem/releases/tag/v0.21.0-rc.7) · [Como atualizar](#atualizar-uma-instalação-existente)
+[**Baixar para Windows — rc.8 (ZIP)**](https://github.com/nelsonseccofilho/N3LX_Stem/releases/download/v0.21.0-rc.8/N3LX_Stem-Windows-Update-0.21.0-rc.8.zip) · [Notas da versão e SHA-256](https://github.com/nelsonseccofilho/N3LX_Stem/releases/tag/v0.21.0-rc.8) · [Como atualizar](#atualizar-uma-instalação-existente)
 
-> **0.21.0-rc.7 é uma pré-release.** O download é um pacote de atualização que usa os ambientes AMD e modelos de uma instalação existente. A validação de instalação limpa em outro computador e a aceitação musical completa continuam pendentes.
+> **0.21.0-rc.8 é uma pré-release.** O download é um pacote de atualização que usa os ambientes AMD e modelos de uma instalação existente. A validação de instalação limpa em outro computador e a aceitação musical completa continuam pendentes.
 
 ![Estúdio N3LX_Stem no tema escuro, com biblioteca, PAN, controles de mixagem e formas de onda](docs/images/studio-dark.png)
 
@@ -21,16 +21,16 @@ Aplicativo local derivado do [StemDeck](https://github.com/stemdeckapp/stemdeck)
 
 ## Atualizar uma instalação existente
 
-1. [Baixe o ZIP da rc.7](https://github.com/nelsonseccofilho/N3LX_Stem/releases/download/v0.21.0-rc.7/N3LX_Stem-Windows-Update-0.21.0-rc.7.zip) e extraia **todo o conteúdo em uma pasta nova**, mantendo o executável, a pasta `resources` e os demais arquivos juntos.
+1. [Baixe o ZIP da rc.8](https://github.com/nelsonseccofilho/N3LX_Stem/releases/download/v0.21.0-rc.8/N3LX_Stem-Windows-Update-0.21.0-rc.8.zip) e extraia **todo o conteúdo em uma pasta nova**, mantendo o executável, a pasta `resources` e os demais arquivos juntos.
 2. Feche o aplicativo anterior e encerre seu servidor com **Stop-N3LX_Stem.cmd**, na instalação atual.
 3. Abra **N3LX_Stem.exe** na pasta extraída.
 4. Na primeira abertura, selecione a pasta da instalação AMD existente — aquela que contém `.venv`, `.venv-directml` e sua biblioteca `data`.
 
 O pacote reutiliza os ambientes, ferramentas, pesos e biblioteca dessa instalação. Os áudios, modelos e configurações pessoais não estão incluídos no download. Preserve sua instalação anterior para poder retornar a ela. Evite substituir um checkout com alterações locais sem revisá-las primeiro.
 
-Para conferir o arquivo, compare seu SHA-256 com o arquivo `.zip.sha256` disponível na [release](https://github.com/nelsonseccofilho/N3LX_Stem/releases/tag/v0.21.0-rc.7).
+Para conferir o arquivo, compare seu SHA-256 com o arquivo `.zip.sha256` disponível na [release](https://github.com/nelsonseccofilho/N3LX_Stem/releases/tag/v0.21.0-rc.8).
 
-A rc.7 reúne os ajustes do karaokê em um diálogo e oferece modo cinema em tela cheia escura com forma de onda e até três linhas sincronizadas. A rc.6 permite escolher português ou inglês no karaokê. Português usa WhisperGPU e alinhamento DirectML; inglês usa Whisper Vulkan com tempos por palavra, sem alinhamento avançado. Consulte [requisitos e validação](docs/KARAOKE_WHISPERGPU_RC5.md). A rc.4 reduz a largura dos controles de PAN e volume, mantendo o nome da pista acima do PAN. A rc.3 acrescentou uma tela de processamento do karaokê, com etapas reais, tempo decorrido e cancelamento. Gerar novamente retira o JSON anterior de uso antes de criar um novo; **Excluir JSON do karaokê** remove o resultado automático. Consulte a [validação desta correção](docs/KARAOKE_PROCESSING_RC3.md).
+A rc.8 mostra as seções no karaokê e no cinema, carrega letras salvas e oferece uma prévia reversível da grade de batidas. Os acordes estimados são experimentais e exigem o modelo opcional abaixo. A rc.7 reúne os ajustes do karaokê em um diálogo e oferece modo cinema em tela cheia escura com forma de onda e até três linhas sincronizadas. A rc.6 permite escolher português ou inglês no karaokê. Português usa WhisperGPU e alinhamento DirectML; inglês usa Whisper Vulkan com tempos por palavra, sem alinhamento avançado. Consulte [requisitos e validação](docs/KARAOKE_WHISPERGPU_RC5.md). A rc.4 reduz a largura dos controles de PAN e volume, mantendo o nome da pista acima do PAN. A rc.3 acrescentou uma tela de processamento do karaokê, com etapas reais, tempo decorrido e cancelamento. Gerar novamente retira o JSON anterior de uso antes de criar um novo; **Excluir JSON do karaokê** remove o resultado automático. Consulte a [validação desta correção](docs/KARAOKE_PROCESSING_RC3.md).
 
 ## O que você pode fazer
 
@@ -44,6 +44,12 @@ A rc.7 reúne os ajustes do karaokê em um diálogo e oferece modo cinema em tel
 | **Biblioteca e lixeira** | Organizar músicas, marcar favoritos, restaurar por botão e confirmar a exclusão definitiva pelo nome ou pela quantidade de itens. |
 | **Reextração** | Criar uma nova extração de uma música local concluída cuja fonte foi preservada, mantendo a versão anterior e suas referências. |
 | **Setlist e playlists** | Organizar a sequência de estudo ou ensaio e salvar uma mistura independente por música em cada playlist. |
+
+### Acordes estimados (experimental)
+
+A análise é opcional, realizada em CPU, e pode errar os acordes. Para habilitá-la, baixe **N3LX_Stem-ChordModel-0.21.0-rc.8.zip** na [release](https://github.com/nelsonseccofilho/N3LX_Stem/releases/tag/v0.21.0-rc.8) e extraia seu conteúdo dentro da pasta `data/models` da instalação existente. Ao final deve existir `data/models/lv-chordia-rrherr/lv_chordia/__init__.py`. O pacote inclui licença e origem do modelo.
+
+A grade de batidas e o compasso são estimativas; confira a prévia antes de usá-los. A prévia não substitui a grade salva.
 
 ### Playlists e reprodução
 
@@ -67,6 +73,7 @@ O desenvolvimento e os testes locais usam **Windows e AMD Radeon RX 6600M**. As 
 | Detalhamento de bateria — DrumSep | Tenta DirectML quando configurado; falhas podem usar a alternativa em CPU, com aviso. |
 | Voz principal e apoio — ONNX | Rota especializada em CPU na instalação documentada. |
 | Estimativas de guitarra — SAM Audio | Recurso opcional com ambiente AMD separado e pesos autorizados. |
+| Acordes estimados — LV-Chordia | Análise experimental opcional em CPU; requer o pacote de modelo separado. |
 | Transcrição do karaokê — whisper.cpp | Português: WhisperGPU e alinhador DirectML; CTC e algumas operações usam CPU. Inglês: Whisper Vulkan com tempos por palavra, sem o alinhador avançado. Large v3 e Medium são escolhas explícitas. |
 
 O dispositivo disponível e a configuração determinam a execução. O teste curto do Large v3 confirmou logs de Vulkan na RX 6600M e produziu tempos por palavra; a qualidade de uma música cantada completa ainda requer revisão. Consulte os relatórios antes de assumir compatibilidade com outra GPU ou desempenho equivalente.

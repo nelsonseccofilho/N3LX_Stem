@@ -368,7 +368,7 @@ function updateKaraokeProgress(value) {
     return;
   }
   document.getElementById("karaokeProcessingTrack").textContent = getCurrentTrackInfo()?.title || "";
-  const phases = ["queued", "prepare", "transcribe", "finalize"];
+  const phases = ["queued", "prepare", "transcribe", "align", "finalize"];
   const phase = phases.includes(karaokeProgress.phase) ? karaokeProgress.phase : "queued";
   document.getElementById("karaokeProcessingPhase").textContent = t(karaokeCancelRequested ? "karaokeTiming.canceling" : `karaokeTiming.phase.${phase}`);
   const elapsed = Math.max(0, Math.floor((karaokeProgress.elapsed_seconds || 0) + (Date.now() - karaokeProgressReceived) / 1000));

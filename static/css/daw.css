@@ -6940,3 +6940,8 @@ input, textarea { font-family: inherit; }
 
 .daw-info-row .meta-card-label { white-space:normal; overflow:visible; line-height:1.1; }
 #summary-key-symbol { font-size:clamp(12px,1vw,15px); color:var(--fg-2); }
+
+.daw-info-row { grid-template-columns:repeat(9,minmax(0,1fr)); }
+.daw-meta-card[data-meta="chord"] button { font-size:10px; padding:3px 6px; }
+#chords-status { font-size:10px; overflow-wrap:anywhere; }
+@media(max-width:1250px) { .daw-info-row { grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); } }

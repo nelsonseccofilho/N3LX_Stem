@@ -1,3 +1,4 @@
+import { refreshAnalysisChord } from "./analysisChords.js";
 import { mixerState, trackIndex } from "./state.js";
 import { isPercussion } from "./constants.js";
 import { formatKey, transposeKey, keySymbol } from "./keyLabel.js";
@@ -10,6 +11,7 @@ export function setAnalyzedKey(key, scale) {
   refreshAnalysisKey();
 }
 export function refreshAnalysisKey() {
+  refreshAnalysisChord();
   const node = document.getElementById("summary-key");
   if (!node) return;
   const names = Object.keys(trackIndex || {}).filter(name => name !== "original" && !isPercussion(name) && mixerState[name]);

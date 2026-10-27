@@ -1,3 +1,4 @@
+import { updateAnalysisChordTime } from "./analysisChords.js";
 import { updateAnalysisMeterTime } from "./analysisMeter.js";
 import { fmtTime, fmtTickLabel, fmtTimeMs, parseTimecode, storeGet, storeSet } from "./utils.js";
 import { MIN_LOOP_SEC, loopDragResult } from "./loopRegion.js";
@@ -158,6 +159,7 @@ export function buildRuler(durationSec) {
 
 export function updatePlayheadMarker(currentSec) {
   updateAnalysisMeterTime(currentSec);
+  updateAnalysisChordTime(currentSec);
   if (!playheadMarker || !totalDuration) return;
   const m = rulerTime.querySelector(".playhead-marker");
   if (m) {

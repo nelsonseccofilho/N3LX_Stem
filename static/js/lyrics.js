@@ -1921,7 +1921,13 @@ function tick() {
   const id = getCurrentTrackInfo()?.id ?? null;
   if (id !== shownTrackId) loadForCurrentTrack();
   const cinemaEmpty = document.getElementById("cinemaEmpty");
-  if (cinemaEmpty) cinemaEmpty.hidden = Boolean(lines.length && !provisional);
+  const cinemaUntimed = document.getElementById("cinemaUntimed");
+  const hasUntimed = Boolean(shownEntry?.plain?.trim() && (!lines.length || provisional));
+  const stage = document.getElementById("karaokeStage");
+  stage?.classList.toggle("cinema-untimed", hasUntimed);
+  if (cinemaEmpty) cinemaEmpty.hidden = Boolean((lines.length && !provisional) || hasUntimed);
+  if (cinemaUntimed) cinemaUntimed.hidden = !hasUntimed;
+  if (bodyEl) bodyEl.tabIndex = hasUntimed ? 0 : -1;
   if (lines.length && !provisional) {
     // 50ms ahead: a click on a line seeks to its exact stamp, and the time read
     // back can land a hair before it, which would mark the line above.

@@ -81,3 +81,14 @@ checks the installed Electron version against its pin, packages tracked source
 only, excludes private runtime/media, and verifies the ZIP plus SHA-256 manifest.
 Actual package launch evidence is recorded with the release assets after build.
 A UI smoke test does not prove real AMD separation or Vulkan inference quality.
+
+## Final release state
+
+The Windows executable was launched: packaged app and backend version 0.21.0-rc.1,
+verified instance identity, DirectML selected, Settings and Karaoke visible using
+a synthetic library. No real separation was run. The final package includes
+the additional narrow-window library drawer so waveforms retain usable width.
+
+GitHub Actions did not start any runner: the account is locked due to a billing
+issue (run 40434685551). No rerun was requested. Main merge remains pending;
+the verified Windows artifact is a prerelease candidate on the release branch.

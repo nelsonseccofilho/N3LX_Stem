@@ -6865,3 +6865,12 @@ input, textarea { font-family: inherit; }
  .daw-info-row, .stem-presence-panel { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
  .daw-meta-card[data-meta="key"], .stem-card[data-stem="vocals"] { grid-column: auto; }
 }
+/* On narrow windows the existing library becomes an overlay drawer. The
+   existing collapse action/state remains authoritative and keyboard reachable. */
+@media (max-width: 1000px) {
+  .app.daw .sidebar { width: var(--rail-w) !important; position: relative; overflow: visible; }
+  .app.daw .sidebar-rail { flex-shrink: 0; position: relative; z-index: 80; background: var(--bg-2); }
+  .app.daw .sidebar-body { position: absolute; left: var(--rail-w); top: 0; bottom: 0; width: 324px; box-sizing: border-box; z-index: 70; background: var(--bg-2); border-right: 1px solid var(--border); box-shadow: 10px 0 24px #0006; }
+  .app.daw .sidebar #processingPanel { position: absolute; left: calc(var(--rail-w) + 324px); top: 0; bottom: 0; z-index: 70; }
+  .app.daw.cat-collapsed .sidebar #processingPanel { left: var(--rail-w); }
+}

@@ -50,6 +50,17 @@ onLanguageChange(() => _render());
 
 // ─── Public API ───────────────────────────────────────────
 
+/** Read-only snapshot for the karaoke overview; does not expose mutable state. */
+export function getSectionsSnapshot() {
+  return { trackId: _trackId, duration: _duration, sections: _sections.map(s => ({ ...s })) };
+}
+
+function _notifySectionsChanged() {
+  if (typeof document !== "undefined" && typeof document.dispatchEvent === "function" && typeof CustomEvent !== "undefined") {
+    document.dispatchEvent(new CustomEvent("sectionschange"));
+  }
+}
+
 export function initSections(trackId, sections, duration) {
   _trackId = trackId;
   _duration = Math.max(1, duration || 0);
@@ -91,6 +102,7 @@ export function destroySections() {
   if (_container) _container.innerHTML = "";
   _container = null;
   _refreshClearVisibility();
+  _notifySectionsChanged();
 }
 
 // ─── Rendering ────────────────────────────────────────────
@@ -99,6 +111,7 @@ function _render() {
   // Before the container guard: the button lives in the header, not the
   // ribbon, so its state must stay correct even when the ribbon is absent.
   _refreshClearVisibility();
+  _notifySectionsChanged();
   if (!_container) return;
   _container.innerHTML = "";
 
@@ -635,6 +648,7 @@ function _hideSaveIndicator() {
 }
 
 function _scheduleSave() {
+  _notifySectionsChanged();
   clearTimeout(_saveTimer);
   _showSaving();
   _saveTimer = setTimeout(() => {

@@ -413,6 +413,7 @@ function updateKaraokeControls() {
     const activePreview = shownFrom === "preview" && shownEntry?.machinePreview;
     button.textContent = t(activePreview && karaokeBeforePreview ? "karaokeTiming.restore"
       : karaokeAvailable ? "karaokeTiming.view" : "karaokeTiming.generate");
+    button.hidden = same && karaokeAvailable && activePreview && !karaokeBeforePreview;
     button.disabled = !same || busy || (!karaokeAvailable && modelUnavailable) || (activePreview && !karaokeBeforePreview);
     button.setAttribute("aria-busy", String(same && karaokeRunning));
   }
@@ -1687,7 +1688,10 @@ function lookAgainButton() {
     const info = getCurrentTrackInfo();
     if (!info) return;
     await storeSet(storeKey(info.id), null);
-    loadForCurrentTrack();
+    if (getCurrentTrackInfo()?.id !== info.id) return;
+    const { song } = knownSong(info);
+    if (song) void lookUp(info, { song });
+    else setStatus(t("lyrics.nothingKnown"), "muted");
   });
   return again;
 }
@@ -1857,11 +1861,30 @@ async function loadForCurrentTrack() {
     show(saved.entry, Array.isArray(saved.others) ? saved.others : []);
     return;
   }
-  if (saved?.entry) {
-    // Kept by the tab before a lookup was held to the track's own song:
-    // another song's lyrics, dropped so the track is looked up again.
-    await storeSet(storeKey(info.id), null);
-    if (token !== loadToken) return;
+  // Preserve any rejected older match on disk. A local transcription can still
+  // be used without deleting the saved entry.
+
+  // A generated sidecar is local to this recording. Read it before any search
+  // and never let a slow response replace a newly opened editor or track.
+  try {
+    const response = await fetch(karaokeApi(info.id, "timing"), { cache: "no-store" });
+    if (token !== loadToken || getCurrentTrackInfo()?.id !== info.id) return;
+    if (response.ok) {
+      const timing = await response.json();
+      if (token !== loadToken || getCurrentTrackInfo()?.id !== info.id) return;
+      if (shownEntry || syncOpen || sync || document.getElementById("lyricsEditor")) return;
+      previewKaraoke(info.id, timing);
+      return;
+    }
+    if (response.status !== 404) {
+      setKaraokeMessage("karaokeTiming.failed", "error");
+      return;
+    }
+  } catch (err) {
+    if (token !== loadToken || getCurrentTrackInfo()?.id !== info.id) return;
+    console.warn("local karaoke load failed", err);
+    setKaraokeMessage("karaokeTiming.failed", "error");
+    return;
   }
 
   // What the server found while the track was separated. Shown, not saved:
@@ -1908,7 +1931,8 @@ async function loadForCurrentTrack() {
     showAnswer(answered.get(info.id));
     return;
   }
-  lookUp(info, { song });
+  setStatus(t("karaoke.localMissing"), "muted");
+  versionsEl.append(lookAgainButton());
 }
 
 // While the tab is on screen: notice a different track being opened, mark the
@@ -1990,7 +2014,7 @@ function setVisible(on) {
   // leaves it, and what it set is saved.
   if (!on) closeSync(false);
   if (on) {
-    loadForCurrentTrack();
+    if (!shownEntry || (getCurrentTrackInfo()?.id ?? null) !== shownTrackId) loadForCurrentTrack();
     if (!frame) frame = requestAnimationFrame(tick);
   } else if (frame) {
     cancelAnimationFrame(frame);

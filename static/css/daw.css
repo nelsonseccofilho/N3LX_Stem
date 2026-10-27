@@ -6911,7 +6911,7 @@ input, textarea { font-family: inherit; }
 #karaokeStage:fullscreen .lyrics-panel > :not(#lyricsBody):not(#cinemaEmpty) { display:none!important; }
 #karaokeStage:fullscreen .lyrics-body { display:grid; grid-template-rows:repeat(3,minmax(0,1fr)); align-items:center; padding:0; overflow:hidden; }
 #karaokeStage:fullscreen .lyrics-body::after { display:none; }
-#karaokeStage:fullscreen .lyrics-line,#karaokeStage:fullscreen .lyrics-text { display:none; }
+#karaokeStage:fullscreen .lyrics-line,#karaokeStage:fullscreen .lyrics-text { display:none; transition:none; }
 #karaokeStage:fullscreen .lyrics-line.previous,#karaokeStage:fullscreen .lyrics-line.current,#karaokeStage:fullscreen .lyrics-line.next { display:block; width:100%; text-align:center; overflow-wrap:anywhere; font-size:clamp(22px,3.2vw,54px); line-height:1.22; padding:8px; }
 #karaokeStage:fullscreen .lyrics-line.previous { grid-row:1; color:#8192a2; }
 #karaokeStage:fullscreen .lyrics-line.current { grid-row:2; color:#fff; background:transparent; box-shadow:none; }

@@ -1,8 +1,8 @@
 name: N3LX checks
+# Default release validation runs locally; see docs/LOCAL_RELEASE_VALIDATION.md.
+# Hosted execution is optional and requires an explicit manual dispatch.
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:

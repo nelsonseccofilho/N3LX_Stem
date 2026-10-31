@@ -43,7 +43,10 @@ def _aligned_copy(job: Job, source: Path, target: Path, info: sf._SoundFileInfo)
             samplerate=info.samplerate,
             channels=info.channels,
             format="WAV",
-            subtype="PCM_24",
+            # Detailed separator output can have finite peaks above 0 dBFS.
+            # Float WAV preserves those samples without saturating the audio.
+            # Matching the FLOAT residual is important for exact reconstruction.
+            subtype="FLOAT",
         ) as writer,
     ):
         if (reader.samplerate, reader.channels) != (info.samplerate, info.channels):
@@ -55,8 +58,6 @@ def _aligned_copy(job: Job, source: Path, target: Path, info: sf._SoundFileInfo)
             )
             if not np.isfinite(data).all():
                 raise ValueError("Detailed stem contains non-finite samples")
-            if np.max(np.abs(data), initial=0) >= 1:
-                raise ValueError("Detailed stem would clip in PCM24")
             writer.write(data)
 
 

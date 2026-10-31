@@ -1,7 +1,8 @@
 # N3LX_Stem 0.21.0-rc.4: guarded FLOAT hotfix + non-destructive re-extraction.
 # Stage 1: -Mode Patch; restart the application; Stage 2: -Mode Reextract.
+# Stage 3 (optional, after job finishes): -Mode Verify.
 param(
-    [ValidateSet('Patch', 'Reextract')] [string]$Mode = 'Patch',
+    [ValidateSet('Patch', 'Reextract', 'Verify')] [string]$Mode = 'Patch',
     [string]$InstallRoot = 'D:\git\N3LX_Stem-Releases\0.21.0-rc.4\N3LX_Stem-Windows-Update-0.21.0-rc.4',
     [string]$Server = 'http://127.0.0.1:8140'
 )
@@ -78,6 +79,28 @@ if ($Mode -eq 'Patch') {
 }
 if (-not $floatInstalled) {
     throw 'O patch FLOAT nao esta instalado. Execute -Mode Patch.'
+}
+if ($Mode -eq 'Verify') {
+    if (-not (Test-Path -LiteralPath $marker -PathType Leaf)) {
+        throw 'Ainda nao existe registro de nova reextracao submetida por este script.'
+    }
+    $submitted = Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json
+    $state = Invoke-RestMethod -Uri "$Server/api/jobs/$($submitted.new_job_id)" -Method Get
+    $parts = @($state.stems | Where-Object { $_.name -in @(
+        'drum_kick','drum_snare','drum_toms','drum_hh','drum_ride','drum_crash'
+    ) })
+    Write-Host "NEW_JOB_ID=$($submitted.new_job_id)"
+    Write-Host "STATUS=$($state.status)"
+    Write-Host "DRUM_PARTS=$($parts.Count)/6"
+    Write-Host "WARNINGS=$(@($state.separation_warnings) -join ' | ')"
+    if ($state.status -eq 'done' -and $parts.Count -eq 6) {
+        Write-Host 'FINAL_RESULT: RASTRO_DRUMS_RECOVERED_6_OF_6'
+    } elseif ($state.status -eq 'done') {
+        Write-Host 'FINAL_RESULT: RASTRO_REEXTRACTION_FINISHED_WITHOUT_SIX_DRUMS'
+    } else {
+        Write-Host 'FINAL_RESULT: RASTRO_REEXTRACTION_NOT_FINISHED'
+    }
+    return
 }
 if (Test-Path -LiteralPath $marker -PathType Leaf) {
     $already = Get-Content -LiteralPath $marker -Raw | ConvertFrom-Json

@@ -31,6 +31,7 @@ from app.core.registry import get as registry_get
 from app.core.settings import get_export_sample_rate
 from app.core.studio import DRUM_STEMS, STUDIO_NAMES, read_layout
 from app.pipeline.audio_stats import vocal_envelope
+from app.pipeline.residue_export import residue_groups, write_residue_archive
 from app.pipeline.click_render import cache_key as click_cache_key
 from app.pipeline.click_render import count_in_beats, render_click_wav, render_count_in_wav
 
@@ -1494,6 +1495,63 @@ def _build_stems_zip(
                 tail = proc.stderr[-2000:].decode("utf-8", "replace")
                 raise RuntimeError(f"ffmpeg failed for {name}: {tail}")
             zf.write(out, arcname=_arcname(prefix, name, fmt))
+
+
+@router.get("/jobs/{job_id}/residues.zip", response_model=None)
+async def get_consolidated_residues(job_id: str) -> FileResponse:
+    """Download three residue groups without changing the source track.
+
+    Missing categories become aligned silence. This is truthful: no vocal
+    residual is fabricated when a job never published that particular signal.
+    Independent exports are WAV FLOAT so peaks above 0 dBFS do not clip.
+    """
+    if not JOB_ID_RE.match(job_id):
+        raise HTTPException(status_code=404, detail="job not found")
+    job = registry_get(job_id)
+    if job is None or job.status != "done":
+        raise HTTPException(status_code=404, detail="job not ready")
+    if job.separation_profile != "complete":
+        raise HTTPException(status_code=409, detail="residue export requires complete separation")
+
+    root = JOBS_DIR.resolve()
+    stems_dir = (JOBS_DIR / job_id / "stems").resolve()
+    if not stems_dir.is_dir() or not stems_dir.is_relative_to(root):
+        raise HTTPException(status_code=404, detail="stems not found")
+    layout = read_layout(JOBS_DIR / job_id) or {}
+    if layout.get("profile") != "complete":
+        raise HTTPException(status_code=409, detail="complete layout is not available")
+    # studio.json is the atomic publication record: never include an orphan
+    # file just because it exists in stems/ or the original drum residue when
+    # the refined pair is now active.
+    published = set(layout.get("active_names", []))
+    groups = residue_groups(published)
+    if not any(groups.values()):
+        raise HTTPException(status_code=409, detail="no residuals published for this song")
+    for names in groups.values():
+        for name in names:
+            _validate_stem_path(job_id, name)
+
+    fd, output = tempfile.mkstemp(prefix="stemdeck_residues_", suffix=".zip")
+    os.close(fd)
+    archive = Path(output)
+    try:
+        await asyncio.to_thread(
+            write_residue_archive, stems_dir, archive, published, _title_slug(job.title)
+        )
+    except (ValueError, FileNotFoundError) as error:
+        archive.unlink(missing_ok=True)
+        raise HTTPException(status_code=409, detail=str(error)) from None
+    except Exception:
+        archive.unlink(missing_ok=True)
+        logger.exception("failed to export consolidated residues for job %s", job_id)
+        raise HTTPException(status_code=500, detail="failed to export residues") from None
+
+    return FileResponse(
+        archive,
+        media_type="application/zip",
+        filename=f"{_safe_title(job.title)}_residuos.zip",
+        background=BackgroundTask(lambda: archive.unlink(missing_ok=True)),
+    )
 
 
 @router.get("/jobs/{job_id}/stems/all.zip")

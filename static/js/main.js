@@ -6,7 +6,7 @@ import {
 } from "./state.js";
 import { STEM_NAMES, syncStemNamesFromAPI } from "./constants.js";
 import { refreshStemChoiceVisuals } from "./stemChoice.js";
-import { renderEmptyShell, buildStripStems, downloadCurrentMix, downloadCurrentVideo, downloadAllStemsZip, downloadRegionMix, drawFooterPlaceholder, regionDragPayload, stemRegionDragPayload, prewarmRegionMix } from "./player.js";
+import { renderEmptyShell, buildStripStems, downloadCurrentMix, downloadCurrentVideo, downloadAllStemsZip, downloadConsolidatedResiduesZip, downloadRegionMix, drawFooterPlaceholder, regionDragPayload, stemRegionDragPayload, prewarmRegionMix } from "./player.js";
 import { wireJobForm, showError } from "./job.js";
 import { initSearch } from "./search.js";
 import { wireTransportButtons } from "./transport.js";
@@ -498,12 +498,13 @@ function wireFooterControls() {
   const exportWrap = document.getElementById("footer-export-wrap");
   const itemMix    = document.getElementById("t-export-mix");
   const itemStems  = document.getElementById("t-export-stems");
+  const itemResidues = document.getElementById("t-export-residues");
   const itemRegion = document.getElementById("t-export-region");
   const mixDescEl  = itemMix?.querySelector(".chip-item-desc");
   // Only the rows actually visible in the current format mode (MP4 hides the
   // audio-only Stems/Region rows).
   const actionItems = () =>
-    [itemMix, itemStems, itemRegion].filter((it) => it && it.offsetParent !== null);
+    [itemMix, itemStems, itemResidues, itemRegion].filter((it) => it && it.offsetParent !== null);
 
   // MP4 is a format choice, shown only for jobs with a preserved video track.
   // It applies to the mix only — stems/region are audio-only.
@@ -569,7 +570,7 @@ function wireFooterControls() {
     // by the time this runs every row is hidden and a visibility-filtered clear
     // would clear nothing at all -- leaving the menu dead for the rest of the
     // session (#335).
-    for (const it of [itemMix, itemStems, itemRegion]) it?.removeAttribute("aria-disabled");
+    for (const it of [itemMix, itemStems, itemResidues, itemRegion]) it?.removeAttribute("aria-disabled");
     applyFormatState(); // re-derives the region row's genuine disabled state
   }
 
@@ -690,6 +691,14 @@ function wireFooterControls() {
     e.stopPropagation();
     if (itemStems.getAttribute("aria-disabled") === "true") return;
     runExport((onStart) => downloadAllStemsZip(format, onStart), t("export.noStems"));
+  });
+
+  // Three full-length residue groups are always WAV FLOAT, independent of the
+  // currently selected mix export format. Incomplete residue families are silent.
+  itemResidues?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (itemResidues.getAttribute("aria-disabled") === "true") return;
+    runExport((onStart) => downloadConsolidatedResiduesZip(onStart), t("export.noStems"));
   });
 
   // Keyboard: ↓ opens/moves into the menu, ↑/↓ cycle rows, Esc closes + restores focus.

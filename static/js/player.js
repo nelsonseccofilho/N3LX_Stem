@@ -2091,6 +2091,21 @@ export function downloadAllStemsZip(format = "wav", onTransferStart) {
   return _triggerDownload(`/api/jobs/${currentJobId}/stems/all.zip?${q}`, name, onTransferStart);
 }
 
+// Three non-overlapping, full-length residue groups. The backend uses WAV
+// FLOAT and writes silent tracks where no matching published residue exists.
+// This is deliberately independent of mixer gain, pitch and export format.
+export function downloadConsolidatedResiduesZip(onTransferStart) {
+  if (!currentJobId || !_currentStems.some((stem) => stem.name.startsWith("residual_") ||
+      stem.name === "drum_recovery")) return false;
+  const safe = _currentTitle
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/_{2,}/g, "_")
+    .slice(0, 80)
+    .replace(/^_+|_+$/g, "");
+  const name = safe ? `${safe}_residuos.zip` : "residuos.zip";
+  return _triggerDownload(`/api/jobs/${currentJobId}/residues.zip`, name, onTransferStart);
+}
+
 function _regionFilename(ext) {
   const safe = _currentTitle
     .replace(/[^a-zA-Z0-9]+/g, "_")

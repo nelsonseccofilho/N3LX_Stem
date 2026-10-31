@@ -35,7 +35,9 @@ def test_drum_detail_still_rejects_nonfinite_audio(tmp_path, monkeypatch):
     source = tmp_path / "drum_snare.wav"
     reference = tmp_path / "drums.wav"
 
-    sf.write(source, np.asarray([[0.1], [np.nan]], dtype=np.float32), 48000, subtype="FLOAT")
+    sf.write(
+        source, np.asarray([[0.1], [np.nan]], dtype=np.float32), 48000, subtype="FLOAT"
+    )
     sf.write(reference, np.zeros((2, 1), dtype=np.float32), 48000, subtype="FLOAT")
 
     with pytest.raises(ValueError, match="non-finite"):

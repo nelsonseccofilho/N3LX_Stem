@@ -136,8 +136,8 @@ if (-not ([string]$job.source_url).StartsWith('local:')) {
 }
 # Never start a duplicate if the user already pressed Reextrair in the app.
 $since = [DateTimeOffset]::new((Get-Item -LiteralPath $target).LastWriteTimeUtc).ToUnixTimeSeconds()
-$existing = @(Invoke-RestMethod -Uri "$Server/api/jobs?trashed=include" -Method Get |
-    Where-Object {
+$allJobs = @(Invoke-RestMethod -Uri "$Server/api/jobs?trashed=include" -Method Get)
+$existing = @($allJobs | Where-Object {
         $_.job_id -ne $jobId -and
         $_.created_at -ge $since -and
         ([string]$_.source_url).StartsWith("$($job.source_url) (")

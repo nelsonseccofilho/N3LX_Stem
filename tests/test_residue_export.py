@@ -1,5 +1,6 @@
 """No signal duplication in the three-residue export."""
 
+import io
 from zipfile import ZipFile
 
 import numpy as np
@@ -54,10 +55,14 @@ def test_archive_has_exactly_three_aligned_float_wavs(tmp_path):
 
     archive = tmp_path / "export.zip"
     originals = {p.name: p.read_bytes() for p in stems.iterdir()}
-    write_residue_archive(stems, archive, set(originals) | {
-        "residual_mix", "residual_guitar", "residual_drums",
-        "drum_recovery", "residual_drums_refined",
-    }, "faixa")
+    published = {
+        "residual_mix",
+        "residual_guitar",
+        "residual_drums",
+        "drum_recovery",
+        "residual_drums_refined",
+    }
+    write_residue_archive(stems, archive, published, "faixa")
 
     with ZipFile(archive) as zf:
         assert zf.namelist() == [
@@ -65,8 +70,6 @@ def test_archive_has_exactly_three_aligned_float_wavs(tmp_path):
             "faixa_residuos_musica.wav",
             "faixa_residuos_bateria.wav",
         ]
-        import io
-
         expected = [np.zeros_like(reference), sample_a + sample_b, drum_a + drum_b]
         for filename, values in zip(zf.namelist(), expected, strict=True):
             with sf.SoundFile(io.BytesIO(zf.read(filename))) as stream:
@@ -86,6 +89,4 @@ def test_export_rejects_mismatched_sample_grids(tmp_path):
     sf.write(stems / "drums.wav", np.zeros((8, 1)), 44100)
     sf.write(stems / "residual_mix.wav", np.zeros((7, 1)), 44100)
     with pytest.raises(ValueError, match="incompatible audio grids"):
-        write_residue_archive(
-            stems, tmp_path / "bad.zip", {"residual_mix"}, "song"
-        )
+        write_residue_archive(stems, tmp_path / "bad.zip", {"residual_mix"}, "song")

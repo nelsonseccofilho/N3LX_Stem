@@ -108,7 +108,7 @@ if ($original.job_id -ne $jobId -or $original.status -ne 'done' -or
     $original.separation_profile -ne 'complete' -or $config.separation_profile -ne 'complete') {
     throw 'A musica original deve estar concluida, e o perfil atual deve ser Completo.'
 }
-if (![string]$original.source_url -or !([string]$original.source_url).StartsWith('local:')) {
+if (-not ([string]$original.source_url) -or -not ([string]$original.source_url).StartsWith('local:')) {
     throw 'A musica veio de URL: este resplit automatico so suporta arquivo local retido.'
 }
 $all = @(Invoke-RestMethod "$server/api/jobs?trashed=include")
@@ -117,6 +117,12 @@ if ($existing.Count -gt 0) {
     Write-Host "EXISTING_JOB_ID=$($existing[0].job_id)"
     Write-Host 'FINAL_RESULT: RASTRO_REEXTRACTION_ALREADY_EXISTS'
     return
+}
+$parts = @($original.stems | Where-Object { $_.name -in @(
+    'drum_kick','drum_snare','drum_toms','drum_hh','drum_ride','drum_crash'
+) })
+if ($parts.Count -ne 0) {
+    throw "O estado da musica mudou: ja existem $($parts.Count) pecas de bateria. Nada enviado."
 }
 $new = Invoke-RestMethod -Uri "$server/api/jobs/$jobId/resplit" -Method Post -ContentType 'application/json' -Body '{"stems":["vocals","drums","bass","guitar","piano","other"]}'
 if ($new.job_id -notmatch '^[a-f0-9]{12}$' -or $new.job_id -eq $jobId) {

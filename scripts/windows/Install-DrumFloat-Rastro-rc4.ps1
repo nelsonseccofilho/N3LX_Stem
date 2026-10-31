@@ -93,6 +93,10 @@ $listener = @(Get-NetTCPConnection -State Listen -LocalPort $port.Port -ErrorAct
     Where-Object LocalAddress -eq '127.0.0.1')
 if ($listener.Count -ne 1) { throw 'Abra o N3LX_Stem na porta 8140.' }
 $backendProcess = Get-Process -Id $listener[0].OwningProcess -ErrorAction Stop
+$backendInfo = Get-CimInstance Win32_Process -Filter "ProcessId = $($listener[0].OwningProcess)"
+if (-not $backendInfo -or [string]$backendInfo.CommandLine -notlike "*$InstallRoot*") {
+    throw 'A porta 8140 nao pertence ao backend instalado que foi corrigido. Nada enviado.'
+}
 if ($backendProcess.StartTime -le (Get-Item -LiteralPath $target).LastWriteTime) {
     throw 'O backend nao foi reiniciado apos o patch. Feche/reabra o aplicativo.'
 }
@@ -106,6 +110,19 @@ if ($job.separation_profile -ne 'complete' -or $config.separation_profile -ne 'c
 }
 if (-not ([string]$job.source_url).StartsWith('local:')) {
     throw 'Fonte URL detectada. Evitando reimportacao que pode substituir a linha da Biblioteca.'
+}
+# Never start a duplicate if the user already pressed Reextrair in the app.
+$since = [DateTimeOffset]::new((Get-Item -LiteralPath $target).LastWriteTimeUtc).ToUnixTimeSeconds()
+$existing = @(Invoke-RestMethod -Uri "$Server/api/jobs?trashed=include" -Method Get |
+    Where-Object {
+        $_.job_id -ne $jobId -and
+        $_.created_at -ge $since -and
+        ([string]$_.source_url).StartsWith("$($job.source_url) (")
+    })
+if ($existing.Count -gt 0) {
+    Write-Host "EXISTING_REEXTRACTION_JOB=$($existing[0].job_id)"
+    Write-Host 'FINAL_RESULT: RASTRO_REEXTRACTION_ALREADY_IN_LIBRARY'
+    return
 }
 $drumParts = @($job.stems | Where-Object { $_.name -in @('drum_kick','drum_snare','drum_toms','drum_hh','drum_ride','drum_crash') })
 if ($drumParts.Count -eq 6) {

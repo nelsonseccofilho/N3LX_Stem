@@ -834,6 +834,9 @@ const en = {
   "export.mixing": "Exporting…",
   "export.allStems": "Export All Stems",
   "export.allStemsDesc": "All stems as a .zip",
+  "export.residues3": "Export 3 residues",
+  "export.residues3Desc": "Voices · Music · Drums (3 WAVs)",
+  "export.residues3Hint": "Three aligned float WAVs. Categories with no published residue are silent.",
   "export.currentRegion": "Export Current Region",
   "export.currentRegionDesc": "Export selected region",
 
@@ -1772,6 +1775,9 @@ const pl = {
   "export.mixing": "Eksportowanie…",
   "export.allStems": "Eksportuj wszystkie ścieżki",
   "export.allStemsDesc": "Wszystkie ścieżki jako .zip",
+  "export.residues3": "Eksportuj 3 pozostałości",
+  "export.residues3Desc": "Głos · Muzyka · Perkusja (3 WAV)",
+  "export.residues3Hint": "Trzy zsynchronizowane pliki WAV. Brakująca kategoria zawiera ciszę.",
   "export.currentRegion": "Eksportuj bieżący fragment",
   "export.currentRegionDesc": "Eksportuj zaznaczony fragment",
 
@@ -2659,6 +2665,9 @@ const ja = {
   "export.mixing": "エクスポート中…",
   "export.allStems": "全パートをエクスポート",
   "export.allStemsDesc": "全パートを.zipとして",
+  "export.residues3": "残差を3種類で書き出す",
+  "export.residues3Desc": "声・音楽・ドラム（WAV 3本）",
+  "export.residues3Hint": "長さの揃ったWAVを3本生成します。残差信号のないカテゴリは無音です。",
   "export.currentRegion": "現在の範囲をエクスポート",
   "export.currentRegionDesc": "選択した範囲をエクスポート",
 
@@ -3522,6 +3531,9 @@ const zhHans = {
   "export.mixing": "正在导出…",
   "export.allStems": "导出全部音轨",
   "export.allStemsDesc": "所有音轨打包为 .zip",
+  "export.residues3": "导出 3 类残余音轨",
+  "export.residues3Desc": "人声 · 音乐 · 鼓组（3 个 WAV）",
+  "export.residues3Hint": "生成三个对齐的 WAV 文件。没有残余信号的类别将保持静音。",
   "export.currentRegion": "导出当前区域",
   "export.currentRegionDesc": "导出所选区域",
 
@@ -4386,6 +4398,9 @@ const de = {
   "export.mixing": "Wird exportiert…",
   "export.allStems": "Alle Stems exportieren",
   "export.allStemsDesc": "Alle Stems als .zip",
+  "export.residues3": "3 Restsignale exportieren",
+  "export.residues3Desc": "Stimmen · Musik · Schlagzeug (3 WAVs)",
+  "export.residues3Hint": "Drei synchrone WAV-Dateien. Kategorien ohne vorhandenes Restsignal sind stumm.",
   "export.currentRegion": "Aktuellen Bereich exportieren",
   "export.currentRegionDesc": "Ausgewählten Bereich exportieren",
 
@@ -5448,6 +5463,9 @@ const pt = {
   "export.mixing": "Exportando…",
   "export.allStems": "Exportar todos os stems",
   "export.allStemsDesc": "Todos os stems como .zip",
+  "export.residues3": "Exportar 3 resíduos",
+  "export.residues3Desc": "Vozes · Música · Bateria (3 WAVs)",
+  "export.residues3Hint": "Três WAVs alinhados. Categorias sem resíduo publicado ficam silenciosas.",
   "export.currentRegion": "Exportar região atual",
   "export.currentRegionDesc": "Exportar região selecionada",
 
@@ -6366,6 +6384,9 @@ const id = {
   "export.mixing": "Mengekspor…",
   "export.allStems": "Ekspor Semua Stem",
   "export.allStemsDesc": "Semua stem sebagai .zip",
+  "export.residues3": "Ekspor 3 residu",
+  "export.residues3Desc": "Vokal · Musik · Drum (3 WAV)",
+  "export.residues3Hint": "Tiga berkas WAV selaras. Kategori tanpa residu akan hening.",
   "export.currentRegion": "Ekspor Wilayah Saat Ini",
   "export.currentRegionDesc": "Ekspor wilayah yang dipilih",
 
@@ -7230,6 +7251,9 @@ const fr = {
   "export.mixing": "Export en cours…",
   "export.allStems": "Exporter toutes les pistes",
   "export.allStemsDesc": "Toutes les pistes dans un .zip",
+  "export.residues3": "Exporter 3 résidus",
+  "export.residues3Desc": "Voix · Musique · Batterie (3 WAV)",
+  "export.residues3Hint": "Trois WAV synchronisés. Une catégorie sans résidu publié est silencieuse.",
   "export.currentRegion": "Exporter la région actuelle",
   "export.currentRegionDesc": "Exporter la région sélectionnée",
 
@@ -8278,6 +8302,9 @@ const es = {
   "export.mixing": "Exportando…",
   "export.allStems": "Exportar todos los stems",
   "export.allStemsDesc": "Todos los stems en un .zip",
+  "export.residues3": "Exportar 3 residuos",
+  "export.residues3Desc": "Voces · Música · Batería (3 WAV)",
+  "export.residues3Hint": "Tres WAV sincronizados. Las categorías sin residuos publicados quedan en silencio.",
   "export.currentRegion": "Exportar la región actual",
   "export.currentRegionDesc": "Exporta la región seleccionada",
 
@@ -9174,6 +9201,9 @@ const ko = {
   "export.mixing": "내보내는 중…",
   "export.allStems": "모든 스템 내보내기",
   "export.allStemsDesc": "모든 스템을 .zip 하나로",
+  "export.residues3": "잔여음 3종 내보내기",
+  "export.residues3Desc": "보컬 · 음악 · 드럼 (WAV 3개)",
+  "export.residues3Hint": "시간이 맞춰진 WAV 3개를 만듭니다. 해당 잔여음이 없으면 무음입니다.",
   "export.currentRegion": "선택 구간 내보내기",
   "export.currentRegionDesc": "선택한 구간을 내보내요",
 

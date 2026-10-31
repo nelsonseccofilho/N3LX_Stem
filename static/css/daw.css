@@ -3612,6 +3612,7 @@ input, textarea { font-family: inherit; }
 /* In MP4 mode only "Export Mix" applies — the audio-only Stems/Region rows
    are hidden. main.js toggles .fmt-mp4 on the panel. */
 #t-export-panel.fmt-mp4 #t-export-stems,
+#t-export-panel.fmt-mp4 #t-export-residues,
 #t-export-panel.fmt-mp4 #t-export-region { display: none; }
 
 /* ── About dialog ── */

@@ -23,6 +23,7 @@ PYTHON_TESTS = [
     "tests/test_complete_multitrack_local.py", "tests/test_processing_progress.py",
     "tests/test_ui_store.py", "tests/test_karaoke_timing.py",
     "tests/test_karaoke_service.py", "tests/test_karaoke_delete_model.py",
+    "tests/test_drum_float_alignment.py", "tests/test_residue_export.py",
 ]
 JS_TESTS = [
     "studio-lanes", "multitrack-playback", "wav-header", "audio-routing",

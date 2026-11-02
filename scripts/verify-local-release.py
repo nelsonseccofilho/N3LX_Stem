@@ -29,6 +29,7 @@ JS_TESTS = [
     "studio-lanes", "multitrack-playback", "wav-header", "audio-routing",
     "theme", "shared-ui-store", "karaoke-timing-ui", "karaoke",
     "processing-selection", "setlist", "song-setlist",
+    "desktop-backend-lifecycle",
 ]
 
 

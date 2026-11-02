@@ -56,7 +56,10 @@ async function ensureBackend(config) {
   await new Promise((resolve, reject) => {
     const args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path.join(root, "scripts", "Start-N3LX_Stem.ps1"), "-NoBrowser", "-Port", String(port), "-RuntimeRoot", config.runtime, "-DataDir", config.data];
     const child = spawn("powershell.exe", args, { cwd: root, windowsHide: true,
-      env: { ...process.env, STEMDECK_INSTANCE_TOKEN: instance } });
+      // The Python server watches this Electron PID and exits when the window closes.
+      // Do not attach lifecycle ownership to a server we did not spawn.
+      env: { ...process.env, STEMDECK_INSTANCE_TOKEN: instance,
+        STEMDECK_DESKTOP: "1", STEMDECK_PARENT_PID: String(process.pid) } });
     const log = fs.createWriteStream(path.join(logs, "desktop-start.log"), { flags: "a" });
     child.stdout.pipe(log, { end: false }); child.stderr.pipe(log, { end: false });
     const timer = setTimeout(() => { child.kill(); reject(new Error("Tempo de abertura excedido. Consulte o diagnÃ³stico.")); }, 150000);

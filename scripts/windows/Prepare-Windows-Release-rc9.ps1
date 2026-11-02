@@ -12,7 +12,9 @@ $branch = 'release/v0.21.0-rc.9'
 $baseSha = '1ca88e17d37ecf72e932cecd0a0570ae5949ed98'
 $allowedChanges = @(
     'desktop-app/package.json',
+    'desktop-app/main.cjs',
     'scripts/verify-local-release.py',
+    'tests/js/desktop-backend-lifecycle.test.mjs',
     'scripts/windows/Prepare-Windows-Release-rc9.ps1'
 )
 function Assert-Exit([string]$step) {

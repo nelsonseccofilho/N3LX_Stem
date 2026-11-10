@@ -314,18 +314,32 @@ def _run_command(
 
 
 def aligned_worker_resources() -> tuple[Path, Path]:
-    """Use the already-installed NELX worker; never download or fall back."""
-    root = Path(os.environ.get("N3LX_WHISPER_GPU_HOME", str(Path.home() / "NELX-Whisper-GPU"))).expanduser().resolve()
-    python = root / "venv" / "Scripts" / "python.exe"
-    script = root / "transcrever_gpu.py"
-    required = (python, script, root / "alinhamento_directml.py",
+    """Locate the existing NELX worker; no downloads or implicit GPU fallback.
+
+    The current workspace layout has the transcriber under src/ and its own
+    Python environment in _workspace/venvs. The legacy DirectML worker is
+    supported only when all of its original prerequisites still exist.
+    """
+    shared = Path(os.environ.get("N3LX_SHARED_WORKSPACE",
+                                str(Path.home() / "Git" / "_workspace"))).expanduser().resolve()
+    root = Path(os.environ.get("N3LX_WHISPER_GPU_HOME",
+                               str(shared.parent / "NELX-Whisper-GPU"))).expanduser().resolve()
+    python = Path(os.environ.get("N3LX_WHISPER_GPU_PYTHON",
+                                str(shared / "venvs" / "whispergpu" / "Scripts" / "python.exe"))).expanduser().resolve()
+    worker = root / "src" / "transcrever_gpu.py"
+    if python.is_file() and worker.is_file():
+        return python, worker
+
+    legacy_python = root / "venv" / "Scripts" / "python.exe"
+    legacy_worker = root / "transcrever_gpu.py"
+    required = (legacy_python, legacy_worker, root / "alinhamento_directml.py",
                 root / "alinhamento_directml_worker.py",
                 root / "experimentos" / "diarizacao-directml" / "venv" / "Scripts" / "python.exe",
                 root / "experimentos" / "alinhamento-directml" / "modelo" / "onnx" / "model.onnx",
                 root / "experimentos" / "alinhamento-directml" / "modelo" / "vocab.json")
-    if not all(path.is_file() for path in required):
-        raise KaraokeTimingError("WhisperGPU alignment environment not configured")
-    return python, script
+    if all(path.is_file() for path in required):
+        return legacy_python, legacy_worker
+    raise KaraokeTimingError("WhisperGPU worker or alignment environment not configured")
 
 
 def _terminate_worker_tree(proc: subprocess.Popen) -> None:
@@ -414,17 +428,20 @@ def generate_timing(
         raise KaraokeTimingError("unsupported karaoke language")
     python, worker = aligned_worker_resources()
     model_name = model.stem.removeprefix("ggml-")
-    if model_name not in {"large-v3", "medium"}:
-        raise KaraokeTimingError("unsupported Whisper model")
+    if model_name != "large-v3":
+        raise KaraokeTimingError("only Whisper Large v3 is supported")
     with tempfile.TemporaryDirectory(prefix="n3lx-whispergpu-") as tmp:
         output = Path(tmp)
         logfile = output / "worker.log"
+        modern = worker.parent.name == "src"
         command = [str(python), str(worker), str(audio), "--model", model_name,
                    "--whisper-model", str(model), "--whisper-cli", cli,
                    "--device", "vulkan", "--gpu", "0", "--language", "pt",
-                   "--threads", "6", "--no-diarize", "--no-preload-align",
-                   "--output-format", "json", "--output-profile", "quality",
-                   "--output-dir", str(output)]
+                   "--threads", "6", "--no-diarize",
+                   "--output-format", "json", "--output-dir", str(output)]
+        if not modern:
+            # Legacy DirectML worker accepts these two extra options.
+            command += ["--no-preload-align", "--output-profile", "quality"]
         env = os.environ.copy()
         env.update({"HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1",
                     "HF_HUB_DISABLE_TELEMETRY": "1", "PYTHONIOENCODING": "utf-8",
@@ -465,17 +482,18 @@ def generate_timing(
             report = json.loads(reports[0].read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
             raise KaraokeTimingError("WhisperGPU returned unreadable JSON") from exc
+        alignment = "cpu" if modern else "onnx_directml_confirmado"
         if (report.get("etapas", {}).get("alinhamento") != "ok" or
-            report.get("backend_alinhamento") != "onnx_directml_confirmado" or
+            report.get("backend_alinhamento") != alignment or
             report.get("gpu_reconhecimento") != "vulkan_confirmado_pelo_log"):
-            raise KaraokeTimingError("Vulkan recognition or DirectML alignment not verified")
+            raise KaraokeTimingError("Vulkan recognition or selected alignment not verified")
         if phase_changed:
             phase_changed("finalize")
         timing = normalize_timing(result)
         timing["lrc_preview"] = enhanced_lrc(timing["words"])
         timing["requested_device"] = "vulkan_device_0"
         timing["gpu_verified"] = True
-        timing["alignment_backend"] = "onnx_directml_confirmado"
+        timing["alignment_backend"] = alignment
         timing["alignment_alerts"] = report.get("total_alertas")
         return timing
 

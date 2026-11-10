@@ -39,10 +39,29 @@ function GitBlob([string]$file) {
     if ($LASTEXITCODE -ne 0) { throw "Falha verificando hash Git: $file" }
     return $actual
 }
+function NormalizedGitBlob([string]$file) {
+    # A Windows clone may have CRLF while the GitHub blob uses LF.
+    # Allow ONLY that line-ending difference; reject content changes.
+    $bytes = [IO.File]::ReadAllBytes($file)
+    $normalized = [Text.Encoding]::UTF8.GetBytes(
+        ([Text.Encoding]::UTF8.GetString($bytes)).Replace("`r`n", "`n")
+    )
+    $header = [Text.Encoding]::ASCII.GetBytes("blob $($normalized.Length)`0")
+    $payload = New-Object byte[] ($header.Length + $normalized.Length)
+    [Array]::Copy($header, 0, $payload, 0, $header.Length)
+    [Array]::Copy($normalized, 0, $payload, $header.Length, $normalized.Length)
+    $sha = [Security.Cryptography.SHA1]::Create()
+    try {
+        return ([BitConverter]::ToString($sha.ComputeHash($payload))).Replace('-', '').ToLowerInvariant()
+    } finally { $sha.Dispose() }
+}
 foreach ($f in $files) {
     $target = Join-Path $backend ($f.path.Replace('/', '\'))
     if (-not (Test-Path -LiteralPath $target -PathType Leaf)) { throw "Arquivo do pacote ausente: $($f.path)" }
-    if ((GitBlob $target) -ne $f.old) { throw "Arquivo do pacote alterado: $($f.path). Nao sobrescrever." }
+    $exact = GitBlob $target
+    if ($exact -ne $f.old -and (NormalizedGitBlob $target) -ne $f.old) {
+        throw "Arquivo do pacote alterado: $($f.path). Nao sobrescrever."
+    }
 }
 $backup = Join-Path $GitRoot ('_workspace\qa\n3lx-karaoke-rc9-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 $staging = Join-Path $backup 'staged'

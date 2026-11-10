@@ -18,13 +18,23 @@ $env:PYTHONIOENCODING = 'utf-8'
 $env:STEMDECK_SEPARATION_PROFILE = 'complete'
 $env:STEMDECK_SEPARATION_QUALITY = 'best'
 $env:STEMDECK_PERSIST_LIBRARY = '1'
+# Shared tools live alongside N3LX_Stem, not inside its Git checkout.
+# Explicit user overrides always win; never install or move shared models here.
+$gitRoot = Split-Path $RuntimeRoot -Parent
+$shared = Join-Path $gitRoot '_workspace'
 if (-not $env:N3LX_WHISPER_CLI) {
-    $env:N3LX_WHISPER_CLI = Join-Path $RuntimeRoot 'tools\whisper.cpp\whisper-cli.exe'
-    if (-not (Test-Path -LiteralPath $env:N3LX_WHISPER_CLI)) { $env:N3LX_WHISPER_CLI = Join-Path $env:USERPROFILE 'whisper.cpp\build-vulkan\bin\Release\whisper-cli.exe' }
+    $env:N3LX_WHISPER_CLI = Join-Path $shared 'tools\whisper.cpp\build-vulkan-nmake\bin\whisper-cli.exe'
+    if (-not (Test-Path -LiteralPath $env:N3LX_WHISPER_CLI)) { $env:N3LX_WHISPER_CLI = Join-Path $RuntimeRoot 'tools\whisper.cpp\whisper-cli.exe' }
 }
-if (-not $env:N3LX_WHISPER_MODEL) {
-    $env:N3LX_WHISPER_MODEL = Join-Path $RuntimeRoot 'tools\whisper.cpp\ggml-large-v3.bin'
-    if (-not (Test-Path -LiteralPath $env:N3LX_WHISPER_MODEL)) { $env:N3LX_WHISPER_MODEL = Join-Path $env:USERPROFILE 'whisper.cpp\models\ggml-large-v3.bin' }
+if (-not $env:N3LX_WHISPER_LARGE_MODEL) {
+    $env:N3LX_WHISPER_LARGE_MODEL = Join-Path $shared 'models\ggml-large-v3.bin'
+}
+if (-not $env:N3LX_WHISPER_MODEL) { $env:N3LX_WHISPER_MODEL = $env:N3LX_WHISPER_LARGE_MODEL }
+if (-not $env:N3LX_WHISPER_GPU_HOME) {
+    $env:N3LX_WHISPER_GPU_HOME = Join-Path $gitRoot 'NELX-Whisper-GPU'
+}
+if (-not $env:N3LX_WHISPER_GPU_PYTHON) {
+    $env:N3LX_WHISPER_GPU_PYTHON = Join-Path $shared 'venvs\whispergpu\Scripts\python.exe'
 }
 if (-not $env:STEMDECK_SAM_SOURCE) { $env:STEMDECK_SAM_SOURCE = Join-Path (Split-Path $RuntimeRoot -Parent) 'sam-audio-amd' }
 $env:STEMDECK_FFMPEG = (Get-Command ffmpeg.exe -ErrorAction Stop).Source

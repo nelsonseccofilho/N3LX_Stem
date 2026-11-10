@@ -405,9 +405,9 @@ function updateKaraokeControls() {
   const same = Boolean(info?.id && info.id === karaokeTrackId);
   const busy = karaokeRunning || karaokeDeleting;
   const languageCode = document.getElementById("lyricsKaraokeLanguage")?.value || "pt";
-  const modelUnavailable = Boolean(karaokeLanguageModels && !(karaokeLanguageModels[languageCode] || []).includes("large-v3"));
+  const modelUnavailable = !karaokeLanguageModels || !(karaokeLanguageModels[languageCode] || []).includes("large-v3");
   const unavailable = document.getElementById("karaokeModelUnavailable");
-  if (unavailable) unavailable.hidden = !same || !modelUnavailable;
+  if (unavailable) unavailable.hidden = !same || !karaokeLanguageModels || !modelUnavailable;
   const button = document.getElementById("lyricsGenerateKaraokeBtn");
   if (button) {
     const activePreview = shownFrom === "preview" && shownEntry?.machinePreview;

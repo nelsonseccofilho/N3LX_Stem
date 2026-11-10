@@ -404,8 +404,8 @@ function updateKaraokeControls() {
   const info = getCurrentTrackInfo();
   const same = Boolean(info?.id && info.id === karaokeTrackId);
   const busy = karaokeRunning || karaokeDeleting;
-  const selectedModel = document.getElementById("lyricsKaraokeModel");
-  const modelUnavailable = Boolean(karaokeLanguageModels && selectedModel?.selectedOptions[0]?.disabled);
+  const languageCode = document.getElementById("lyricsKaraokeLanguage")?.value || "pt";
+  const modelUnavailable = Boolean(karaokeLanguageModels && !(karaokeLanguageModels[languageCode] || []).includes("large-v3"));
   const unavailable = document.getElementById("karaokeModelUnavailable");
   if (unavailable) unavailable.hidden = !same || !modelUnavailable;
   const button = document.getElementById("lyricsGenerateKaraokeBtn");
@@ -471,12 +471,8 @@ async function fetchKaraokeStatus(trackId) {
 }
 
 function updateKaraokeModels() {
-  const language = document.getElementById("lyricsKaraokeLanguage")?.value || "pt";
-  const select = document.getElementById("lyricsKaraokeModel");
-  if (!select || !karaokeLanguageModels) return;
-  const available = karaokeLanguageModels[language] || [];
-  for (const option of select.options) option.disabled = !available.includes(option.value);
-  updateKaraokeControls();
+  // Large v3 is the only karaoke model; readiness is per language.
+  if (karaokeLanguageModels) updateKaraokeControls();
 }
 
 async function inspectKaraokeStatus(trackId, token) {
@@ -600,7 +596,7 @@ async function generateKaraoke({ replace = false } = {}) {
   try {
     const res = await fetch(karaokeApi(trackId, "generate"), {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ replace, model: document.getElementById("lyricsKaraokeModel")?.value || "large-v3", language }),
+      body: JSON.stringify({ replace, model: "large-v3", language }),
     });
     if (!res.ok) {
       // A sidecar from another session may have appeared since we last checked.

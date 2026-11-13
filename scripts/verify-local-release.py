@@ -23,11 +23,13 @@ PYTHON_TESTS = [
     "tests/test_complete_multitrack_local.py", "tests/test_processing_progress.py",
     "tests/test_ui_store.py", "tests/test_karaoke_timing.py",
     "tests/test_karaoke_service.py", "tests/test_karaoke_delete_model.py",
+    "tests/test_karaoke_workspace_large_v3.py", "tests/test_stems_location.py",
 ]
 JS_TESTS = [
     "studio-lanes", "multitrack-playback", "wav-header", "audio-routing",
     "theme", "shared-ui-store", "karaoke-timing-ui", "karaoke",
     "processing-selection", "setlist", "song-setlist",
+    "desktop-storage-paths",
 ]
 
 

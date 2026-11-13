@@ -52,6 +52,15 @@ This is **not a complete backup**: untracked source files are listed but not
 copied. Preserve them separately before any destructive Git operation.
 No music, stems, data folders, GPU models, installs, local worktree files or
 existing releases are modified. Do not upload the private patch to GitHub.
+**Comparison correction (cycle 4, 13 Nov 2026):** the first inventory
+reported 98 overlapping paths because it measured the candidate against the
+local HEAD `a7c1515`, which is 69 commits behind remote main. Those 98 paths
+are NOT verified conflicts. The revised inspector fetches remote main metadata,
+compares only `remote-main..rc.10` for candidate-specific changes, and reports
+older main-history overlaps separately. It also includes root build/config
+paths when cataloging source. A second, new private report is intentional; the
+first report remains unchanged. Neither report is a complete backup.
+
 A zero-overlap list does not prove functional equivalence; review all local
 commits and uncommitted changes against rc.10 before signing off completeness.
 

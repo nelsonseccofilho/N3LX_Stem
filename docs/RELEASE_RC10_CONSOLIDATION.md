@@ -64,6 +64,20 @@ first report remains unchanged. Neither report is a complete backup.
 A zero-overlap list does not prove functional equivalence; review all local
 commits and uncommitted changes against rc.10 before signing off completeness.
 
+### Cycle 5 correction — PowerShell Git wrapper
+
+The first local checkpoint attempt stopped with `failed (exit 1); no retry`
+before generating a verified checkpoint. Root cause in the source: the
+`Git-Lines` helper mistakenly used `$Args` as a named parameter even
+though `$args` is a PowerShell automatic variable. Git therefore received
+an empty command; the earlier error did not identify the Git arguments.
+
+The helper now uses `$GitArguments` and explicitly rejects missing command
+arguments. Re-download the **fixed, exact commit** before the next execution.
+The original failed attempt is **not** a verified source backup, and no
+Windows execution or success is claimed for the fix. Do not repeat inventory
+or patch generation.
+
 ## Cycle 5 — protect local source before reconciliation
 
 The corrected inventory run from 13 Nov showed: 49 modified tracked source

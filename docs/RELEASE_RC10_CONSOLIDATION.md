@@ -270,6 +270,41 @@ functional parity and release gates remain open** until the bounded rc.10
 test suite, Windows desktop smoke test, AMD/Vulkan karaoke, 6-drum/3-residue
 exports and library data-preservation checks pass.
 
+## Cycle 12 — Windows QA and packaging preflight
+
+The 98-file private checkpoint was protected, and all 20 additional
+non-equivalent source copies received a structural/focused review. A concrete
+word-timing regression was fixed and its focused test was added. **That
+review is not evidence that Windows runtime or existing music data passed.**
+
+The packaging helper `scripts/build-windows-update.py` now explicitly
+closes opened streams after hashing all package files and the ZIP, avoiding
+dangling Windows file handles (commit `5a93605`).
+
+To start the first full QA gate, obtain
+`scripts/windows/Prepare-Windows-Release-rc10.ps1` from an exact pinned
+`release/v0.21.0-rc.10` commit, store it **outside** the dirty checkout,
+verify the Git blob hash, and run it once with `-ExpectedSha`. The existing
+checkout remains dirty and untouched; the script fetches branch objects,
+creates a unique detached worktree under `N3LX_Stem-Releases`, performs one
+bounded CPU/synthetic Python+Node regression pass and packages the Windows
+update from tracked files with installed Electron 44.3.0, without installing
+dependencies or opening the user's music library.
+
+The *preflight* ends in
+`PREFLIGHT_PASS_RUNTIME_QA_PENDING` **only** when the unit gate, ZIP member
+list, metadata and ZIP checksum all match that exact commit. Any failure
+must stop and be inspected once, not retried in a loop. The resulting
+`local-QA/RESULT.md`, `local-QA/summary.json`, and
+`release-preflight.json` are local evidence. Their existence alone is
+not a pass; check status and SHA.
+
+The preflight does **not** launch the packaged EXE against the user's
+real library or perform AMD GPU inference, six-drum real extraction,
+three-residue sonic QA, or custom-drive export tests. Keep the PR in Draft;
+no merge, tag, new installation, cleanup, library migration or published
+release is authorized by package preflight alone.
+
 ## Build and QA gate
 
 1. Confirm the checkout has an existing compatible Python 3.12 .venv and

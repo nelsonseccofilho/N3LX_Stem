@@ -49,6 +49,14 @@ if (typeof ipcMain.handle === "function") {
    configured: Boolean(saved),
   };
  });
+ ipcMain.handle("n3lx:storage-choose-stems", async event => {
+  if (event.sender !== win?.webContents) throw new Error("Unauthorized window");
+  const result = await dialog.showOpenDialog(win, {
+   title: "Selecione uma pasta vazia para a biblioteca multitrack",
+   properties: ["openDirectory", "createDirectory"],
+  });
+  return result.canceled ? null : (result.filePaths?.[0] || null);
+ });
  ipcMain.handle("n3lx:storage-choose-exports", async event => {
   if (event.sender !== win?.webContents) throw new Error("Unauthorized window");
   const result = await dialog.showOpenDialog(win, {

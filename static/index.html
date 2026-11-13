@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="/css/waves.css" />
     <link rel="stylesheet" href="/css/daw.css" />
     <link rel="stylesheet" href="/css/themes.css" />
+    <link rel="stylesheet" href="/css/storageSettings.css" />
   </head>
   <body>
 
@@ -1364,8 +1365,33 @@
 
     <!-- First, so its handlers are installed before main.js is evaluated and
          can report a failure to parse, resolve an import, or wire the UI. -->
+    <!-- Desktop storage preferences. Changing an existing stems library is
+         intentionally disabled until verified migration QA is complete. -->
+    <dialog id="storageSettingsDialog" class="storage-settings-dialog" aria-labelledby="storageSettingsTitle">
+      <div class="storage-settings-top">
+        <h2 id="storageSettingsTitle" data-i18n="storage.title">Armazenamento</h2>
+        <button id="storageSettingsClose" class="storage-settings-action" type="button" data-i18n="storage.close">Fechar</button>
+      </div>
+      <section class="storage-settings-group" aria-labelledby="storageStemsLabel">
+        <h3 id="storageStemsLabel" data-i18n="storage.stemsTitle">Biblioteca multitrack</h3>
+        <p data-i18n="storage.stemsHelp">Músicas separadas, stems, projetos e seus metadados. Ficam fora da instalação.</p>
+        <output id="storageStemsPath" class="storage-settings-path">—</output>
+        <button id="storageStemsChange" class="storage-settings-action" type="button" disabled data-i18n="storage.change">Alterar pasta</button>
+        <p id="storageStemsNote" class="storage-settings-note" role="status"></p>
+      </section>
+      <section class="storage-settings-group" aria-labelledby="storageExportsLabel">
+        <h3 id="storageExportsLabel" data-i18n="storage.exportsTitle">Exportações</h3>
+        <p data-i18n="storage.exportsHelp">Pasta sugerida para salvar WAV, ZIP, mixagens e loops. Você ainda pode escolher outro destino ao exportar.</p>
+        <output id="storageExportsPath" class="storage-settings-path">—</output>
+        <button id="storageExportsChange" class="storage-settings-action" type="button" disabled data-i18n="storage.change">Alterar pasta</button>
+        <p id="storageExportsNote" class="storage-settings-note" role="status"></p>
+      </section>
+      <p id="storageSettingsStatus" class="storage-settings-note" role="status" aria-live="polite"></p>
+    </dialog>
+
     <script type="module" src="/js/boot-diagnostics.js"></script>
     <script type="module" src="/js/main.js"></script>
     <script type="module" src="/js/ui-chrome.js"></script>
+    <script type="module" src="/js/storageSettings.js"></script>
   </body>
 </html>

@@ -1,0 +1,43 @@
+/* Storage is a compact, self-contained modal; never overflows short desktop windows. */
+.storage-settings-dialog {
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(82vh, 680px);
+  overflow-y: auto;
+  margin: auto;
+  border: 1px solid var(--border, #3d454f);
+  border-radius: 14px;
+  padding: 24px;
+  color: var(--text, #eee);
+  background: var(--bg, #161b23);
+  box-shadow: 0 20px 70px #0009;
+}
+.storage-settings-dialog::backdrop { background: #000a; }
+.storage-settings-top {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; margin-bottom: 18px;
+}
+.storage-settings-top h2 { font-size: 20px; line-height: 1.3; margin: 0; }
+.storage-settings-group {
+  border-top: 1px solid var(--border, #343b46);
+  padding: 18px 0; display: flex; flex-direction: column;
+  align-items: flex-start; gap: 10px;
+}
+.storage-settings-group h3 { margin: 0; font-size: 15px; }
+.storage-settings-group p { margin: 0; font-size: 13px; color: var(--muted, #aab2c0); line-height: 1.5; }
+.storage-settings-group .storage-settings-path {
+  box-sizing: border-box; display: block; width: 100%;
+  padding: 10px 12px; word-break: break-all;
+  border: 1px solid var(--border, #343b46); border-radius: 6px;
+  font-family: ui-monospace, Consolas, monospace; font-size: 12px;
+  color: var(--text, #eee);
+}
+.storage-settings-dialog .storage-settings-action {
+  border: 1px solid var(--border, #485364); border-radius: 6px;
+  background: transparent; color: inherit; cursor: pointer;
+  font: inherit; font-size: 13px; padding: 8px 12px;
+}
+.storage-settings-dialog .storage-settings-action:disabled {
+  cursor: not-allowed; opacity: .48;
+}
+.storage-settings-dialog .storage-settings-action:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.storage-settings-dialog .storage-settings-note { margin: 0; font-size: 12px; line-height: 1.5; color: var(--muted, #aab2c0); }

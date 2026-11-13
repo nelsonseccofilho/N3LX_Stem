@@ -58,8 +58,11 @@ def _configuration(model_name: str | None = None, language: str = "pt") -> tuple
                   or os.environ.get("N3LX_WHISPER_MODEL")
                   or str(Path.home() / "Git" / "_workspace" / "models" / "ggml-large-v3.bin"))
     model = Path(model_path).expanduser()
-    if not cli or not shutil.which(cli) or not model.is_file():
-        raise HTTPException(status_code=503, detail="Vulkan Whisper worker not configured")
+    # The legacy generic variable can still point to ggml-medium.bin. A
+    # request for Large v3 must never silently run another model.
+    if (not cli or not shutil.which(cli) or not model.is_file()
+            or model.name.casefold() != "ggml-large-v3.bin"):
+        raise HTTPException(status_code=503, detail="Vulkan Whisper Large v3 worker not configured")
     if language not in {"pt", "en"}:
         raise HTTPException(status_code=422, detail="unsupported karaoke language")
     if language == "pt":

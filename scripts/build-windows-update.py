@@ -73,7 +73,8 @@ def build(source: Path, installation: Path, output: Path) -> Path:
     hashes = {}
     for file in sorted(package.rglob("*")):
         if file.is_file():
-            hashes[file.relative_to(package).as_posix()] = hashlib.file_digest(file.open("rb"), "sha256").hexdigest()
+            with file.open("rb") as stream:
+                hashes[file.relative_to(package).as_posix()] = hashlib.file_digest(stream, "sha256").hexdigest()
     manifest = package / "sha256-manifest.json"
     manifest.write_text(json.dumps(hashes, indent=2), encoding="utf-8")
     archive = output / (package.name + ".zip")
@@ -81,7 +82,8 @@ def build(source: Path, installation: Path, output: Path) -> Path:
         for file in sorted(package.rglob("*")):
             if file.is_file():
                 z.write(file, file.relative_to(output))
-    digest = hashlib.file_digest(archive.open("rb"), "sha256").hexdigest()
+    with archive.open("rb") as stream:
+        digest = hashlib.file_digest(stream, "sha256").hexdigest()
     archive.with_suffix(".zip.sha256").write_text(f"{digest}  {archive.name}\n", encoding="utf-8")
     with zipfile.ZipFile(archive) as z:
         if z.testzip() is not None:

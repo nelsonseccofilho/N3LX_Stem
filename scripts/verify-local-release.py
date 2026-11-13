@@ -24,12 +24,14 @@ PYTHON_TESTS = [
     "tests/test_ui_store.py", "tests/test_karaoke_timing.py",
     "tests/test_karaoke_service.py", "tests/test_karaoke_delete_model.py",
     "tests/test_karaoke_workspace_large_v3.py", "tests/test_stems_location.py",
+    "tests/test_drum_float_alignment.py", "tests/test_residue_export.py",
 ]
 JS_TESTS = [
     "studio-lanes", "multitrack-playback", "wav-header", "audio-routing",
     "theme", "shared-ui-store", "karaoke-timing-ui", "karaoke",
     "processing-selection", "setlist", "song-setlist",
     "desktop-storage-paths",
+    "desktop-backend-lifecycle",
 ]
 
 
@@ -93,7 +95,8 @@ def main():
         run("javascript-tests", [options.node, "--test", *[f"tests/js/{name}.test.mjs" for name in JS_TESTS]], timeout=180)
         result["javascript_files"] = len(JS_TESTS)
         for source in ("desktop-app/main.cjs", "desktop-app/preload.cjs", "static/js/theme.js",
-                       "static/js/themeBoot.js", "static/js/confirmAction.js", "static/js/catalog.js", "static/js/lyrics.js"):
+                       "static/js/themeBoot.js", "static/js/confirmAction.js", "static/js/catalog.js", "static/js/lyrics.js",
+                       "static/js/storageSettings.js", "static/js/i18n.js"):
             run("syntax-" + Path(source).stem, [options.node, "--check", source])
         if git(root, "rev-parse", "HEAD") != revision:
             raise RuntimeError("HEAD changed during validation; results cannot authorize a different revision.")

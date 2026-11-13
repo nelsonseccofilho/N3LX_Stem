@@ -5,10 +5,12 @@ import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 // Execute the real Electron entry point with inert OS/Electron doubles.
 // No server, library, window, GPU or process is actually started.
-const entry = fs.readFileSync(new URL("../../desktop-app/main.cjs", import.meta.url), "utf8");
+const entryPath = fileURLToPath(new URL("../../desktop-app/main.cjs", import.meta.url));
+const entry = fs.readFileSync(entryPath, "utf8");
 
 async function launch({ existingBackend = null } = {}) {
   const pid = 48321;
@@ -96,6 +98,8 @@ async function launch({ existingBackend = null } = {}) {
     return health ? { ok: true, json: async () => health } : { ok: false };
   };
   vm.runInNewContext(entry, {
+    // CommonJS supplies __dirname in production; vm sandboxes must supply it explicitly.
+    __dirname: path.dirname(entryPath),
     require(name) {
       if (name === "electron") return fakes.electron;
       if (name === "node:fs") return fakes.fs;

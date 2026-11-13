@@ -226,6 +226,50 @@ equivalence and both-sides-changed classification. The test
 release suite. Do not infer a successful Windows invocation or user-data
 inspection from this fixture.
 
+## Cycle 11 — private 20-file source parity review (13 Nov 2026)
+
+The owner supplied `rc10-parity-20-private.tar.gz`, containing exactly the
+**20 `PENDING_OTHER_FILES` copies** from the already verified 98-file source
+checkpoint. They are not included in the repository and were **not** uploaded
+to the public PR. Their contents were inspected in a private analysis
+environment. Static syntax checks passed on **18 Python/JavaScript files**
+(README and CSS excluded).
+
+The review compared the source structure and selected behavior of the private
+copies against candidate `911903017f02cd47e325d68eb385408e4f332182`.
+The existing named module functions were retained in the candidate's
+backend, catalog, mixer, player, transport, section, karaoke and
+processing modules; there was no evidence requiring the wholesale replacement
+of the candidate with the older local source. This **does not** prove full
+internal semantic parity for the larger UI/CSS/backend files.
+
+| Surface | Files | Findings or remaining QA |
+| --- | --- | --- |
+| Import, multitrack and export | `app/api/router.py`, `app/api/stems.py`, `app/pipeline/complete_multitrack.py` | Core 6-piece drum and reconstruction residual functions remain; candidate adds a dedicated three-residue ZIP endpoint and routes. Test against synthesized source and a representative real song later. |
+| Playback and interaction | `static/js/main.js`, `player.js`, `mixer.js`, `transport.js`, `sections.js` | Named existing controls remain, with additional residue export, metronome preview and karaoke section snapshot. Test transport timing, solo/mute, edits and export paths in Windows. |
+| Library and data | `static/js/catalog.js`, `job.js`, `sharedUiStore.js` | Existing public functions remain, including resplit target, playlist and settings. Confirm stored library contents, export destination and recovery without migrating the user's data. |
+| Karaoke, header, processing | `static/js/headerReextract.js`, `karaoke.js`, `karaokeTiming.js`, `lyricsEditing.js`, `processingStudio.js` | Candidate improves localized reextract staging/disabled checks, fullscreen and section display, and protection against stale generated timestamps; processing errors use a generic message with diagnostics in Settings rather than displaying raw errors inline. Validate interactive states. |
+| UI, documentation and tests | `static/css/daw.css`, `README.md`, `tests/js/karaoke-timing-ui.test.mjs`, `tests/test_karaoke_timing.py` | CSS requires rendered UI smoke checks; tests retained and extended. README is updated candidate documentation, not a reason to replace app code. |
+
+**Functional hardening found during review:** in
+`timingForMatchingEditedLyrics` the candidate previously accepted a manual
+lyric that matched only a *prefix* of the generated Whisper words. The code
+claimed exact, in-order alignment, but a missing final word would still
+receive generated timing. Now all word counts must match before applying
+machine timestamps to edited text. Added regression assertions for full
+matches, missing words, and changed words in
+`tests/js/karaoke-timing-ui.test.mjs`; original manual text is preserved.
+Commits: `935ca6c` (fix) and `6727654` (test). These new test assertions
+are committed but **full candidate tests were not executed on the owner's
+Windows installation yet**.
+
+No dirty checkout contents, music, models, playlists or private archive were
+committed, moved or deleted. No automatic bulk merge is needed based on
+the structural comparison alone. **Final status: structural parity reviewed;
+functional parity and release gates remain open** until the bounded rc.10
+test suite, Windows desktop smoke test, AMD/Vulkan karaoke, 6-drum/3-residue
+exports and library data-preservation checks pass.
+
 ## Build and QA gate
 
 1. Confirm the checkout has an existing compatible Python 3.12 .venv and

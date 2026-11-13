@@ -151,6 +151,35 @@ candidate SHA. Do not treat `AUTO_MERGE_PREVIEW_ONLY` as proof that the
 combined behavior works. No results can be claimed until the user's actual
 Windows run is inspected. The final `rc.10` branch remains draft.
 
+## Cycle 9 — restore existing automatic lyrics lookup
+
+The private rc.10 reconciliation review found one concrete change in
+`static/js/lyrics.js`: when no saved, karaoke sidecar, server-provided or
+embedded lyrics existed, the older local application automatically requested
+a lookup; the candidate required the user to press the search button.
+
+The existing workflow is restored on the rc.10 draft branch, without
+overwriting edits or bypassing karaoke/sidecar precedence:
+- An eligible missing-lyrics track triggers `lookUp(info, { song })`
+  after all local and server sources have been checked
+- An empty search result leaves the **manual retry** button available
+- Cached empty results do not initiate another automatic lookup
+- Existing protections still prevent searching unknown song metadata
+
+Added `tests/js/lyrics-auto-lookup-rc10.test.mjs` and included it in the
+`scripts/verify-local-release.py` bounded JS suite. Eight mocked,
+network-free cases were run in an isolated environment against the
+candidate source: **baseline 5 passed / 3 failed**; corrected version
+**8 passed / 0 failed**, with JS syntax validated. The patched source's
+Git blob hash was cross-checked against the committed file.
+
+These checks are not Windows app, LRCLIB network, Electron, AMD/Vulkan,
+GPU or full-package QA. The change deliberately preserves prior product
+behavior pending a separately validated decision to make lookups manual.
+The source checkpoint remains private; 91 other local source files were
+not fully reconciled by the seven-path review. Do not merge or publish the
+draft release until remaining functional parity and release gates pass.
+
 ## Build and QA gate
 
 1. Confirm the checkout has an existing compatible Python 3.12 .venv and

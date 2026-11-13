@@ -32,6 +32,7 @@ JS_TESTS = [
     "processing-selection", "setlist", "song-setlist",
     "desktop-storage-paths",
     "desktop-backend-lifecycle",
+    "lyrics-auto-lookup-rc10",
 ]
 
 

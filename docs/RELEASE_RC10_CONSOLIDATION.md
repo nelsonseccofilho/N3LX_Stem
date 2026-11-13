@@ -340,6 +340,38 @@ full preflight; do not rerun the old `d54bb0e` test suite or overwrite the
 old failed report. Retain earlier detached worktree and private evidence
 until final approval; no cleanup of user data is authorized.
 
+## Cycle 12.2 — JavaScript Electron VM test failures (13 Nov 2026)
+
+At pinned candidate `32f1a33d6a9213ce3fb57fc16d0827f23a20c7fb`, the
+second real Windows preflight passed the Python/Node version checks,
+Git diff check and the full `pytest` suite. It stopped at
+`javascript-tests FAIL (exit 1)`. The private Node TAP log reported
+**22 tests, 20 passed, 2 failed**, specifically:
+- `desktop-backend-lifecycle.test.mjs`: `__dirname is not defined`
+- `desktop-storage-paths.test.mjs`: `__dirname is not defined`
+
+Both tests invoke the actual `desktop-app/main.cjs` inside
+`vm.runInNewContext` with fake OS and Electron dependencies. Under a real
+Node/Electron CommonJS module wrapper, `__dirname` is provided
+automatically. Their VM contexts omitted it. The missing value caused
+tests to fail when the real entry point constructed its preload path;
+this does **not** establish an Electron runtime defect.
+
+**Correction confined to tests, not the application:** both VM tests
+now resolve `main.cjs` through `fileURLToPath`, load that source by its
+real filesystem path, and inject `__dirname: path.dirname(entryPath)` into
+the sandbox. Commits: `d980d0b` (lifecycle) and `c20cc05`
+(storage paths). The existing release test list includes both files.
+
+These changes were checked statically against the committed GitHub files,
+but **their new Windows result has not yet been observed**. Next run only
+the two failing JavaScript test files from a new detached worktree pinned to
+the amended rc.10 HEAD. On pass, run the complete bounded preflight
+*once* for the same final pinned SHA; do not rerun the old failed gate
+or overwrite reports. Prior Python PASS does not by itself authorize
+release. No packaged EXE, actual AMD/Vulkan inference, user music library
+or export run was tested in the failed preflight. The PR remains Draft.
+
 ## Build and QA gate
 
 1. Confirm the checkout has an existing compatible Python 3.12 .venv and

@@ -29,6 +29,29 @@ Source base: main 1ca88e17d37ecf72e932cecd0a0570ae5949ed98.
 - No proven Windows ML inference, GPU alignment performance, singing-quality
   accuracy, packaged EXE smoke test, or publicly accessible rc.10 release.
 
+## Read-only local checkout review (required before claiming completeness)
+
+Before running the Windows package preflight, inspect the dirty checkout without
+checking out, resetting, stashing, cleaning or moving files. From PowerShell,
+use the script committed at the **reviewed, exact rc.10 SHA**:
+
+```powershell
+& "$HOME\Git\N3LX_Stem\scripts\windows\Inspect-Local-Checkout-rc10.ps1" `
+  -Repository "$HOME\Git\N3LX_Stem" `
+  -ExpectedSha "<40-character-reviewed-rc10-SHA>"
+```
+
+The inspector fetches branch metadata, verifies the exact SHA and common
+ancestor, inventories tracked/untracked source changes and identifies paths
+also modified by rc.10. It writes a unique **private local** report containing
+`inventory.json`, `RESULT.md` and a patch of modified **tracked source** files.
+This is **not a complete backup**: untracked source files are listed but not
+copied. Preserve them separately before any destructive Git operation.
+No music, stems, data folders, GPU models, installs, local worktree files or
+existing releases are modified. Do not upload the private patch to GitHub.
+A zero-overlap list does not prove functional equivalence; review all local
+commits and uncommitted changes against rc.10 before signing off completeness.
+
 ## Build and QA gate
 
 1. Confirm the checkout has an existing compatible Python 3.12 .venv and

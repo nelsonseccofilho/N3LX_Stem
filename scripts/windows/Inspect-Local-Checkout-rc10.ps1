@@ -38,10 +38,19 @@ Assert-Git 'Resolve candidate'
 if ($candidateSha -ne $ExpectedSha) {
     throw "Candidate changed: found $candidateSha, expected $ExpectedSha. Review the new SHA before continuing."
 }
+# The release-specific delta must be measured against its own remote main,
+# NOT against the older local HEAD. Otherwise old main commits appear as
+# candidate changes and inflate the apparent conflicts.
+& git -C $Repository fetch --no-tags origin 'refs/heads/main'
+Assert-Git 'Fetch remote main metadata'
+$remoteMainSha = (& git -C $Repository rev-parse FETCH_HEAD).Trim()
+Assert-Git 'Resolve remote main'
+& git -C $Repository merge-base --is-ancestor $remoteMainSha $candidateSha
+Assert-Git 'Ensure candidate is based on reviewed remote main'
 $localSha = (& git -C $Repository rev-parse HEAD).Trim()
 Assert-Git 'Read local HEAD'
-$mergeBase = (& git -C $Repository merge-base HEAD $candidateSha).Trim()
-Assert-Git 'Find common ancestor'
+$mergeBase = (& git -C $Repository merge-base $localSha $remoteMainSha).Trim()
+Assert-Git 'Find local/remote-main common ancestor'
 $localBranch = (& git -C $Repository branch --show-current).Trim()
 Assert-Git 'Read local branch'
 
@@ -58,11 +67,18 @@ $sourcePaths = @(
 $dirtyTracked = @(Git-Lines (@('diff', '--name-only', 'HEAD', '--') + $sourcePaths))
 $untracked = @(Git-Lines (@('ls-files', '--others', '--exclude-standard', '--') + $sourcePaths))
 $localCommitted = @(Git-Lines (@('diff', '--name-only', $mergeBase, 'HEAD', '--') + $sourcePaths))
-$candidateChanged = @(Git-Lines (@('diff', '--name-only', $mergeBase, $candidateSha, '--') + $sourcePaths))
+# Candidate-only changes, excluding all commits that were already in main.
+$candidateChanged = @(Git-Lines (@('diff', '--name-only', $remoteMainSha, $candidateSha, '--') + $sourcePaths))
+$remoteMainUpdates = @(Git-Lines (@('diff', '--name-only', $mergeBase, $remoteMainSha, '--') + $sourcePaths))
 $localAll = @(($dirtyTracked + $localCommitted + $untracked) | Sort-Object -Unique)
 $candidateLookup = @{}
 foreach ($name in $candidateChanged) { $candidateLookup[$name] = $true }
 $overlap = @($localAll | Where-Object { $candidateLookup.ContainsKey($_) } | Sort-Object -Unique)
+# Additional possible overlap with already-merged main updates is reported
+# separately; it is not a PR #24/rc.10-specific conflict count.
+$mainLookup = @{}
+foreach ($name in $remoteMainUpdates) { $mainLookup[$name] = $true }
+$mainOverlap = @($localAll | Where-Object { $mainLookup.ContainsKey($_) } | Sort-Object -Unique)
 
 # This is a private local report, never a branch commit or cloud upload.
 # --output asks Git to write raw patch bytes (no PowerShell re-encoding).
@@ -78,13 +94,19 @@ $summary = [ordered]@{
     purpose = 'Inventory and tracked-source-only patch; NOT a complete backup'
     candidate_branch = $branch
     candidate_sha = $candidateSha
+    remote_main_sha = $remoteMainSha
     local_branch = $localBranch
     local_head = $localSha
+    local_remote_main_merge_base = $mergeBase
     merge_base = $mergeBase
     dirty_tracked_source_files = $dirtyTracked
     untracked_source_files_not_backed_up = $untracked
     committed_local_source_files_since_merge_base = $localCommitted
+    candidate_source_files_since_remote_main = $candidateChanged
     candidate_source_files_since_merge_base = $candidateChanged
+    remote_main_updated_files_since_local_common_ancestor = $remoteMainUpdates
+    overlapping_rc10_specific_source_files_requiring_review = $overlap
+    overlapping_remote_main_history_source_files = $mainOverlap
     overlapping_source_files_requiring_review = $overlap
     tracked_patch_file = 'tracked-source-changes.patch'
     private_library_accessed = $false
@@ -96,14 +118,16 @@ $lines = @(
     '# rc.10 local checkout review'
     ''
     "Candidate: $candidateSha"
+    "Remote main: $remoteMainSha"
     "Local HEAD: $localSha ($localBranch)"
-    "Common ancestor: $mergeBase"
+    "Local/main common ancestor: $mergeBase"
     ''
     "Dirty tracked source files: $($dirtyTracked.Count)"
     "Untracked source files (not backed up): $($untracked.Count)"
     "Locally committed source files since common ancestor: $($localCommitted.Count)"
-    "Candidate source files since common ancestor: $($candidateChanged.Count)"
-    "Files requiring reconciliation review: $($overlap.Count)"
+    "Candidate-specific source files vs remote main: $($candidateChanged.Count)"
+    "POSSIBLE rc.10-specific overlapping paths: $($overlap.Count)"
+    "Overlaps with older remote-main updates (separate): $($mainOverlap.Count)"
     ''
     'The tracked-source patch is local only. Untracked source files are NOT'
     'backed up by this tool. Do not reset/clean/stash or replace the checkout'
@@ -116,6 +140,9 @@ Write-Host "CANDIDATE: $candidateSha"
 Write-Host "LOCAL_HEAD: $localSha"
 Write-Host "DIRTY_TRACKED: $($dirtyTracked.Count)"
 Write-Host "UNTRACKED_NOT_BACKED_UP: $($untracked.Count)"
-Write-Host "OVERLAPPING_PATHS: $($overlap.Count)"
+Write-Host "REMOTE_MAIN: $remoteMainSha"
+Write-Host "RC10_SPECIFIC_CHANGED: $($candidateChanged.Count)"
+Write-Host "RC10_SPECIFIC_OVERLAP: $($overlap.Count)"
+Write-Host "MAIN_HISTORY_OVERLAP: $($mainOverlap.Count)"
 Write-Host "REPORT: $report"
-Write-Host 'STOP: review the local report and untracked source files before package QA, merge, release, or cleanup.'
+Write-Host 'STOP: overlaps are possible same-path edits, not proven merge conflicts. Review local source and untracked files before package QA, merge, release, or cleanup.'

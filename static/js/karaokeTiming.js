@@ -66,7 +66,7 @@ export function timingForMatchingEditedLyrics(entry, timing) {
   const words = lines.flatMap(line => line.split(/\s+/));
   const normal = value => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
-  if (!words.length || words.length > timing.words.length ||
+  if (!words.length || words.length !== timing.words.length ||
       words.some((word, i) => /[<>\[\]]/.test(word) || !normal(word) ||
         normal(word) !== normal(timing.words[i].text))) return null;
   let index = 0;

@@ -305,6 +305,41 @@ three-residue sonic QA, or custom-drive export tests. Keep the PR in Draft;
 no merge, tag, new installation, cleanup, library migration or published
 release is authorized by package preflight alone.
 
+## Cycle 12.1 — first Windows preflight pytest failure and focused repair
+
+The owner's first pinned preflight at `d54bb0e8fc0280955cba9c010a8547a54a15b6a4`
+created an isolated detached worktree and passed Python/Node version checks
+and Git diff-check, then **stopped at pytest exit 1**. The complete actual
+test result was **121 passed, 1 skipped, 1 failed**; the failing test was
+`tests/test_karaoke_delete_model.py::test_explicit_models_are_resolved_without_silent_downgrade`.
+No JavaScript QA, Windows package, EXE, real model inference or music-library
+test occurred in that run. The script stopped without any retry.
+
+**Root cause:** the test still expected the former `medium` support and
+assumed a Large v3 file created alongside an explicitly configured
+`N3LX_WHISPER_MODEL=ggml-medium.bin` would be auto-discovered. The rc.10
+contract intentionally allows only `large-v3`, but the API also had a
+real missing guard: the legacy generic environment variable could point to
+a `ggml-medium.bin` and still be accepted as if it were Large v3.
+
+**Fix:** `app/api/karaoke.py` now requires the configured model filename to be
+`ggml-large-v3.bin` as well as an existing file and configured CLI,
+or returns HTTP 503. Both the generic and preferred dedicated model env
+variables are covered. Unsupported model selections still return HTTP 422.
+This filename guard prevents a known misconfiguration, but does not prove
+the binary content/model weights or GPU inference quality. The updated
+test covers legacy generic medium, Large v3 configured explicitly,
+dedicated variable pointing to medium, unsupported model names and
+absence of a silent fallback. The independent synthetic unsafe-path fixture
+no longer uses an invalid Python escape sequence.
+
+The fix is in the Draft branch, but the updated focused test and full QA
+**have not yet been executed on the owner's Windows host**. Run one
+focused validation against the NEW pinned candidate before rerunning the
+full preflight; do not rerun the old `d54bb0e` test suite or overwrite the
+old failed report. Retain earlier detached worktree and private evidence
+until final approval; no cleanup of user data is authorized.
+
 ## Build and QA gate
 
 1. Confirm the checkout has an existing compatible Python 3.12 .venv and

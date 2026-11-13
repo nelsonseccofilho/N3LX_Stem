@@ -26,8 +26,11 @@ if [[ "$repo" == "$checkpoint" || "$checkpoint" == "$repo/"* ||
 fi
 [[ "$(git -C "$repo" rev-parse HEAD)" == "$local_sha" ]] ||
   { echo "FAIL: local HEAD changed since checkpoint; no preview attempted" >&2; exit 2; }
-grep -q '^CHECKPOINT_VERIFIED:' "$checkpoint/STATUS.txt" ||
-  { echo "FAIL: checkpoint is not marked verified" >&2; exit 2; }
+# Windows PowerShell 5.1 Set-Content -Encoding UTF8 prepends a UTF-8 BOM.
+# Match the precise success marker anywhere in the line rather than requiring
+# it at byte zero. The INCOMPLETE marker cannot pass this check.
+LC_ALL=C grep -aFq 'CHECKPOINT_VERIFIED: local source copies and tracked patch saved with hashes.' "$checkpoint/STATUS.txt" ||
+  { echo "FAIL: checkpoint is not marked verified (or STATUS.txt differs from expected success marker)" >&2; exit 2; }
 [[ -s "$checkpoint/manifest.json" && -s "$checkpoint/tracked-working-tree.patch" ]] ||
   { echo "FAIL: checkpoint manifest or patch missing" >&2; exit 2; }
 

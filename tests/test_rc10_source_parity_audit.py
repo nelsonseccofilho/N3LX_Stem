@@ -32,7 +32,7 @@ def test_classification(local, base, candidate, expected):
 
 @pytest.mark.parametrize("path", [
     "../private.txt", "data/music.mp3", "app/models/model.bin",
-    "app\\..\secret", "/absolute", "static/js/../../data/music.txt",
+    r"app\\..\secret", "/absolute", "static/js/../../data/music.txt",
     "app/private.onnx", "app/.git/config",
 ])
 def test_manifest_path_fails_closed(path):

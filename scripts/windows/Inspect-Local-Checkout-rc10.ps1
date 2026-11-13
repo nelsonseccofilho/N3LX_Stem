@@ -60,6 +60,8 @@ $sourcePaths = @(
     '.github', 'app', 'desktop', 'desktop-app', 'docs', 'packaging',
     'scripts', 'static', 'templates', 'tests',
     'README.md', 'README-UPSTREAM.md', 'ROADMAP.md',
+    '.gitignore', '.gitattributes', '.dockerignore', '.trivyignore',
+    'run.sh', 'playwright.config.mjs', 'build',
     'package.json', 'package-lock.json', 'pyproject.toml', 'uv.lock',
     'Setup-N3LX_Stem.cmd', 'Start-N3LX_Stem.cmd',
     'Start-StemDeck-AMD.cmd', 'Stop-N3LX_Stem.cmd', 'Stop-StemDeck.cmd'

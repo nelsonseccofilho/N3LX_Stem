@@ -85,7 +85,10 @@ def main():
         result["node"] = run("node-version", [options.node, "--version"]).strip()
         if int(result["node"].lstrip("v").split(".")[0]) < 20:
             raise RuntimeError("Node 20 or newer is required.")
-        run("diff-check", ["git", "diff", "--check", "HEAD^", "HEAD"])
+        # Consolidated release spans several commits; check the full delta from main,
+        # not only the most recent commit (which could be documentation).
+        run("diff-check", ["git", "diff", "--check",
+                           "1ca88e17d37ecf72e932cecd0a0570ae5949ed98", "HEAD"])
         run("pytest", [options.python, "-m", "pytest", *PYTHON_TESTS, "-q", "--tb=short",
                        "--junitxml=" + str(report_dir / "pytest.xml")], timeout=300)
         tree = ET.parse(report_dir / "pytest.xml")

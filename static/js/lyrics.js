@@ -1750,7 +1750,11 @@ async function lookUp(info, { song }) {
 /** A lookup's answer that kept nothing: versions to pick from, or none. */
 function showAnswer({ song, matches }) {
   if (matches.length) offer(matches);
-  else setStatus(t("lyrics.notFound", { song }), "muted");
+  else {
+    setStatus(t("lyrics.notFound", { song }), "muted");
+    // Keep the on-demand retry introduced in rc.10, even after the first lookup.
+    versionsEl.replaceChildren(lookAgainButton());
+  }
 }
 
 /**
@@ -1942,8 +1946,9 @@ async function loadForCurrentTrack() {
     showAnswer(answered.get(info.id));
     return;
   }
-  setStatus(t("karaoke.localMissing"), "muted");
-  versionsEl.append(lookAgainButton());
+  // Preserve the existing automatic LRCLIB lookup when local sources have
+  // no lyrics. The generated karaoke sidecar still takes priority.
+  void lookUp(info, { song });
 }
 
 // While the tab is on screen: notice a different track being opened, mark the

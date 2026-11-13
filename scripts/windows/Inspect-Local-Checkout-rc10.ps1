@@ -145,6 +145,10 @@ Write-Host "UNTRACKED_NOT_BACKED_UP: $($untracked.Count)"
 Write-Host "REMOTE_MAIN: $remoteMainSha"
 Write-Host "RC10_SPECIFIC_CHANGED: $($candidateChanged.Count)"
 Write-Host "RC10_SPECIFIC_OVERLAP: $($overlap.Count)"
+if ($overlap.Count -gt 0) {
+    Write-Host 'RC10_SPECIFIC_OVERLAP_FILES:'
+    foreach ($name in $overlap) { Write-Host "  $name" }
+}
 Write-Host "MAIN_HISTORY_OVERLAP: $($mainOverlap.Count)"
 Write-Host "REPORT: $report"
 Write-Host 'STOP: overlaps are possible same-path edits, not proven merge conflicts. Review local source and untracked files before package QA, merge, release, or cleanup.'

@@ -64,6 +64,44 @@ first report remains unchanged. Neither report is a complete backup.
 A zero-overlap list does not prove functional equivalence; review all local
 commits and uncommitted changes against rc.10 before signing off completeness.
 
+## Cycle 5 — protect local source before reconciliation
+
+The corrected inventory run from 13 Nov showed: 49 modified tracked source
+paths, 49 untracked source paths, and **7 candidate-specific overlapping
+paths** out of 24 changed by the rc.10 candidate. The user also generated a
+private patch for seven relevant paths; that patch remains outside GitHub.
+
+Before changing branches, merging or cleaning anything, preserve the untracked
+files and the full uncommitted tracked-source state using
+`scripts/windows/Checkpoint-Local-Source-rc10.ps1` from the exact reviewed
+candidate commit. Download that script into a **temporary location outside
+the dirty checkout**, then run it with:
+
+```powershell
+& "<downloaded-path>\Checkpoint-Local-Source-rc10.ps1" `
+  -Repository "$HOME\Git\N3LX_Stem" `
+  -InventoryFile "$HOME\Git\N3LX_Stem-Releases\rc10-local-review-20261113-041743-6eafa00d\inventory.json"
+```
+
+This tool reads the earlier inventory and checks that local HEAD and source
+file lists remain consistent. It creates a unique private local folder under
+`N3LX_Stem-Releases` containing copies of tracked-modified and untracked
+source files, a binary tracked-file patch, per-file SHA-256 hashes, and
+`manifest.json` / `STATUS.txt`. Only
+`SOURCE_CHECKPOINT_VERIFIED` and `CHECKPOINT_VERIFIED` count as success.
+If it refuses unsafe files, reports stale inventory, or leaves `INCOMPLETE`,
+stop; do not reset the checkout or call the checkpoint complete.
+
+It is **not a full backup of the repository, runtime, music library,
+playlists, external models, environments or machine**. No source is
+changed; no audio data is copied, and the checkpoint/manifest/patch must
+remain private and never be committed or uploaded to GitHub.
+
+Review the seven specific overlapping paths against the local patch and the
+current PR #24 code. Preserve karaoke, frontend and other local features;
+same-file changes are not proof of conflicting hunks. Only then run the bounded
+Windows QA and release preflight.
+
 ## Build and QA gate
 
 1. Confirm the checkout has an existing compatible Python 3.12 .venv and

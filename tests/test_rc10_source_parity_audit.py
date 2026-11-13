@@ -76,7 +76,7 @@ def test_end_to_end_private_snapshot_and_read_only_source(tmp_path, monkeypatch)
     git("add", ".", cwd=candidate)
     git("commit", "-m", "release candidate", cwd=candidate)
     release_sha = git("rev-parse", "HEAD", cwd=candidate)
-    git("push", "origin", "HEAD:" + audit.BRANCH, cwd=candidate)
+    git("push", "origin", "HEAD:refs/heads/" + audit.BRANCH, cwd=candidate)
 
     (repo / "shared.txt").write_text("local\n")
     (repo / "local.txt").write_text("local\n")

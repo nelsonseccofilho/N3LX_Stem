@@ -14,9 +14,14 @@ $ErrorActionPreference = 'Stop'
 function Assert-Git([string]$Step) {
     if ($LASTEXITCODE -ne 0) { throw "$Step failed (exit $LASTEXITCODE); no retry." }
 }
-function Git-Lines([string[]]$Args) {
-    $value = @(& git -C $Repository @Args)
-    Assert-Git ($Args -join ' ')
+function Git-Lines([string[]]$GitArguments) {
+    # Never name this parameter $Args: $args is PowerShell's automatic
+    # argument variable and may swallow the intended Git subcommand.
+    if (-not $GitArguments -or $GitArguments.Count -eq 0) {
+        throw 'Git-Lines received no Git arguments; refusing to execute bare git.'
+    }
+    $value = @(& git -C $Repository @GitArguments)
+    Assert-Git ("git " + ($GitArguments -join ' '))
     return @($value | Where-Object { $_ -is [string] -and $_.Length -gt 0 })
 }
 function Names($items) {

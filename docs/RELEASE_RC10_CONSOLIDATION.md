@@ -180,6 +180,52 @@ The source checkpoint remains private; 91 other local source files were
 not fully reconciled by the seven-path review. Do not merge or publish the
 draft release until remaining functional parity and release gates pass.
 
+## Cycle 10 — audit the remaining checkpointed source files
+
+The earlier seven-path private reconciliation resolved what needed a semantic
+decision in the rc.10 candidate, including restoring automatic lyrics lookup.
+It does **not** cover the other 91 saved source paths (49 tracked changes plus
+49 untracked copies in the private checkpoint = 98 total).
+
+The audit script at `scripts/windows/Audit-Local-Source-Parity-rc10.py`
+uses ONLY the **previously verified private checkpoint** and Git object reads.
+Download it to the `N3LX_Stem-Releases` directory from the **exact reviewed
+candidate SHA**, then run it with existing Python 3.12+ and these arguments:
+
+```text
+python <downloaded-Audit-Local-Source-Parity-rc10.py>
+  --repository <user-home>/Git/N3LX_Stem
+  --checkpoint <user-home>/Git/N3LX_Stem-Releases/rc10-source-checkpoint-20261113-043900-3dba8393
+  --reports-root <user-home>/Git/N3LX_Stem-Releases
+  --candidate <exact-reviewed-rc10-SHA>
+```
+
+The audit verifies the checkpoint marker, all saved-file SHA-256 hashes and
+tracked patch SHA-256 *before* fetching the candidate. It compares each
+checkpoint copy against the original HEAD and exact rc.10 commit, allowing
+CRLF-only equivalence without modifying originals. Its **private metadata-only**
+`RESULT.md` and `summary.tsv` distinguish:
+- Local-only files missing from candidate and local changes not incorporated
+- Independent parallel additions (add/add)
+- Both sides changed: requires semantic review
+- Candidate-only changes and content-equivalent files
+
+The seven previously reviewed paths are labeled separately; the report
+classifies all 98 copies but totals the **other 91** for follow-up.
+This is a triage, not a verified semantic merge or functional parity claim.
+No private source contents, music, GPU models, exports or paths outside the
+checkpoint are copied. No Git checkout, merge, reset, clean, stash or build.
+Do not commit the private report or checkpoint to GitHub. Share only the
+metadata summary after reviewing filenames. Actual Windows execution of
+this new audit is pending, as is final parity review and full rc.10 QA.
+
+A synthetic disposable-Git fixture passed end to end for the original audit
+implementation, including independent addition, local-only changes, CRLF
+equivalence and both-sides-changed classification. The test
+`tests/test_rc10_source_parity_audit.py` is included in the bounded Python
+release suite. Do not infer a successful Windows invocation or user-data
+inspection from this fixture.
+
 ## Build and QA gate
 
 1. Confirm the checkout has an existing compatible Python 3.12 .venv and

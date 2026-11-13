@@ -5,8 +5,10 @@ import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
-const entry = fs.readFileSync(new URL("../../desktop-app/main.cjs", import.meta.url), "utf8");
+const entryPath = fileURLToPath(new URL("../../desktop-app/main.cjs", import.meta.url));
+const entry = fs.readFileSync(entryPath, "utf8");
 
 test("Electron keeps exports outside package, persists choice and enables desktop backend", async () => {
   const runtime = path.resolve("test-runtime");
@@ -91,6 +93,8 @@ test("Electron keeps exports outside package, persists choice and enables deskto
   };
   const hash = createHash; // included to match the real desktop boot path.
   vm.runInNewContext(entry, {
+    // Match the CommonJS module wrapper used by Electron/Node.
+    __dirname: path.dirname(entryPath),
     require(name) {
       if (name === "electron") return launch.electron;
       if (name === "node:fs") return launch.fs;

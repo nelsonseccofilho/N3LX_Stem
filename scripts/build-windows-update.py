@@ -46,6 +46,13 @@ def build(source: Path, installation: Path, output: Path) -> Path:
     for rel in files:
         if not rel or not (rel.startswith(("app/", "static/", "scripts/", "desktop/src-tauri/icons/")) or rel in ("pyproject.toml", "uv.lock", "LICENSE")):
             continue
+        # Maintenance-only PowerShell hotfixes, QA and build scripts belong to
+        # the repository, not inside a packaged Windows desktop executable.
+        # Keep the runtime scripts (including Start-N3LX_Stem.ps1) untouched.
+        if rel.startswith("scripts/windows/") or rel in (
+            "scripts/verify-local-release.py", "scripts/build-windows-update.py",
+        ):
+            continue
         target = backend / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source / rel, target)

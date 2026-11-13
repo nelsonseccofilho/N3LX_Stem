@@ -17,6 +17,55 @@ else app.setPath("userData", path.join(root, "data", "desktop"));
 fs.mkdirSync(app.getPath("userData"), { recursive: true });
 app.commandLine.appendSwitch("lang", "pt-BR");
 let win;
+
+// Export preferences live in Electron userData, outside the packaged executable.
+// No library, model or audio file is copied or modified by this setting.
+function exportsSettingsPath() {
+ return path.join(app.getPath("userData"), "storage-preferences.json");
+}
+function configuredExportsFolder() {
+ try {
+  const value = JSON.parse(fs.readFileSync(exportsSettingsPath(), "utf8")).exportsFolder;
+  return typeof value === "string" && path.isAbsolute(value) ? value : null;
+ } catch { return null; }
+}
+function writableFolder(folder) {
+ try {
+  return !!folder && fs.statSync(folder).isDirectory() &&
+    (fs.accessSync(folder, fs.constants.W_OK), true);
+ } catch { return false; }
+}
+function exportsFolder() {
+ const configured = configuredExportsFolder();
+ return writableFolder(configured) ? configured : app.getPath("downloads");
+}
+if (typeof ipcMain.handle === "function") {
+ ipcMain.handle("n3lx:storage-info", async event => {
+  if (event.sender !== win?.webContents) throw new Error("Unauthorized window");
+  const saved = configuredExportsFolder();
+  return {
+   exportsFolder: saved || app.getPath("downloads"),
+   exportsAvailable: !saved || writableFolder(saved),
+   configured: Boolean(saved),
+  };
+ });
+ ipcMain.handle("n3lx:storage-choose-exports", async event => {
+  if (event.sender !== win?.webContents) throw new Error("Unauthorized window");
+  const result = await dialog.showOpenDialog(win, {
+   title: "Pasta padrão para exportações do N3LX_Stem",
+   properties: ["openDirectory", "createDirectory"],
+   defaultPath: exportsFolder(),
+  });
+  if (result.canceled || !result.filePaths?.[0]) return null;
+  const folder = result.filePaths[0];
+  if (!writableFolder(folder)) throw new Error("A pasta de exportações deve existir e permitir gravação.");
+  const preferences = exportsSettingsPath();
+  const temporary = preferences + ".tmp";
+  fs.writeFileSync(temporary, JSON.stringify({ exportsFolder: folder }), "utf8");
+  fs.renameSync(temporary, preferences);
+  return folder;
+ });
+}
 ipcMain.on("n3lx:theme", (event, value) => {
  if (event.sender !== win?.webContents || !["dark", "light", "system"].includes(value)) return;
  nativeTheme.themeSource = value;
@@ -56,7 +105,11 @@ async function ensureBackend(config) {
   await new Promise((resolve, reject) => {
     const args = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path.join(root, "scripts", "Start-N3LX_Stem.ps1"), "-NoBrowser", "-Port", String(port), "-RuntimeRoot", config.runtime, "-DataDir", config.data];
     const child = spawn("powershell.exe", args, { cwd: root, windowsHide: true,
-      env: { ...process.env, STEMDECK_INSTANCE_TOKEN: instance } });
+      // Desktop flag is also required for the existing stems-location API.
+      // Attach the watchdog to the backend we spawn, never to a foreign process.
+      env: { ...process.env, STEMDECK_INSTANCE_TOKEN: instance,
+        STEMDECK_DESKTOP: "1", STEMDECK_PARENT_PID: String(process.pid),
+        STEMDECK_SETTINGS_MIRROR: path.join(app.getPath("userData"), "settings-mirror.json") } });
     const log = fs.createWriteStream(path.join(logs, "desktop-start.log"), { flags: "a" });
     child.stdout.pipe(log, { end: false }); child.stderr.pipe(log, { end: false });
     const timer = setTimeout(() => { child.kill(); reject(new Error("Tempo de abertura excedido. Consulte o diagnÃ³stico.")); }, 150000);
@@ -79,7 +132,7 @@ else {
    win.webContents.on("page-title-updated", event => { event.preventDefault(); win.setTitle("N3LX_Stem"); });
    win.webContents.setWindowOpenHandler(({ url }) => { openExternal(url); return { action: "deny" }; });
    win.webContents.on("will-navigate", (event, url) => { if (new URL(url).origin !== origin) { event.preventDefault(); openExternal(url); } });
-   win.webContents.session.on("will-download", (_event, item) => item.setSaveDialogOptions({ title: "Exportar do N3LX_Stem", defaultPath: path.join(app.getPath("downloads"), item.getFilename()) }));
+   win.webContents.session.on("will-download", (_event, item) => item.setSaveDialogOptions({ title: "Exportar do N3LX_Stem", defaultPath: path.join(exportsFolder(), path.basename(item.getFilename())) }));
    await win.loadURL(origin);
  }).catch(error => { dialog.showErrorBox("N3LX_Stem nÃ£o pÃ´de abrir", error.message); app.quit(); });
  app.on("window-all-closed", () => app.quit());

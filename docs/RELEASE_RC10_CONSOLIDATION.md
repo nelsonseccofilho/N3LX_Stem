@@ -116,6 +116,41 @@ current PR #24 code. Preserve karaoke, frontend and other local features;
 same-file changes are not proof of conflicting hunks. Only then run the bounded
 Windows QA and release preflight.
 
+## Cycle 6 — isolated reconciliation preview (no merge)
+
+The checkpoint was completed on Windows and reported
+`SOURCE_CHECKPOINT_VERIFIED`, 49 tracked source files,
+49 untracked source files and 98 copies with zero tracked deletions.
+Its private location is
+`N3LX_Stem-Releases/rc10-source-checkpoint-20261113-043900-3dba8393`.
+The private 7-file patch remains on disk; do not upload it to GitHub.
+
+Seven rc.10-specific paths overlap local source. Five are tracked modifications:
+`app/main.py`, `scripts/Start-N3LX_Stem.ps1`, `static/index.html`,
+`static/js/i18n.js`, `static/js/lyrics.js`.
+Two paths were **locally added as untracked files** because they did not exist
+in local HEAD `a7c1515`: `app/api/karaoke.py` and
+`app/pipeline/karaoke_timing.py`. Treat them as independent additions, never
+overwrite them with candidate versions without review.
+
+`scripts/windows/Preview-Local-Reconciliation-rc10.sh` generates a
+**private, text-only, isolated, no-write-to-checkout** three-way preview for
+these seven paths using files saved in the existing checkpoint:
+- For the five tracked paths: candidate vs old local HEAD vs checkpointed
+  working version, with CRLF normalized only in scratch copies
+- For the two added paths: explicit add/add comparison and collision reporting,
+  with **no automatic resolution**
+- `summary.tsv` and `RESULT.md` report statuses and conflict marker counts;
+  actual source files and merged previews stay local
+- No Git reset, clean, checkout, stash, merge commit, changes to the library,
+  Python/model install, music export, tests, EXE build or release publication
+
+Download the preview script from the **pinned reviewed GitHub SHA** outside the
+dirty checkout and run using Git Bash, passing repo, verified checkpoint and
+candidate SHA. Do not treat `AUTO_MERGE_PREVIEW_ONLY` as proof that the
+combined behavior works. No results can be claimed until the user's actual
+Windows run is inspected. The final `rc.10` branch remains draft.
+
 ## Build and QA gate
 
 1. Confirm the checkout has an existing compatible Python 3.12 .venv and

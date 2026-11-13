@@ -32,11 +32,14 @@ Source base: main 1ca88e17d37ecf72e932cecd0a0570ae5949ed98.
 ## Read-only local checkout review (required before claiming completeness)
 
 Before running the Windows package preflight, inspect the dirty checkout without
-checking out, resetting, stashing, cleaning or moving files. From PowerShell,
-use the script committed at the **reviewed, exact rc.10 SHA**:
+checking out, resetting, stashing, cleaning or moving files. Download and
+review `scripts/windows/Inspect-Local-Checkout-rc10.ps1` from the
+**exact rc.10 commit** in GitHub first: the dirty local checkout may not yet
+contain this new script. Save the downloaded script **outside the repository**,
+then run it from PowerShell:
 
 ```powershell
-& "$HOME\Git\N3LX_Stem\scripts\windows\Inspect-Local-Checkout-rc10.ps1" `
+& "<downloaded-path>\Inspect-Local-Checkout-rc10.ps1" `
   -Repository "$HOME\Git\N3LX_Stem" `
   -ExpectedSha "<40-character-reviewed-rc10-SHA>"
 ```

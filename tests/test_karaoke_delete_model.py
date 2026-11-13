@@ -61,15 +61,34 @@ def test_explicit_models_are_resolved_without_silent_downgrade(tmp_path, monkeyp
     monkeypatch.delenv("N3LX_WHISPER_LARGE_MODEL", raising=False)
     monkeypatch.delenv("N3LX_WHISPER_MEDIUM_MODEL", raising=False)
     monkeypatch.setattr(k, "ffmpeg_executable", lambda: "ffmpeg")
+    # A legacy generic variable must not let a medium checkpoint masquerade
+    # as the sole supported Large v3 model.
     with pytest.raises(HTTPException) as problem:
         k._configuration("large-v3")
     assert problem.value.status_code == 503
+
     large.write_bytes(b"model")
-    assert k._configuration("large-v3")[1] == large
-    assert k._configuration("medium")[1] == medium
+    # Creating Large v3 on disk must not silently override an explicit,
+    # incorrectly configured generic model path.
     with pytest.raises(HTTPException) as problem:
-        k._configuration("../../other")
-    assert problem.value.status_code == 422
+        k._configuration("large-v3")
+    assert problem.value.status_code == 503
+
+    monkeypatch.setenv("N3LX_WHISPER_LARGE_MODEL", str(large))
+    assert k._configuration("large-v3")[1] == large
+    assert k._configuration(None)[1] == large
+
+    # Even the preferred dedicated variable must not point at medium.
+    monkeypatch.setenv("N3LX_WHISPER_LARGE_MODEL", str(medium))
+    with pytest.raises(HTTPException) as problem:
+        k._configuration("large-v3")
+    assert problem.value.status_code == 503
+
+    monkeypatch.setenv("N3LX_WHISPER_LARGE_MODEL", str(large))
+    for unsupported in ("medium", "../../other"):
+        with pytest.raises(HTTPException) as problem:
+            k._configuration(unsupported)
+        assert problem.value.status_code == 422
 
 
 @pytest.mark.parametrize("outcome", ["done", "failed", "cancelled"])

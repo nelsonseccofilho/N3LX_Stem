@@ -123,6 +123,10 @@ try {
         if ($required -notin $names) { throw "Missing ZIP member: $required" }
     }
     foreach ($name in $names) {
+        if ($name -match '/scripts/windows/' -or
+            $name -match '/scripts/(verify-local-release|build-windows-update)\.py$') {
+            throw "Maintenance or QA tooling incorrectly packaged: $name"
+        }
         if ($name -match '(^|/)(data|jobs|weights|\.venv|\.venv-directml)(/|$)' -or
             $name -match '\.(wav|mp3|flac|ogg|m4a|opus)$') {
             throw "Unexpected runtime/private payload: $name"

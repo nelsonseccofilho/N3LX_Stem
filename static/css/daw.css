@@ -7804,3 +7804,74 @@ input, textarea { font-family: inherit; }
     align-items: center;
   }
 }
+
+/* PR #26 — consistent 40px shell / 30px interactive interior.
+   A text baseline cannot be reliably centered with position or transforms:
+   center every content row and use one line-height for all controls. */
+@media (min-width: 1400px) {
+  .app.daw.header-v3 .daw-composer.header-compact > :is(.import-layout-toggle,.reextract-action) {
+    display: flex !important;
+    box-sizing: border-box;
+    align-items: center !important;
+    justify-content: center !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    max-height: 40px !important;
+    padding: 0 8px !important;
+    margin: 0 !important;
+    line-height: 1.2 !important;
+    text-align: center;
+    vertical-align: middle;
+  }
+  .app.daw.header-v3 #nowPlayingPanel {
+    display: grid;
+    align-items: center !important;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .track-panel-head {
+    display: flex;
+    box-sizing: border-box;
+    align-items: center !important;
+    height: 40px !important;
+    min-height: 40px;
+    margin: 0;
+    padding: 0;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .track-panel-info {
+    display: flex;
+    min-width: 0;
+    flex-direction: row;
+    align-items: center;
+    gap: 5px;
+    line-height: 1.2;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .track-panel-title,
+  .app.daw.header-v3 #nowPlayingPanel .np-artist {
+    line-height: 1.2;
+    margin-block: 0;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .song-controls,
+  .app.daw.header-v3 #nowPlayingPanel .footer-clusters,
+  .app.daw.header-v3 #nowPlayingPanel .studio-mode-tabs {
+    height: 40px;
+    min-height: 40px;
+    align-self: center !important;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 30px;
+  }
+  .app.daw.header-v3 #nowPlayingPanel :is(.footer-elapsed,.footer-total,.pitch-value,.loop-btn-label) {
+    line-height: 1.2;
+    align-self: center;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .studio-mode-tabs button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.2;
+    height: 30px;
+    min-height: 30px;
+  }
+}

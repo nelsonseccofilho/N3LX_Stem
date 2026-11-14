@@ -51,17 +51,18 @@ def _vocals(job_dir: Path) -> Path:
 
 
 def _configuration(model_name: str | None = None, language: str = "pt") -> tuple[str, Path, str]:
+    if model_name not in (None, "large-v3"):
+        raise HTTPException(status_code=422, detail="only Whisper Large v3 is supported")
     cli = os.environ.get("N3LX_WHISPER_CLI", "").strip()
-    model = Path(os.environ.get("N3LX_WHISPER_MODEL", "").strip())
-    if model_name is not None:
-        if model_name not in {"large-v3", "medium"}:
-            raise HTTPException(status_code=422, detail="unsupported Whisper model")
-        model = Path(os.environ.get(
-            "N3LX_WHISPER_LARGE_MODEL" if model_name == "large-v3" else "N3LX_WHISPER_MEDIUM_MODEL",
-            str(model.parent / f"ggml-{model_name}.bin"),
-        ))
-    if not cli or not shutil.which(cli) or not model.is_file():
-        raise HTTPException(status_code=503, detail="Vulkan Whisper worker not configured")
+    model_path = (os.environ.get("N3LX_WHISPER_LARGE_MODEL")
+                  or os.environ.get("N3LX_WHISPER_MODEL")
+                  or str(Path.home() / "Git" / "_workspace" / "models" / "ggml-large-v3.bin"))
+    model = Path(model_path).expanduser()
+    # The legacy generic variable can still point to ggml-medium.bin. A
+    # request for Large v3 must never silently run another model.
+    if (not cli or not shutil.which(cli) or not model.is_file()
+            or model.name.casefold() != "ggml-large-v3.bin"):
+        raise HTTPException(status_code=503, detail="Vulkan Whisper Large v3 worker not configured")
     if language not in {"pt", "en"}:
         raise HTTPException(status_code=422, detail="unsupported karaoke language")
     if language == "pt":
@@ -151,8 +152,8 @@ async def generate_karaoke(job_id: str, request: Request) -> JSONResponse:
             type(body.get("replace", False)) is not bool):
         raise HTTPException(status_code=422, detail="expected optional boolean replace")
     model_name = body.get("model")
-    if model_name is not None and model_name not in ("large-v3", "medium"):
-        raise HTTPException(status_code=422, detail="unsupported Whisper model")
+    if model_name not in (None, "large-v3"):
+        raise HTTPException(status_code=422, detail="only Whisper Large v3 is supported")
     language = body.get("language", "pt")
     if not isinstance(language, str) or language not in {"pt", "en"}:
         raise HTTPException(status_code=422, detail="unsupported karaoke language")
@@ -190,7 +191,7 @@ def karaoke_status(job_id: str) -> dict:
     language_models = {}
     for language in ("pt", "en"):
         language_models[language] = []
-        for name in ("large-v3", "medium"):
+        for name in ("large-v3",):
             try:
                 _configuration(name, language)
                 language_models[language].append(name)

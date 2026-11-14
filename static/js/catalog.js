@@ -1,6 +1,7 @@
 import { getTheme, setTheme } from "./theme.js";
 import { confirmAction } from "./confirmAction.js";
 import { enhanceSettings } from "./settingsAccessibility.js";
+import { wireStorageSettings } from "./storageSettings.js";
 import { initSetlist, renderSetlistPanel } from "./setlist.js";
 import { setDefaultSeparationProfile, defaultSeparationProfile } from "./constants.js";
 // catalog.js — library panel: folders, tracks, collapse, drag-and-drop
@@ -4646,6 +4647,7 @@ function openLibraryEditor() {
       </div>
       <div class="settings-tabs" role="tablist">
         <button class="settings-tab active" type="button" data-tab="general" role="tab" data-i18n="settings.tab.general">General</button>
+        <button class="settings-tab" type="button" data-tab="storage" role="tab" data-i18n="storage.title">Storage</button>
         <button class="settings-tab" type="button" data-tab="details" role="tab" data-i18n="settings.tab.songDetails">Song details</button>
         <button class="settings-tab" type="button" data-tab="network" role="tab" data-i18n="settings.tab.network">Network</button>
         <button class="settings-tab" type="button" data-tab="export" role="tab" data-i18n="settings.tab.export">Export</button>
@@ -4803,6 +4805,23 @@ function openLibraryEditor() {
             <button class="settings-reset-btn" type="button" data-i18n="settings.resetData.button">Reset app data…</button>
           </div>
         </div>
+      </div>
+      <div class="settings-pane hidden" data-pane="storage">
+        <section class="storage-settings-group" aria-labelledby="storageStemsLabel">
+          <h3 id="storageStemsLabel" data-i18n="storage.stemsTitle">Multitrack library</h3>
+          <p data-i18n="storage.stemsHelp">Separated songs, stems, projects and metadata stay outside the app package.</p>
+          <output id="storageStemsPath" class="storage-settings-path">—</output>
+          <button id="storageStemsChange" class="storage-settings-action" type="button" disabled data-i18n="storage.change">Choose folder</button>
+          <p id="storageStemsNote" class="storage-settings-note" role="status"></p>
+        </section>
+        <section class="storage-settings-group" aria-labelledby="storageExportsLabel">
+          <h3 id="storageExportsLabel" data-i18n="storage.exportsTitle">Exports</h3>
+          <p data-i18n="storage.exportsHelp">Suggested folder for WAV, ZIP, mixes and loops. You can still choose another destination when saving.</p>
+          <output id="storageExportsPath" class="storage-settings-path">—</output>
+          <button id="storageExportsChange" class="storage-settings-action" type="button" disabled data-i18n="storage.change">Choose folder</button>
+          <p id="storageExportsNote" class="storage-settings-note" role="status"></p>
+        </section>
+        <p id="storageSettingsStatus" class="storage-settings-note" role="status" aria-live="polite"></p>
       </div>
       <div class="settings-pane hidden" data-pane="details">
         <div class="settings-section">
@@ -4998,6 +5017,7 @@ function openLibraryEditor() {
   libraryEditor = overlay;
   overlay._opener = opener;
   enhanceSettings(overlay, opener);
+  wireStorageSettings(overlay);
   if (previousTab) overlay.querySelector(`[data-tab="${previousTab}"]`)?.click();
   refreshLibrarySyncSummary();
   const isDesktop = Boolean(window.__TAURI__?.core?.invoke);

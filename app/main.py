@@ -658,7 +658,17 @@ async def set_stems_location(request: Request) -> dict[str, object]:
                 status_code=409,
                 detail="Finish or cancel the imports in the queue before moving the stems folder",
             )
-        target = validate_target(Path(raw), JOBS_DIR)
+        # The new Electron dialog only configures empty libraries. Never
+        # relocate an existing user's music without a separately validated,
+        # backup-first migration flow. Recheck on the server under the
+        # relocation guard, not merely from a stale UI size estimate.
+        empty_only = body.get("only_if_source_empty") is True
+        if empty_only and JOBS_DIR.exists() and any(JOBS_DIR.iterdir()):
+            raise HTTPException(status_code=409, detail="Existing stems library requires verified migration")
+        candidate = Path(raw)
+        if empty_only and candidate.exists() and candidate.is_dir() and any(candidate.iterdir()):
+            raise HTTPException(status_code=409, detail="Select an empty destination directory")
+        target = validate_target(candidate, JOBS_DIR)
     except StemsLocationError as e:
         abandon_relocation()
         raise HTTPException(status_code=422, detail=str(e)) from None

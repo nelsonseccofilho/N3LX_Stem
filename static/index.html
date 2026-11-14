@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="/css/waves.css" />
     <link rel="stylesheet" href="/css/daw.css" />
     <link rel="stylesheet" href="/css/themes.css" />
+    <link rel="stylesheet" href="/css/storageSettings.css" />
   </head>
   <body>
 
@@ -775,11 +776,8 @@
                 <span id="lyricsLanguageHelp" class="lyrics-note" data-i18n="karaokeTiming.languageHelp">Português usa alinhamento avançado; inglês usa os tempos do Whisper.</span>
               </div>
               <div class="lyrics-generator-model">
-                <label for="lyricsKaraokeModel" data-i18n="karaokeTiming.model">Modelo de transcrição</label>
-                <select id="lyricsKaraokeModel">
-                  <option value="large-v3" data-i18n="karaokeTiming.modelLarge">Whisper Large v3 · maior precisão</option>
-                  <option value="medium" data-i18n="karaokeTiming.modelMedium">Whisper Medium · mais rápido</option>
-                </select>
+                <span class="lyrics-note" data-i18n="karaokeTiming.modelLarge">Whisper Large v3 · maior precisão</span>
+                <input id="lyricsKaraokeModel" type="hidden" value="large-v3">
                 <button id="lyricsRegenerateKaraokeBtn" class="lyrics-align-btn" type="button" data-i18n="karaokeTiming.regenerate" hidden>Gerar novamente</button>
                 <button id="lyricsDeleteKaraokeBtn" class="lyrics-align-btn" type="button" data-i18n="karaokeTiming.delete" hidden>Excluir JSON do karaokê</button>
               </div>
@@ -1367,6 +1365,7 @@
 
     <!-- First, so its handlers are installed before main.js is evaluated and
          can report a failure to parse, resolve an import, or wire the UI. -->
+
     <script type="module" src="/js/boot-diagnostics.js"></script>
     <script type="module" src="/js/main.js"></script>
     <script type="module" src="/js/ui-chrome.js"></script>

@@ -1649,7 +1649,8 @@ function setSyncMethod(method) {
 
 function tapNow() {
   if (!sync || sync.method !== "play" || sync.session.done) return;
-  const time = snapped(now());
+  // Voice snap helps identify onset, but the end must remain the actual tap.
+  const time = sync.pendingStart === null ? snapped(now()) : now();
   if (sync.pendingStart === null) {
     // A start is staged, not saved. The pair is committed atomically.
     sync.pendingStart = time;

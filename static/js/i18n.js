@@ -218,6 +218,8 @@ function applyStemRowAriaLabels(scope) {
 // ─────────────────────────────────────────────────────────────────────────
 
 const en = {
+  "lyrics.sync.saveExit": "Save and close",
+  "lyrics.sync.advanced": "More synchronization tools",
   "lyrics.sync.editPhrase": "Edit phrase timing",
   "lyrics.sync.rangeStart": "Phrase start",
   "lyrics.sync.rangeEnd": "Phrase end",
@@ -4895,6 +4897,8 @@ const de = {
 };
 
 const pt = {
+  "lyrics.sync.saveExit": "Salvar e sair",
+  "lyrics.sync.advanced": "Mais ferramentas de sincronização",
   "lyrics.sync.editPhrase": "Editar sincronização",
   "lyrics.sync.rangeStart": "Início da frase",
   "lyrics.sync.rangeEnd": "Fim da frase",

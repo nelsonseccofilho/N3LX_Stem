@@ -352,6 +352,7 @@ function setKaraokeMessage(key = "", kind = "") {
 
 let karaokeProgress = { phase: "queued", elapsed_seconds: 0 };
 let karaokeLanguageModels = null;
+let karaokeLanguageIssues = {};
 let karaokeProgressTimer = null;
 let karaokeProgressReceived = 0;
 let karaokeCancelRequested = false;
@@ -410,7 +411,12 @@ function updateKaraokeControls() {
   const languageCode = document.getElementById("lyricsKaraokeLanguage")?.value || "pt";
   const modelUnavailable = !karaokeLanguageModels || !(karaokeLanguageModels[languageCode] || []).includes("large-v3");
   const unavailable = document.getElementById("karaokeModelUnavailable");
-  if (unavailable) unavailable.hidden = !same || !karaokeLanguageModels || !modelUnavailable;
+  if (unavailable) {
+    unavailable.hidden = !same || !karaokeLanguageModels || !modelUnavailable;
+    unavailable.textContent = languageCode === "en" && karaokeLanguageIssues.en === "model_cache_missing"
+      ? t("karaokeTiming.englishModelCacheMissing")
+      : t("karaokeTiming.modelUnavailable");
+  }
   const button = document.getElementById("lyricsGenerateKaraokeBtn");
   if (button) {
     const activePreview = shownFrom === "preview" && shownEntry?.machinePreview;
@@ -630,6 +636,7 @@ function selectKaraokeTrack(trackId) {
   karaokeTrackId = trackId;
   karaokeDeleting = false;
   karaokeLanguageModels = null;
+  karaokeLanguageIssues = {};
   karaokeRequestToken++;
   karaokeAvailable = false;
   karaokeRunning = false;
@@ -661,6 +668,7 @@ async function inspectKaraokeStatus(trackId, token) {
     if (token !== karaokeRequestToken || getCurrentTrackInfo()?.id !== trackId) return;
     karaokeAvailable = result?.available === true;
     karaokeLanguageModels = result.language_models || { pt: result.models || [], en: result.models || [] };
+    karaokeLanguageIssues = result.language_issues || {};
     updateKaraokeModels();
     karaokeRunning = result?.state === "running";
     updateKaraokeProgress(result);

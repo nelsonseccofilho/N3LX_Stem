@@ -135,3 +135,115 @@ def test_full_json_without_word_offsets_is_rejected():
     }]}
     with pytest.raises(KaraokeTimingError, match="lacks timestamps"):
         normalize_timing(payload)
+
+
+@pytest.mark.parametrize("language", ["pt", "en"])
+def test_both_languages_use_the_same_vulkan_whisperx_worker(
+    monkeypatch, tmp_path: Path, language: str,
+):
+    """No GPU, network, model download or user recording required."""
+    from app.pipeline import karaoke_timing as k
+
+    audio = tmp_path / "vocals.wav"
+    audio.write_bytes(b"test audio stub")
+    model = tmp_path / "ggml-large-v3.bin"
+    model.write_bytes(b"model stub")
+    captured = []
+
+    class Finished:
+        returncode = 0
+
+        def poll(self):
+            return 0
+
+    def worker_run(argv, **kwargs):
+        captured.append(argv)
+        assert kwargs["env"]["HF_HUB_OFFLINE"] == "1"
+        assert kwargs["env"]["TRANSFORMERS_OFFLINE"] == "1"
+        output = Path(argv[argv.index("--output-dir") + 1])
+        output.joinpath("fixture.integrado.json").write_text(json.dumps({
+            "language": language,
+            "segments": [{"words": [
+                {"word": "Hello", "start": 22.0, "end": 22.2},
+                {"word": "from", "start": 22.3, "end": 22.5},
+                {"word": "vocals", "start": 22.6, "end": 23.0},
+            ]}],
+        }), encoding="utf-8")
+        output.joinpath("fixture.qualidade.json").write_text(json.dumps({
+            "etapas": {"alinhamento": "ok"},
+            "backend_alinhamento": "cpu",
+            "gpu_reconhecimento": "vulkan_confirmado_pelo_log",
+        }), encoding="utf-8")
+        return Finished()
+
+    monkeypatch.setattr(k, "_checked_executable", lambda value, label: value)
+    monkeypatch.setattr(k, "aligned_worker_resources", lambda: (
+        tmp_path / "python.exe", tmp_path / "src" / "transcrever_gpu.py"))
+    monkeypatch.setattr(k, "english_alignment_ready", lambda: True)
+    monkeypatch.setattr(k.subprocess, "Popen", worker_run)
+    phases = []
+    timing = k.generate_timing(
+        audio, whisper_cli="whisper-cli", model=model,
+        language=language, phase_changed=phases.append)
+    assert captured
+    args = captured[0]
+    assert args[args.index("--language") + 1] == language
+    assert args[args.index("--device") + 1] == "vulkan"
+    assert "--no-diarize" in args
+    assert "-ojf" not in args  # do not silently fall back to Whisper timestamps
+    assert timing["language"] == language
+    assert timing["engine"] == "whisperx"
+    assert timing["alignment_backend"] == "cpu"
+    assert timing["gpu_verified"] is True
+    assert timing["words"][0]["start"] == 22.0
+    assert "finalize" in phases
+
+
+def test_english_requires_offline_acoustic_checkpoint(monkeypatch, tmp_path: Path):
+    from app.pipeline import karaoke_timing as k
+
+    monkeypatch.setenv("TORCH_HOME", str(tmp_path / "torch"))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "other"))
+    assert k.english_alignment_checkpoint() == (
+        tmp_path / "torch/hub/checkpoints" / k.ENGLISH_ALIGN_CHECKPOINT)
+    assert k.english_alignment_ready() is False
+    location = k.english_alignment_checkpoint()
+    location.parent.mkdir(parents=True)
+    with location.open("wb") as output:
+        output.truncate(20 * 1024 * 1024)  # sparse fixture, no model download
+    assert k.english_alignment_ready() is True
+
+
+def test_english_fails_before_worker_when_model_missing(monkeypatch, tmp_path: Path):
+    from app.pipeline import karaoke_timing as k
+
+    audio = tmp_path / "vocals.wav"
+    audio.write_bytes(b"stub")
+    model = tmp_path / "ggml-large-v3.bin"
+    model.write_bytes(b"stub")
+    monkeypatch.setattr(k, "_checked_executable", lambda v, _label: v)
+    monkeypatch.setattr(k, "aligned_worker_resources", lambda: (
+        tmp_path / "python.exe", tmp_path / "src/transcrever_gpu.py"))
+    monkeypatch.setattr(k, "english_alignment_ready", lambda: False)
+    with pytest.raises(k.KaraokeTimingError, match="checkpoint not available"):
+        k.generate_timing(audio, whisper_cli="whisper-cli", model=model, language="en")
+
+
+def test_api_exposes_pt_while_english_checkpoint_is_missing(monkeypatch, tmp_path: Path):
+    from fastapi import HTTPException
+    from app.api import karaoke as api
+
+    model = tmp_path / "ggml-large-v3.bin"
+    model.write_bytes(b"fixture")
+    monkeypatch.setenv("N3LX_WHISPER_CLI", "test-whisper-cli")
+    monkeypatch.setenv("N3LX_WHISPER_LARGE_MODEL", str(model))
+    monkeypatch.setattr(api.shutil, "which", lambda value: value)
+    monkeypatch.setattr(api, "aligned_worker_resources", lambda: (
+        tmp_path / "python.exe", tmp_path / "src/transcrever_gpu.py"))
+    monkeypatch.setattr(api, "english_alignment_ready", lambda: False)
+    monkeypatch.setattr(api, "ffmpeg_executable", lambda: "ffmpeg")
+    assert api._configuration("large-v3", "pt")[1] == model
+    with pytest.raises(HTTPException) as error:
+        api._configuration("large-v3", "en")
+    assert error.value.status_code == 503
+    assert "not cached" in error.value.detail

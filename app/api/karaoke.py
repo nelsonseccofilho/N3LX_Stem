@@ -19,7 +19,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app.core.config import JOB_ID_RE, JOBS_DIR, ffmpeg_executable
 from app.core.registry import get as registry_get
-from app.pipeline.karaoke_timing import MAX_BYTES, KaraokeTimingError, aligned_worker_resources, generate_timing, store_timing
+from app.pipeline.karaoke_timing import MAX_BYTES, KaraokeTimingError, aligned_worker_resources, english_alignment_ready, generate_timing, store_timing
 from app.pipeline.lyrics_retime import cancel_run, claim_run, current_run
 from app.pipeline.runner import _pipeline_lock
 
@@ -65,11 +65,19 @@ def _configuration(model_name: str | None = None, language: str = "pt") -> tuple
         raise HTTPException(status_code=503, detail="Vulkan Whisper Large v3 worker not configured")
     if language not in {"pt", "en"}:
         raise HTTPException(status_code=422, detail="unsupported karaoke language")
-    if language == "pt":
-        try:
-            aligned_worker_resources()
-        except KaraokeTimingError:
-            raise HTTPException(status_code=503, detail="WhisperGPU alignment environment not configured") from None
+    # Both supported languages require the same WhisperX alignment worker.
+    # Do not advertise EN as available if only the legacy PT-only worker exists.
+    try:
+        _, worker = aligned_worker_resources()
+        if language == "en" and worker.parent.name != "src":
+            raise KaraokeTimingError("English WhisperX alignment worker unavailable")
+        if language == "en" and not english_alignment_ready():
+            raise HTTPException(
+                status_code=503,
+                detail="English alignment model not cached; prepare the WAV2VEC2_ASR_BASE_960H checkpoint",
+            )
+    except KaraokeTimingError:
+        raise HTTPException(status_code=503, detail=f"WhisperX {language.upper()} alignment worker not configured") from None
     return cli, model, ffmpeg_executable()
 
 
@@ -114,6 +122,8 @@ async def _generate(job, job_dir: Path, run, replace: bool, cli: str, model: Pat
                 raise KaraokeTimingError("vocals changed during transcription")
             _phase(run, "finalize")
             timing["model"] = model.stem.removeprefix("ggml-")
+            # Reuse WhisperX timings only while the underlying vocals stem matches.
+            timing["vocals"] = [after[0], after[1]]
             output = job_dir / _SIDE_CAR
             await asyncio.to_thread(store_timing, output, timing, replace=replace)
             run.state = "done"
@@ -189,19 +199,25 @@ def karaoke_status(job_id: str) -> dict:
         run = None
     output = job_dir / _SIDE_CAR
     language_models = {}
+    language_issues = {}
     for language in ("pt", "en"):
         language_models[language] = []
         for name in ("large-v3",):
             try:
                 _configuration(name, language)
                 language_models[language].append(name)
-            except HTTPException:
-                pass
+            except HTTPException as exc:
+                language_issues[language] = (
+                    "model_cache_missing"
+                    if language == "en" and "alignment model not cached" in str(exc.detail)
+                    else "unavailable"
+                )
     models = language_models["pt"]
     now = time.monotonic()
     return {
         "state": run.state if run is not None else "idle",
         "available": output.is_file(), "models": models, "language_models": language_models,
+        "language_issues": language_issues,
         "language": getattr(run, "karaoke_language", None) if run is not None else None,
         "phase": getattr(run, "karaoke_phase", "queued") if run is not None else None,
         "elapsed_seconds": round(max(0, now - getattr(run, "karaoke_started", now))),

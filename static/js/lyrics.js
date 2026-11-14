@@ -1400,7 +1400,7 @@ function buildSyncPanel(session) {
   const kind = el("span", "lyrics-sync-kind");
   const saveState = el("span", "lyrics-sync-kind lyrics-sync-save");
   saveState.setAttribute("aria-live", "polite");
-  head.append(el("h3", "lyrics-sync-title", t("lyrics.sync.title")), kind, saveState);
+  head.append(el("h3", "lyrics-sync-title", t("lyrics.sync.manualTitle")), kind, saveState);
 
   const next = el("p", "lyrics-sync-next");
   const nextLabel = el("span", "lyrics-sync-next-label");

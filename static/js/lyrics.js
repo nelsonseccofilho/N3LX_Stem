@@ -41,7 +41,6 @@ import { confirmAction } from "./confirmAction.js";
 import { lyricsEditorText, editedLyrics, untimedLines } from "./lyricsEditing.js";
 import { karaokePreviewFromTiming, hasProtectedLyrics, timingForMatchingEditedLyrics } from "./karaokeTiming.js";
 import { createLyricsAutoSyncController } from "./lyricsAutoSync.js";
-import { parseLyricClock, anchorFirstSungLine } from "./lyricsStartAnchor.js";
 import { t, getLanguage, onLanguageChange } from "./i18n.js";
 import { storeGet, storeSet } from "./utils.js";
 import { getCurrentTrackInfo, getCurrentTrackArtist } from "./catalog.js";
@@ -64,6 +63,9 @@ import {
   timingOf,
   serializeLrc,
   formatStamp,
+  preciseStamp,
+  parsePreciseStamp,
+  editPhraseRange,
   snapToVoice,
   applyTime,
   SyncSession,
@@ -500,7 +502,7 @@ function renderAutoSync() {
       setPlayheadTime(0);
       if (!transport()?.isPlaying?.()) togglePlayPause();
     }, true);
-    button("lyricsAutoSync.anchor", openFirstLineTiming);
+    button("lyrics.sync.editPhrase", openManualPhraseEditor);
     button("lyricsAutoSync.manual", () => {
       getAutoSyncController().dismiss();
       const dialog = document.getElementById("karaokeSettings");
@@ -555,70 +557,20 @@ function getAutoSyncController() {
   return autoSyncController;
 }
 
-/** Fix the first sung phrase at an explicitly supplied time, leaving the
- * subsequent matched anchors intact unless they would overlap the correction.
- * This is a manual correction after automatic matching, not a regeneration. */
-function openFirstLineTiming() {
-  const info = getCurrentTrackInfo();
-  if (!info?.id || !shownEntry || document.getElementById("lyricsFirstLineTiming") ||
-      autoSyncView?.state === "running") return;
-  const index = lines.findIndex((line) => line.text?.trim() && line.text.trim() !== "♪");
+/** Open the existing contextual line editor for the selected phrase. */
+function openManualPhraseEditor() {
+  if (autoSyncView?.state === "running" || karaokeRunning) return;
+  if (!sync) openSync();
+  if (!sync) return;
+  const candidate = pickedIndex >= 0 && pickedIndex < lines.length ? pickedIndex
+    : Math.max(0, currentLineIndex(lines, now()));
+  const index = lines[candidate]?.text?.trim() ? candidate
+    : lines.findIndex(line => line.text?.trim());
   if (index < 0) return;
-  const trackId = info.id;
-  const initial = lines[index].time;
-  const dialog = el("dialog", "lyrics-editor");
-  dialog.id = "lyricsFirstLineTiming";
-  const form = el("form", "lyrics-editor-form");
-  const title = el("h2", "", t("lyricsAutoSync.anchorTitle"));
-  const detail = el("p", "lyrics-note", t("lyricsAutoSync.anchorHint"));
-  const phrase = el("p", "lyrics-note", lines[index].text);
-  const label = el("label", "", t("lyricsAutoSync.anchorTime"));
-  const input = el("input", "lyrics-anchor-clock");
-  input.type = "text";
-  input.value = formatStamp(initial);
-  input.placeholder = "00:22";
-  input.autocomplete = "off";
-  input.setAttribute("aria-label", t("lyricsAutoSync.anchorTime"));
-  label.append(input);
-  const error = el("p", "lyrics-status error");
-  error.setAttribute("role", "alert");
-  const actions = el("div", "lyrics-editor-actions");
-  const cancel = el("button", "lyrics-align-btn", t("karaoke.cancel"));
-  cancel.type = "button";
-  const save = el("button", "lyrics-align-btn lyrics-generate-btn", t("lyricsAutoSync.anchorSave"));
-  save.type = "submit";
-  const close = () => { dialog.close(); dialog.remove(); };
-  cancel.addEventListener("click", close);
-  dialog.addEventListener("cancel", (event) => { event.preventDefault(); close(); });
-  form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    if (getCurrentTrackInfo()?.id !== trackId || !shownEntry) {
-      error.textContent = t("karaoke.changedTrack");
-      return;
-    }
-    const duration = totalDuration > 0 ? totalDuration : Infinity;
-    const seconds = parseLyricClock(input.value, duration);
-    const revision = seconds === null ? null : anchorFirstSungLine(lines, seconds, duration);
-    if (!revision) {
-      error.textContent = t("lyricsAutoSync.anchorInvalid");
-      return;
-    }
-    save.disabled = true;
-    if (sync) closeSync(false);
-    setDisplayLines(revision.lines);
-    const lrc = serializeLrc(revision.lines);
-    saveUserTiming(lrc);
-    await flushUserSave();
-    updateTimingNote();
-    close();
-  });
-  actions.append(cancel, save);
-  form.append(title, detail, phrase, label, error, actions);
-  dialog.append(form);
-  document.body.append(dialog);
-  dialog.showModal();
-  input.focus();
-  input.select();
+  document.getElementById("karaokeSettings")?.close();
+  selectLine(index);
+  sync.rangeStart?.focus();
+  sync.rangeStart?.select();
 }
 
 /**
@@ -1504,7 +1456,50 @@ function buildSyncPanel(session) {
   here.title = t("lyrics.sync.hereTitle");
   lineTools.append(lineStep(-NUDGE_COARSE), lineStep(-NUDGE_FINE), lineStep(NUDGE_FINE), lineStep(NUDGE_COARSE), here);
 
-  return { panel, session, kind, saveState, nextLabel, nextText, tap, undo, retimeBtn, message, lineTools };
+  // Inline controls are placed beneath the currently selected lyric.
+  const range = el("div", "lyrics-phrase-range");
+  const rangeError = el("p", "lyrics-align-message");
+  rangeError.setAttribute("role", "alert");
+  const rangeField = (labelKey) => {
+    const wrap = el("label", "lyrics-phrase-range-field");
+    const label = el("span", "", t(labelKey));
+    const input = el("input", "lyrics-phrase-time");
+    input.type = "text";
+    input.inputMode = "decimal";
+    input.placeholder = "00:22.000";
+    input.setAttribute("aria-label", t(labelKey));
+    const capture = alignButton(t("lyrics.sync.capture"), () => {
+      input.value = preciseStamp(now());
+      input.focus();
+    });
+    capture.type = "button";
+    wrap.append(label, input, capture);
+    return { wrap, input };
+  };
+  const begin = rangeField("lyrics.sync.rangeStart");
+  const finish = rangeField("lyrics.sync.rangeEnd");
+  const saveRange = alignButton(t("lyrics.sync.saveRange"), () => {
+    const index = session.cursor;
+    const start = parsePreciseStamp(begin.input.value, totalDuration || Infinity);
+    const end = parsePreciseStamp(finish.input.value, totalDuration || Infinity);
+    const revised = editPhraseRange(session.lines, index, start, end, totalDuration || Infinity);
+    if (!revised) {
+      rangeError.textContent = t("lyrics.sync.rangeInvalid");
+      return;
+    }
+    session.record();
+    session.lines = revised;
+    session.touched.add(index);
+    edited({ reveal: false });
+    rangeError.textContent = "";
+    saveRange.textContent = t("lyrics.sync.savedRange");
+  });
+  saveRange.type = "button";
+  range.append(begin.wrap, finish.wrap, saveRange, rangeError);
+  lineTools.append(range);
+
+  return { panel, session, kind, saveState, nextLabel, nextText, tap, undo, retimeBtn, message,
+    lineTools, rangeStart: begin.input, rangeEnd: finish.input, rangeError, rangeSave: saveRange };
 }
 
 /** Where the singing starts near `time`, with Snap on and Alt not held. */
@@ -1535,6 +1530,14 @@ function onCursor({ reveal = false } = {}) {
     sync.nextLabel.textContent = t("lyrics.sync.next", { n: index + 1, count: lines.length });
     sync.nextText.textContent = line.text || "♪";
     tagLang(sync.nextText, line.text);
+    const next = lines[index + 1]?.time;
+    const estimatedEnd = Math.min(totalDuration || Infinity,
+      next != null ? next : line.time + 3);
+    if (sync.rangeStart) sync.rangeStart.value = preciseStamp(line.time);
+    if (sync.rangeEnd) sync.rangeEnd.value = preciseStamp(line.end ??
+      Math.max(line.time + 0.05, estimatedEnd));
+    if (sync.rangeError) sync.rangeError.textContent = "";
+    if (sync.rangeSave) sync.rangeSave.textContent = t("lyrics.sync.saveRange");
   } else {
     sync.nextLabel.textContent = t("lyrics.sync.allSetLabel");
     sync.nextText.textContent = t("lyrics.sync.allSet");
@@ -2317,12 +2320,12 @@ export function initLyrics() {
   document.getElementById("lyricsEditBtn")?.addEventListener("click", editLyrics);
   document.getElementById("lyricsAutoSyncBtn")?.addEventListener("click", startAutoSync);
   const syncBtn = document.getElementById("lyricsAutoSyncBtn");
-  if (syncBtn && !document.getElementById("lyricsAnchorStartBtn")) {
-    const anchor = el("button", "lyrics-align-btn", t("lyricsAutoSync.anchor"));
-    anchor.id = "lyricsAnchorStartBtn";
-    anchor.type = "button";
-    anchor.addEventListener("click", openFirstLineTiming);
-    syncBtn.after(anchor);
+  if (syncBtn && !document.getElementById("lyricsEditPhraseBtn")) {
+    const edit = el("button", "lyrics-align-btn", t("lyrics.sync.editPhrase"));
+    edit.id = "lyricsEditPhraseBtn";
+    edit.type = "button";
+    edit.addEventListener("click", openManualPhraseEditor);
+    syncBtn.after(edit);
   }
   document.addEventListener("tracktags", (e) => {
     if (visible && nothingKnownFor && e.detail?.id === nothingKnownFor) loadForCurrentTrack();
@@ -2331,8 +2334,8 @@ export function initLyrics() {
     updateKaraokeControls();
     setKaraokeMessage(karaokeMessageKey, karaokeMessageKind);
     updateTimingNote();
-    const anchor = document.getElementById("lyricsAnchorStartBtn");
-    if (anchor) anchor.textContent = t("lyricsAutoSync.anchor");
+    const edit = document.getElementById("lyricsEditPhraseBtn");
+    if (edit) edit.textContent = t("lyrics.sync.editPhrase");
   });
 }
 
@@ -2350,8 +2353,8 @@ function updateTimingNote() {
     : getCurrentTrackInfo() ? t("karaoke.addLyrics") : "";
   const auto = document.getElementById("lyricsAutoSyncBtn");
   if (auto) auto.disabled = !(shownEntry?.plain || shownEntry?.synced) || autoSyncView?.state === "running";
-  const anchor = document.getElementById("lyricsAnchorStartBtn");
-  if (anchor) anchor.disabled = !lines.length || autoSyncView?.state === "running";
+  const manual = document.getElementById("lyricsEditPhraseBtn");
+  if (manual) manual.disabled = !lines.length || autoSyncView?.state === "running";
   const edit = document.getElementById("lyricsEditBtn");
   if (edit) edit.disabled = !getCurrentTrackInfo() || autoSyncView?.state === "running";
 }

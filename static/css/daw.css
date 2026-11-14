@@ -7569,3 +7569,55 @@ input, textarea { font-family: inherit; }
     vertical-align: middle;
   }
 }
+
+/* PR #26: fix the layout origin, not the button's text alignment.
+   The compact composer must fill the entire topbar from the logo onward.
+   Its first two grid tracks are exactly the two extraction buttons. */
+@media (min-width: 1400px) {
+  .app.daw.header-v3 .daw-topbar {
+    justify-content: flex-start;
+  }
+  .app.daw.header-v3 .daw-topbar > .daw-composer-stack {
+    box-sizing: border-box;
+    flex: 1 1 0;
+    width: auto;
+    max-width: none;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    align-items: stretch;
+    justify-content: center;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact {
+    box-sizing: border-box;
+    flex: 0 0 42px;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    justify-content: stretch;
+    align-content: center;
+    grid-template-columns: 118px 90px minmax(0, 1fr);
+    grid-template-rows: 36px;
+    column-gap: 6px;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact > .import-layout-toggle {
+    grid-column: 1;
+    grid-row: 1;
+    width: 100%;
+    margin: 0;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact > .reextract-action {
+    grid-column: 2;
+    grid-row: 1;
+    width: 100%;
+    margin: 0;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact > #nowPlayingPanel {
+    grid-column: 3;
+    grid-row: 1;
+    min-width: 0;
+    margin: 0;
+  }
+}

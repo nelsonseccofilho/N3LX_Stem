@@ -347,7 +347,8 @@ function setKaraokeMessage(key = "", kind = "") {
   karaokeMessageKind = kind;
   const node = document.getElementById("lyricsGeneratorStatus");
   if (node) {
-    node.textContent = key ? t(key) : "";
+    node.textContent = key ? t(key === "karaokeTiming.ready" ? "karaokeTiming.readyShort" : key) : "";
+    node.title = key === "karaokeTiming.ready" ? t(key) : "";
     node.className = `lyrics-note${kind ? ` ${kind}` : ""}`;
   }
 }
@@ -1347,7 +1348,7 @@ function openSync({ focus = false } = {}) {
   showSyncState();
   if (provisional) setSyncMessage(t("karaoke.provisional"), "muted");
   updateTimingNote();
-  if (focus) sync.tap.focus();
+  if (focus) sync.byExact.focus();
 }
 
 /** Leave Sync lines: what is waiting to be saved is saved now. `keepOpen`
@@ -1357,6 +1358,7 @@ function closeSync(focusToggle, { keepOpen = false } = {}) {
   if (!sync) return;
   retimeToken++;
   flushUserSave();
+  sync.pendingStart = null;
   sync.panel.remove();
   sync.lineTools.remove();
   for (const row of lineEls) {
@@ -1408,9 +1410,20 @@ function buildSyncPanel(session) {
   next.append(nextLabel, nextText);
   next.setAttribute("aria-live", "polite");
 
-  const tap = alignButton(t("lyrics.sync.tap"), tapNow, "lyrics-sync-tap");
-  tap.append(el("kbd", "", t("lyrics.sync.tapKey")));
-  tap.title = t("lyrics.sync.tapTitle");
+  const tap = alignButton(t("lyrics.sync.tapStart"), tapNow, "lyrics-sync-tap");
+  tap.title = t("lyrics.sync.tapRangeHelp");
+  const method = el("div", "lyrics-sync-method");
+  method.setAttribute("role", "group");
+  method.setAttribute("aria-label", t("lyrics.sync.methodLabel"));
+  const byPlay = alignButton(t("lyrics.sync.methodPlay"), () => setSyncMethod("play"));
+  const byExact = alignButton(t("lyrics.sync.methodExact"), () => setSyncMethod("exact"));
+  byPlay.setAttribute("aria-pressed", "false");
+  byExact.setAttribute("aria-pressed", "true");
+  method.append(byPlay, byExact);
+  const playControls = el("div", "lyrics-sync-play-controls");
+  playControls.append(next, tap);
+  const playHint = el("p", "lyrics-sync-keys", t("lyrics.sync.tapRangeHelp"));
+  playControls.append(playHint);
 
   const undo = alignButton(t("lyrics.sync.undo"), undoSync);
   undo.title = t("lyrics.sync.undoTitle");
@@ -1418,11 +1431,14 @@ function buildSyncPanel(session) {
   edits.append(undo);
 
   const opts = el("div", "lyrics-sync-opts");
-  opts.append(
+  const playOptions = el("div", "lyrics-sync-options-group");
+  playOptions.append(el("strong", "", t("lyrics.sync.playOptions")),
     syncOption("lyrics.sync.leadIn", leadIn, (on) => { leadIn = on; }, "lyrics.sync.leadInTitle"),
-    syncOption("lyrics.sync.snap", snapOn, (on) => { snapOn = on; }, "lyrics.sync.snapTitle"),
-    syncOption("lyrics.sync.ripple", session.ripple, (on) => { session.ripple = on; }, "lyrics.sync.rippleTitle"),
-  );
+    syncOption("lyrics.sync.snap", snapOn, (on) => { snapOn = on; }, "lyrics.sync.snapTitle"));
+  const lineOptions = el("div", "lyrics-sync-options-group");
+  lineOptions.append(el("strong", "", t("lyrics.sync.lineOptions")),
+    syncOption("lyrics.sync.ripple", session.ripple, (on) => { session.ripple = on; }, "lyrics.sync.rippleTitle"));
+  opts.append(playOptions, lineOptions);
 
   const retimeBtn = alignButton(t("lyrics.sync.retime"), retimeFromVocals);
   retimeBtn.title = t("lyrics.sync.retimeTitle");
@@ -1433,8 +1449,8 @@ function buildSyncPanel(session) {
   // No timing of their own (plain lyrics fitted to the vocals): nothing to
   // go back to.
   original.disabled = !baseLines.length;
-  const resets = el("div", "lyrics-sync-row");
-  resets.append(retimeBtn, detected, original);
+  const resets = el("div", "lyrics-sync-options-group");
+  resets.append(el("strong", "", t("lyrics.sync.moreActions")), retimeBtn, detected, original);
 
   const message = el("p", "lyrics-align-message");
   message.setAttribute("aria-live", "polite");
@@ -1449,8 +1465,8 @@ function buildSyncPanel(session) {
   head.append(actions);
   const advanced = el("details", "lyrics-sync-advanced");
   const advancedLabel = el("summary", "", t("lyrics.sync.advanced"));
-  advanced.append(advancedLabel, next, tap, opts, resets, keys);
-  panel.append(head, advanced, message);
+  advanced.append(advancedLabel, opts, resets, keys);
+  panel.append(head, method, playControls, advanced, message);
 
   // The line in hand's own controls, shown under it in the list.
   const lineTools = el("div", "lyrics-line-tools");
@@ -1513,6 +1529,7 @@ function buildSyncPanel(session) {
   lineTools.append(range);
 
   return { panel, session, kind, saveState, nextLabel, nextText, tap, undo, retimeBtn, message,
+    method: "exact", pendingStart: null, byPlay, byExact, playControls,
     lineTools, rangePanel: range, rangeStart: begin.input, rangeEnd: finish.input, rangeError, rangeSave: saveRange };
 }
 
@@ -1524,6 +1541,7 @@ function snapped(time, free = false) {
 /** Take line `index` in hand; with `seek`, the playhead goes to it. */
 function selectLine(index, { seek = false } = {}) {
   if (!sync || index < 0 || index >= lines.length) return;
+  sync.pendingStart = null;
   sync.session.select(index);
   onCursor({ reveal: true });
   if (seek) setPlayheadTime(Math.max(0, lines[index].time - (leadIn ? LEAD_IN_SEC : 0)));
@@ -1538,9 +1556,12 @@ function onCursor({ reveal = false } = {}) {
   setLaneSelected(index);
   placeLineTools();
   const line = lines[index];
-  sync.tap.disabled = !line;
+  sync.tap.disabled = !line || !line.text?.trim();
+  sync.tap.textContent = t(sync.pendingStart === null ? "lyrics.sync.tapStart" : "lyrics.sync.tapEnd");
+  sync.playControls.hidden = sync.method !== "play";
+  sync.lineTools.hidden = sync.method !== "exact";
   sync.nextText.removeAttribute("lang");
-  if (sync.rangePanel) sync.rangePanel.hidden = !line?.text?.trim();
+  if (sync.rangePanel) sync.rangePanel.hidden = sync.method !== "exact" || !line?.text?.trim();
   if (line) {
     sync.nextLabel.textContent = t("lyrics.sync.next", { n: index + 1, count: lines.length });
     sync.nextText.textContent = line.text || "♪";
@@ -1616,10 +1637,31 @@ function edited(options) {
   syncChanged(options);
 }
 
+function setSyncMethod(method) {
+  if (!sync || !["play", "exact"].includes(method)) return;
+  sync.method = method;
+  sync.pendingStart = null;
+  sync.byPlay.setAttribute("aria-pressed", String(method === "play"));
+  sync.byExact.setAttribute("aria-pressed", String(method === "exact"));
+  setSyncMessage();
+  onCursor();
+}
+
 function tapNow() {
-  if (!sync || sync.session.done) return;
-  sync.session.tap(snapped(now()));
-  // The tap is seen as well as heard: the button flashes.
+  if (!sync || sync.method !== "play" || sync.session.done) return;
+  const time = snapped(now());
+  if (sync.pendingStart === null) {
+    // A start is staged, not saved. The pair is committed atomically.
+    sync.pendingStart = time;
+    sync.tap.textContent = t("lyrics.sync.tapEnd");
+    sync.nextLabel.textContent = t("lyrics.sync.startMarked", { time: preciseStamp(time) });
+    return;
+  }
+  if (!sync.session.markPhraseRange(sync.pendingStart, time)) {
+    setSyncMessage(t("lyrics.sync.rangeInvalid"), "error");
+    return;
+  }
+  sync.pendingStart = null;
   sync.tap.classList.remove("tapped");
   void sync.tap.offsetWidth;
   sync.tap.classList.add("tapped");
@@ -1638,6 +1680,12 @@ function lineToPlayhead() {
 }
 
 function undoSync() {
+  if (sync?.pendingStart !== null && sync?.method === "play") {
+    sync.pendingStart = null;
+    setSyncMessage();
+    onCursor();
+    return;
+  }
   if (sync?.session.undo()) {
     setSyncMessage();
     syncChanged({ reveal: true });
@@ -1853,13 +1901,13 @@ function onSyncKey(e) {
   } else if (mod || e.altKey) {
     handled = false;
   } else if (e.code === "KeyT") {
-    if (sync.tap.closest("details")?.open) tapNow();
+    if (sync.method === "play") tapNow();
     else handled = false;
   } else if (e.key === "Enter") {
     // Enter on another button presses that button.
     const control = e.target?.closest?.("button, a, [role='button']");
     if (control && control !== sync.tap) handled = false;
-    else if (sync.tap.closest("details")?.open) tapNow();
+    else if (sync.method === "play") tapNow();
     else handled = false;
   } else if (e.key === "Backspace") {
     undoSync();
@@ -2364,10 +2412,12 @@ export function setLyricsPresentation(on) {
 
 function updateTimingNote() {
   const note = document.getElementById("lyricsTimingNote");
-  if (note) note.textContent = shownFrom === "preview" && shownEntry?.machinePreview
-    ? ""
-    : shownEntry ? t(lines.length && !provisional ? "karaoke.timed" : "karaoke.untimed")
-    : getCurrentTrackInfo() ? t("karaoke.addLyrics") : "";
+  if (note) {
+    note.textContent = shownFrom === "preview" && shownEntry?.machinePreview
+      ? "" : shownEntry ? t(lines.length && !provisional ? "karaoke.timedShort" : "karaoke.untimed")
+      : getCurrentTrackInfo() ? t("karaoke.addLyrics") : "";
+    note.title = lines.length && !provisional ? t("karaoke.timed") : "";
+  }
   const auto = document.getElementById("lyricsAutoSyncBtn");
   if (auto) auto.disabled = !(shownEntry?.plain || shownEntry?.synced) || autoSyncView?.state === "running";
   const manual = document.getElementById("lyricsEditPhraseBtn");

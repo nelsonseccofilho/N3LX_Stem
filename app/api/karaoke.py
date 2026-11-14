@@ -122,6 +122,9 @@ async def _generate(job, job_dir: Path, run, replace: bool, cli: str, model: Pat
                 raise KaraokeTimingError("vocals changed during transcription")
             _phase(run, "finalize")
             timing["model"] = model.stem.removeprefix("ggml-")
+            # Bump when the alignment contract changes; old sidecars must be
+            # explicitly regenerated rather than silently reused.
+            timing["pipeline_revision"] = 2
             # Reuse WhisperX timings only while the underlying vocals stem matches.
             timing["vocals"] = [after[0], after[1]]
             output = job_dir / _SIDE_CAR
@@ -174,13 +177,9 @@ async def generate_karaoke(job_id: str, request: Request) -> JSONResponse:
     run = claim_run(job_id)
     if run is None:
         raise HTTPException(status_code=409, detail="lyrics processing already running")
-    try:
-        if replace:
-            _archive_timing(job_dir, "regenerated")
-    except Exception:
-        run.state = "idle"
-        run.ended.set()
-        raise
+    # Keep the active sidecar visible until a complete, validated replacement
+    # is committed. store_timing(replace=True) creates the recovery backup and
+    # atomically replaces the file only after successful acoustic alignment.
     run.karaoke_language = language
     run.karaoke_started = time.monotonic()
     _phase(run, "queued")
@@ -213,10 +212,24 @@ def karaoke_status(job_id: str) -> dict:
                     else "unavailable"
                 )
     models = language_models["pt"]
+    # The filename existing is not sufficient evidence of a current acoustic
+    # alignment. Check its pipeline revision and the verified source, language,
+    # and acoustic backend before the UI decides to skip regeneration.
+    current_alignment = {"pt": False, "en": False}
+    if output.is_file():
+        try:
+            from app.pipeline.lyrics_retime import read_karaoke_transcript
+            metadata = json.loads(output.read_text(encoding="utf-8"))
+            if isinstance(metadata, dict) and metadata.get("pipeline_revision") == 2:
+                for lang in current_alignment:
+                    current_alignment[lang] = read_karaoke_transcript(job_dir, lang) is not None
+        except (OSError, ValueError, TypeError):
+            pass
     now = time.monotonic()
     return {
         "state": run.state if run is not None else "idle",
-        "available": output.is_file(), "models": models, "language_models": language_models,
+        "available": output.is_file(), "current_alignment": current_alignment,
+        "models": models, "language_models": language_models,
         "language_issues": language_issues,
         "language": getattr(run, "karaoke_language", None) if run is not None else None,
         "phase": getattr(run, "karaoke_phase", "queued") if run is not None else None,

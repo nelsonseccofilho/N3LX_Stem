@@ -8,6 +8,9 @@
 import {
   timingOf,
   formatStamp,
+  preciseStamp,
+  parsePreciseStamp,
+  editPhraseRange,
   serializeLrc,
   fitWords,
   applyTime,
@@ -16,7 +19,7 @@ import {
   SyncSession,
   MIN_GAP_SEC,
 } from "../../static/js/lyricsSync.js";
-import { parseLrc, fromServerLyrics } from "../../static/js/lyricsLookup.js";
+import { parseLrc, fromServerLyrics, currentLineIndex, wordTimings } from "../../static/js/lyricsLookup.js";
 
 let pass = 0;
 let fail = 0;
@@ -181,6 +184,73 @@ const USER = "[00:00.00]\n[00:01.50] One line\n[00:03.50] Two line\n[00:05.50] T
   check("a tap just before snaps forward", near(snapToVoice(envelope, 1.85), 2.0, 1e-9));
   check("too far away, the tap stays", snapToVoice(envelope, 1.2) === 1.2);
   check("no envelope, no snap", snapToVoice(null, 2.2) === 2.2);
+}
+
+// ── manual editing: start and end of ANY selected phrase ──
+{
+  check("millisecond time is readable and not rounded to centiseconds",
+    parsePreciseStamp("00:22.125") === 22.125 &&
+    preciseStamp(22.125) === "00:22.125" &&
+    parsePreciseStamp("00:22") === 22 &&
+    parsePreciseStamp("00:62.500") === null);
+
+  // The legacy sidecar put an instrumental clear at 21s. Moving the first
+  // phrase to the real 22s vocal onset must not let the clear hide its words.
+  const source = parseLrc("[00:19.00] A rua respira sal\n[00:21.00]\n[00:29.00] Segunda frase");
+  const corrected = editPhraseRange(source, 0, 22, 26.5, 245);
+  check("manual correction of the first phrase survives a pause marker",
+    corrected?.[0]?.time === 22 && corrected[0].end === 26.5 &&
+    corrected[1].time > 26.5 && corrected[2].time === 29);
+  const stored = serializeLrc(corrected);
+  const restored = parseLrc(stored);
+  check("the exact phrase end is persisted in LRC without an extra line",
+    stored.includes("<00:26.500>") && restored.length === source.length &&
+    restored[0].end === 26.5 && restored[0].time === 22);
+  check("user timing wins over automatic alignment after reloading",
+    timingOf({
+      synced: "[00:19.00] A rua respira sal",
+      aligned: { synced: "[00:20.00] A rua respira sal" },
+      userSynced: stored,
+    }).lines[0].time === 22);
+  check("the lyric disappears at the explicitly confirmed end",
+    currentLineIndex(restored, 25) === 0 &&
+    currentLineIndex(restored, 26.5) === -1);
+  check("word highlighting never extends beyond a manually set end",
+    wordTimings(restored[0], restored[1].time).at(-1)?.end <= 26.5);
+  check("editing a later phrase never moves other sung phrases",
+    editPhraseRange(source, 2, 30, 34, 245)?.[0]?.time === 19);
+  check("invalid or out-of-order phrase boundaries are rejected",
+    editPhraseRange(source, 0, 24, 22, 245) === null &&
+    editPhraseRange(source, 0, 22, 31, 245) === null &&
+    editPhraseRange(source, 0, 22, 26, 25) === null);
+}
+
+// Playback mode: staged start is UI-only; complete range is one undoable,
+// persistent change, and the next sung phrase is selected automatically.
+{
+  const source = parseLrc("[00:19.000] First phrase\n[00:27.000]\n[00:29.000] Second phrase\n[00:39.000] Third phrase");
+  const session = new SyncSession(source, { max: 70 });
+  check("two-tap range commits start and end together",
+    session.markPhraseRange(22, 26.5) &&
+    session.lines[0].time === 22 && session.lines[0].end === 26.5);
+  check("two-tap advances to next sung phrase, skipping pauses",
+    session.cursor === 2 && session.lines[2].time === 29);
+  check("two-tap does not move another sung phrase",
+    session.lines[2].time === 29 && session.lines[3].time === 39);
+  const saved = serializeLrc(session.lines);
+  const reloaded = parseLrc(saved);
+  check("two-tap range persists with millisecond precision",
+    reloaded[0].time === 22 && reloaded[0].end === 26.5);
+  check("undo restores earlier timing and selection",
+    session.undo() && session.cursor === 0 &&
+    session.lines[0].time === 19 && !Number.isFinite(session.lines[0].end));
+  check("redo restores timing and next phrase",
+    session.redo() && session.cursor === 2 &&
+    session.lines[0].time === 22 && session.lines[0].end === 26.5);
+  check("invalid playback end does not mutate any lyrics",
+    !session.markPhraseRange(32, 31) && session.lines[2].time === 29);
+  check("overlapping subsequent phrase is rejected",
+    !session.markPhraseRange(30, 42) && session.lines[3].time === 39);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

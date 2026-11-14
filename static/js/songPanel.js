@@ -35,7 +35,10 @@ export function initSongPanel() {
   document.getElementById("t-metro-panel").append(note);
   const bounds = card.querySelector(".footer-loop-times-wrap");
   bounds.classList.add("song-loop-panel", "hidden"); bounds.id = "song-loop-panel";
-  const loopMore = button("⌄", () => {}, "song-small-btn"); loopMore.id = "song-loop-more";
+  const loopMore = button("", () => {}, "song-small-btn"); loopMore.id = "song-loop-more";
+  // Match the metronome disclosure's chevron shape, size and direction.
+  const metroChevron = document.querySelector("#t-metro-more svg");
+  if (metroChevron) loopMore.append(metroChevron.cloneNode(true));
   loopMore.setAttribute("aria-controls", bounds.id); position.append(loopMore);
   const menuWrap = el("div", "song-menu-wrap");
   const menuButton = button("⋯", () => {}, "song-small-btn song-menu-button");
@@ -45,6 +48,15 @@ export function initSongPanel() {
   const metroLabel = card.querySelector(".footer-group-click .footer-group-label");
   metroLabel.dataset.i18n = "song.metronome"; metroLabel.textContent = t("song.metronome");
   const menu = el("div", "song-menu hidden"); menu.id = "song-menu";
+  // The menu must be a floating surface, not another row in the music card.
+  // Anchor it below the ellipsis and keep it inside the viewport.
+  const positionMenu = () => {
+    const rect = menuButton.getBoundingClientRect();
+    const width = Math.min(260, window.innerWidth - 24);
+    menu.style.width = width + "px";
+    menu.style.left = Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12)) + "px";
+    menu.style.top = Math.min(rect.bottom + 7, window.innerHeight - 18) + "px";
+  };
   menu.setAttribute("role", "group");
   menuWrap.append(menuButton, menu); card.querySelector(".track-panel-head").append(menuWrap);
   const notice = el("div", "song-notice"); notice.setAttribute("role", "status"); card.append(notice);
@@ -60,7 +72,7 @@ export function initSongPanel() {
     const guitars = button(t("guitar.title"), () => { closeMenu(); openGuitarDetail(song, menuButton); });
     guitars.disabled = !song.ready; menu.append(guitars);
   };
-  closeMenu = wirePanel(menuButton, menu, renderMenu);
+  closeMenu = wirePanel(menuButton, menu, () => { renderMenu(); positionMenu(); });
   wirePanel(loopMore, bounds);
   const translate = () => {
     menuButton.title = t("song.actions"); menuButton.setAttribute("aria-label", t("song.actions"));

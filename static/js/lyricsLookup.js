@@ -114,12 +114,16 @@ export function parseLrc(text) {
       rest = rest.slice(m[0].length);
     }
     if (!stamps.length) continue;
-    const words = wordStamps(rest);
-    const plain = rest.replace(WORD_STAMP, "").replace(/\s+/g, " ").trim();
+    // An empty trailing word-time stamp is the phrase's explicit end.
+    const tail = /<(\d{1,3}):(\d{1,2}(?:[.:]\d{1,3})?)>\s*$/.exec(rest);
+    const explicitEnd = tail ? Number(tail[1]) * 60 + Number(tail[2].replace(":", ".")) : null;
+    const body = tail ? rest.slice(0, tail.index) : rest;
+    const words = wordStamps(body);
+    const plain = body.replace(WORD_STAMP, "").replace(/\s+/g, " ").trim();
     for (const time of stamps) {
-      // Words sung before the first word stamp start with the line.
       const timed = words?.[0].time == null ? words?.map((w, i) => (i ? w : { ...w, time })) : words;
-      lines.push(timed ? { time, text: plain, words: timed } : { time, text: plain });
+      const end = explicitEnd != null && explicitEnd > time ? { end: explicitEnd } : {};
+      lines.push(timed ? { time, text: plain, words: timed, ...end } : { time, text: plain, ...end });
     }
   }
   const shift = (t) => Math.max(0, t - offset);
@@ -127,6 +131,7 @@ export function parseLrc(text) {
     .map((line) => ({
       ...line,
       time: shift(line.time),
+      ...(line.end != null ? { end: shift(line.end) } : {}),
       ...(line.words ? { words: line.words.map((w) => ({ ...w, time: shift(w.time) })) } : {}),
     }))
     .sort((a, b) => a.time - b.time);
@@ -406,7 +411,9 @@ function layPhrase(tokens, weights, phrase, out) {
  * when the next line starts, or null for the last.
  */
 export function wordTimings(line, nextTime, envelope = null) {
-  const limit = nextTime != null && nextTime > line.time ? nextTime : line.time + LAST_LINE_SECONDS;
+  const naturalLimit = nextTime != null && nextTime > line.time ? nextTime : line.time + LAST_LINE_SECONDS;
+  const limit = Number.isFinite(line.end) && line.end > line.time
+    ? Math.min(naturalLimit, line.end) : naturalLimit;
   if (line.words?.length) {
     const out = [];
     line.words.forEach((word, i) => {
@@ -545,6 +552,7 @@ export function shiftLines(lines, offset) {
   return lines.map((line) => ({
     ...line,
     time: line.time + offset,
+    ...(Number.isFinite(line.end) ? { end: line.end + offset } : {}),
     ...(line.words ? { words: line.words.map((w) => (w.time == null ? w : { ...w, time: w.time + offset })) } : {}),
   }));
 }
@@ -576,5 +584,5 @@ export function currentLineIndex(lines, seconds) {
       hi = mid - 1;
     }
   }
-  return found;
+  return found >= 0 && Number.isFinite(lines[found].end) && seconds >= lines[found].end ? -1 : found;
 }

@@ -1833,6 +1833,67 @@ def _hear(
     return _run_worker(job, cmd, cancelled=cancelled, report=report)
 
 
+def read_karaoke_transcript(job_dir: Path, language: str) -> dict[str, Any] | None:
+    """Use the already aligned WhisperX PT/EN words without running ASR again.
+
+    Only accept sidecars whose source vocals stem is unchanged, whose acoustic
+    backend is verified and whose timestamps are sane. Older sidecars lack a
+    source stamp, so accept those only if newer than the original stem.
+    This is an anchor candidate: retime_gate still checks lyric agreement.
+    """
+    from app.pipeline.karaoke_timing import MAX_BYTES, MAX_DURATION, MAX_WORDS
+
+    file = job_dir / "lyrics_timing.json"
+    vocals = job_dir / "stems" / "vocals.wav"
+    try:
+        if file.is_symlink() or not file.is_file() or not vocals.is_file():
+            return None
+        if file.stat().st_size > MAX_BYTES:
+            return None
+        data = json.loads(file.read_text(encoding="utf-8"))
+        if not isinstance(data, dict) or data.get("v") != 1:
+            return None
+        if data.get("engine") != "whisperx" or data.get("gpu_verified") is not True:
+            return None
+        if data.get("alignment_backend") != "cpu":
+            return None
+        actual_language = data.get("language")
+        if actual_language not in {"pt", "en"} or (language and language != actual_language):
+            return None
+        stamp = _vocals_stamp(job_dir)
+        if not stamp:
+            return None
+        if "vocals" in data:
+            if data["vocals"] != stamp:
+                return None
+        elif file.stat().st_mtime_ns < vocals.stat().st_mtime_ns:
+            return None  # Legacy sidecar cannot predate its source.
+        raw = data.get("words")
+        if not isinstance(raw, list) or not (3 <= len(raw) <= MAX_WORDS):
+            return None
+        words = []
+        previous = -1.0
+        for item in raw:
+            if not isinstance(item, dict):
+                return None
+            text = item.get("text")
+            start, end = item.get("start"), item.get("end")
+            if (not isinstance(text, str) or not text.strip() or len(text) > 120
+                    or any(ch in text for ch in "<>[]")
+                    or isinstance(start, bool) or isinstance(end, bool)
+                    or not isinstance(start, (int, float))
+                    or not isinstance(end, (int, float))
+                    or not math.isfinite(start) or not math.isfinite(end)
+                    or start < max(0, previous - .02) or end < start
+                    or end > MAX_DURATION):
+                return None
+            words.append({"text": text.strip(), "start": float(start), "end": float(end)})
+            previous = max(previous, float(start))
+        return {"words": words, "language": actual_language, "refined": True}
+    except (OSError, ValueError, TypeError):
+        return None
+
+
 def _transcribe(
     job: Any,
     job_dir: Path,
@@ -1843,6 +1904,13 @@ def _transcribe(
     """The heard words, and whether missed lines were heard again already:
     the kept transcript, else a new one (kept too). Raises RetimeFailed, or
     JobCancelled."""
+    # WhisperX already measured these words during karaoke generation.
+    # Prefer its language-aware alignment; never re-run Vulkan for the same
+    # vocals unless neither the sidecar nor a kept transcript is usable.
+    sidecar = read_karaoke_transcript(job_dir, language)
+    if sidecar is not None:
+        report("transcribe", 100)
+        return sidecar["words"], True
     kept = read_transcript(job_dir)
     if kept is not None and kept["words"]:
         return kept["words"], kept["refined"]
@@ -1922,6 +1990,16 @@ def retime_job(
     voice = Voice.of(*envelope) if envelope is not None else None
     duration = float(getattr(job, "duration_sec", 0) or entry.get("duration") or 0)
     result = retime_lines(pairs, words, voice, duration)
+    # When the WhisperX sidecar cannot pass the confidence gate, an older
+    # transcript may still rescue the lyrics without a second ASR pass.
+    # Never replace a valid WhisperX result just for a small score difference.
+    if refined and not retime_gate(result):
+        sidecar = read_karaoke_transcript(job_dir, language)
+        kept = read_transcript(job_dir) if sidecar is not None else None
+        if kept is not None and kept["words"]:
+            alternate = retime_lines(pairs, kept["words"], voice, duration)
+            if retime_gate(alternate) and no_worse(entry, alternate, voice):
+                result, words, refined = alternate, kept["words"], kept["refined"]
     clips = [] if refined else missed_clips(result, voice, duration)
     if clips:
         # The lines not found, heard again on their own: Whisper often

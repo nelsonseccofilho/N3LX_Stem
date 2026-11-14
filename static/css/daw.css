@@ -4127,6 +4127,29 @@ input, textarea { font-family: inherit; }
   display: flex; flex-direction: column; gap: 7px;
   padding: 8px; border: 1px solid var(--accent); border-radius: 8px; background: var(--panel);
 }
+.lyrics-heading .lyrics-generation-status {
+  display: inline-flex; align-items: center; max-width: 260px;
+  font-size: 11px; line-height: 1.25; color: var(--muted); margin: 0;
+}
+.lyrics-heading .lyrics-generation-status:empty { display: none; }
+/* Two methods share one editor and one persistence pipeline. */
+.lyrics-sync-method { display: flex; flex-wrap: wrap; gap: 4px; }
+.lyrics-sync-method .lyrics-align-btn { flex: 1 1 120px; min-height: 32px; }
+.lyrics-sync-method [aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 700; }
+.lyrics-sync-play-controls { display: flex; flex-direction: column; gap: 6px; }
+.lyrics-sync-play-controls .lyrics-sync-tap { min-height: 42px; }
+.lyrics-sync-options-group { display: flex; flex-wrap: wrap; align-items: center; gap: 7px 12px; padding: 4px 0; }
+.lyrics-sync-options-group > strong { flex: 1 0 100%; font-size: 11px; color: var(--muted); }
+.lyrics-sync-play-controls[hidden], .lyrics-line-tools[hidden], .lyrics-phrase-range[hidden] { display: none !important; }
+.lyrics-sync-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.lyrics-sync-primary { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.lyrics-sync-primary .lyrics-align-btn { min-height: 30px; padding: 4px 10px; }
+.lyrics-sync-primary .lyrics-align-done { color: var(--bg); background: var(--accent); border-color: var(--accent); }
+.lyrics-sync-advanced { border-top: 1px solid var(--border-subtle, var(--border)); padding-top: 5px; }
+.lyrics-sync-advanced > summary { cursor: pointer; width: fit-content; padding: 4px 2px; font-size: 11px; color: var(--fg-2); }
+.lyrics-sync-advanced[open] { display: flex; flex-direction: column; gap: 7px; }
+.lyrics-sync-advanced .lyrics-sync-next { margin-top: 3px; }
+.lyrics-sync:has(.lyrics-sync-advanced:not([open])) { gap: 4px; }
 .lyrics-sync-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .lyrics-sync-title { margin: 0; font-size: 12px; font-weight: 700; color: var(--fg); }
 .lyrics-sync-kind { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -4167,7 +4190,13 @@ input, textarea { font-family: inherit; }
   font-variant-numeric: tabular-nums;
 }
 .lyrics-body.syncing .lyrics-line.selected { background: var(--panel); outline: 1px solid var(--accent); outline-offset: -1px; }
-.lyrics-line-tools { display: flex; align-items: center; gap: 4px; padding: 2px 8px 6px; }
+.lyrics-line-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; padding: 2px 8px 6px; }
+.lyrics-phrase-range { display: flex; flex-basis: 100%; align-items: end; flex-wrap: wrap; gap: 8px; padding: 8px 0 4px; border-top: 1px solid var(--border-subtle, #d3d8dd); }
+.lyrics-phrase-range-field { display: flex; flex: 1 1 155px; flex-direction: column; gap: 4px; font-size: 11px; }
+.lyrics-phrase-range-field > span { font-weight: 600; }
+.lyrics-phrase-time { box-sizing: border-box; width: 100%; min-height: 30px; padding: 4px 8px; border: 1px solid var(--border-subtle, #a5adb7); border-radius: 5px; color: inherit; background: var(--surface, #fff); font: 12px var(--font-mono, monospace); font-variant-numeric: tabular-nums; }
+.lyrics-phrase-range .lyrics-align-message { flex-basis: 100%; margin: 0; }
+.lyrics-phrase-range > .lyrics-align-btn { min-height: 30px; }
 .lyrics-line-tools .lyrics-align-btn { min-height: 22px; padding: 0 6px; font-size: 10.5px; }
 .lyrics-line-tools .lyrics-align-nudge { font-family: var(--font-mono); }
 .lyrics-line-tools .lyrics-line-here { margin-left: auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--accent); border-color: var(--accent); }
@@ -7007,3 +7036,936 @@ input, textarea { font-family: inherit; }
 .karaoke-sections[hidden] { display:none; }
 .karaoke-section { position:absolute; top:0; bottom:0; box-sizing:border-box; display:flex; align-items:center; padding:0 7px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; border:1px solid var(--section-color,var(--border)); border-radius:4px; color:var(--section-color,var(--fg-2)); background:var(--bg-2); font-size:10px; font-weight:700; }
 .karaoke-section.is-active { box-shadow:inset 0 -2px 0 var(--section-color,var(--accent)); }
+
+
+/* PR #26 — compact karaoke editing: lyrics are the preview, not a duplicate card. */
+.lyrics-sync-visually-hidden {
+  position: absolute !important;
+  width: 1px !important; height: 1px !important;
+  padding: 0 !important; margin: -1px !important; border: 0 !important;
+  overflow: hidden !important; clip: rect(0,0,0,0) !important;
+  white-space: nowrap !important;
+}
+.lyrics-sync {
+  gap: 5px;
+  padding: 7px 9px;
+  border-color: var(--border-strong);
+}
+.lyrics-sync-head { align-items: center; }
+.lyrics-sync-method { gap: 6px; }
+.lyrics-sync-method .lyrics-align-btn {
+  flex: 0 1 auto; min-width: 126px; height: 30px; min-height: 30px;
+  padding: 4px 12px; font-size: 11px; font-weight: 600;
+  color: var(--fg-2); background: transparent;
+  border-color: var(--border-strong); border-radius: 6px;
+}
+.lyrics-sync-method [aria-pressed="true"] {
+  background: var(--panel-2); color: var(--fg);
+  border-color: var(--fg-2); box-shadow: inset 0 -2px 0 var(--accent);
+}
+.lyrics-sync-method [aria-pressed="true"]:hover { background: var(--panel-2); color: var(--fg); }
+.lyrics-sync-play-controls { gap: 3px; }
+.lyrics-sync-play-controls .lyrics-sync-tap {
+  align-self: flex-start; min-width: 152px; width: auto;
+  height: 32px; min-height: 32px; padding: 4px 16px;
+  font-size: 12px; letter-spacing: 0; border-radius: 6px;
+}
+.lyrics-sync-play-controls > .lyrics-sync-keys { font-size: 10px; }
+.lyrics-sync-primary .lyrics-align-btn { height: 30px; min-height: 30px; }
+.lyrics-sync-advanced { padding-top: 3px; }
+.lyrics-sync-advanced > summary { font-size: 10.5px; }
+/* Keep interactive heights consistent without enlarging the whole panel. */
+.lyrics-heading > button, .lyrics-heading .lyrics-align-btn {
+  height: 30px; min-height: 30px; box-sizing: border-box;
+}
+
+/* Full-width desktop: one consistent row for import, track and transport.
+   Preserve the existing two-row layout below 1400px rather than clipping. */
+@media (min-width: 1400px) {
+  .app.daw.header-v3 .daw-topbar {
+    min-height: 54px;
+    height: 54px;
+    gap: 8px;
+    padding-right: 10px;
+  }
+  .app.daw.header-v3 .daw-composer-stack {
+    padding: 3px 0;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact {
+    grid-template-columns: 118px 90px minmax(0,1fr);
+    grid-template-rows: 36px;
+    column-gap: 6px;
+    row-gap: 0;
+    height: 42px;
+    max-height: 42px;
+    align-items: center;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact > .import-layout-toggle {
+    grid-column: 1;
+    grid-row: 1;
+    height: 30px;
+    min-height: 30px;
+    align-self: center;
+    font-size: 10.5px;
+    padding-inline: 5px;
+    white-space: nowrap;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact > .reextract-action {
+    grid-column: 2;
+    grid-row: 1;
+    height: 30px;
+    min-height: 30px;
+    align-self: center;
+    font-size: 10.5px;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact > #nowPlayingPanel {
+    grid-column: 3;
+    grid-row: 1;
+    grid-template-columns: minmax(155px, 24%) minmax(0, 1fr);
+    grid-template-rows: 32px;
+    gap: 6px;
+    height: 40px;
+    min-height: 40px;
+    padding: 3px 8px;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .track-panel-head {
+    grid-column: 1;
+    grid-row: 1;
+    height: 30px;
+  }
+  /* Track title and artist remain available; detailed metadata stays in info. */
+  .app.daw.header-v3 #nowPlayingPanel .daw-track-meta-line {
+    display: none;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .song-controls {
+    grid-column: 2;
+    grid-row: 1;
+    padding-left: 7px;
+    align-self: center;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .footer-clusters {
+    grid-template-columns: max-content minmax(110px, 1fr) max-content max-content max-content max-content;
+    grid-template-rows: 30px;
+    column-gap: 6px;
+    row-gap: 0;
+    align-items: center;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-transport { grid-area: 1 / 1; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-position { grid-area: 1 / 2; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-speed { grid-area: 1 / 3; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-key { grid-area: 1 / 4; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-click { grid-area: 1 / 5; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-track-actions {
+    grid-area: 1 / 6;
+    justify-self: end;
+    align-self: center;
+  }
+  .app.daw.header-v3 #nowPlayingPanel #footer-scrub {
+    min-width: 32px;
+    max-width: 126px;
+    height: 7px;
+    margin-inline: 4px;
+  }
+  .app.daw.header-v3 #nowPlayingPanel :is(.daw-play-btn, .daw-iconbtn.btn-transport,
+    .speed-btn, .pitch-btn, .pitch-reset, #t-metro, .metro-vol-btn, #t-metro-more, #t-export-btn) {
+    box-sizing: border-box;
+    height: 30px;
+    min-height: 30px;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-body { gap: 3px; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-clusters { gap: 5px; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-total { font-size: 10px; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-elapsed { font-size: 12px; }
+}
+
+/* PR #26 — remove the redundant title strip; keep the icon-only brand link. */
+.app.daw .daw-brand a { min-height: 0; height: 100%; justify-content: center; }
+.app.daw .daw-brand img { width: 28px; height: 28px; }
+.rail-community-action {
+  width: 100%; display: flex; justify-content: center;
+  border-top: 1px solid var(--border); padding-top: 7px; margin-top: 4px;
+}
+.rail-community-action .github-star-shortcut {
+  width: 40px; height: 40px; box-sizing: border-box;
+  padding: 0; display: flex; justify-content: center; align-items: center;
+  border: 1px solid var(--border-strong); background: transparent;
+  color: var(--muted); border-radius: 8px;
+}
+.rail-community-action .github-star-shortcut span { display: none; }
+.rail-community-action .github-star-shortcut svg { width: 18px; height: 18px; }
+.rail-community-action .github-star-shortcut:hover,
+.rail-community-action .github-star-shortcut:focus-visible {
+  background: var(--panel); border-color: var(--accent); color: var(--accent);
+}
+/* Analysis / Sections are visibility toggles, not main actions.
+   Neutral chips, consistent alignment, and an unambiguous off state. */
+.studio-view-tools .daw-panel-toggles {
+  display: inline-flex; flex: 0 0 auto; align-items: center;
+  gap: 4px; padding: 2px; margin-left: 8px;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 7px;
+}
+.studio-view-tools .daw-panel-toggle {
+  box-sizing: border-box; display: inline-flex; justify-content: center;
+  align-items: center; height: 30px; min-height: 30px;
+  padding: 0 11px; border: 1px solid transparent;
+  border-radius: 5px; font-size: 11px; font-weight: 600;
+  letter-spacing: 0; text-transform: none; text-decoration: none;
+}
+.studio-view-tools .daw-panel-toggle[aria-pressed="true"] {
+  background: var(--bg-2); border-color: var(--border-strong);
+  color: var(--fg); opacity: 1; box-shadow: 0 1px 2px #0001;
+}
+.studio-view-tools .daw-panel-toggle[aria-pressed="false"] {
+  background: transparent; border-color: transparent;
+  color: var(--muted); opacity: .85;
+  text-decoration: none;
+}
+.studio-view-tools .daw-panel-toggle:hover {
+  background: var(--panel-2); border-color: var(--border-strong);
+}
+.studio-view-tools .daw-panel-toggle:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
+/* All transport and editing controls share a 30px hit area and centered baseline. */
+.app.daw.header-v3 .daw-composer.header-compact > :is(.import-layout-toggle,.reextract-action) {
+  box-sizing: border-box; display: inline-flex; align-items: center;
+  justify-content: center; height: 30px; min-height: 30px;
+  margin-block: 0; align-self: center; line-height: 1;
+}
+.app.daw.header-v3 #nowPlayingPanel .footer-clusters,
+.app.daw.header-v3 #nowPlayingPanel .footer-group,
+.app.daw.header-v3 #nowPlayingPanel .footer-group-body,
+.app.daw.header-v3 #nowPlayingPanel .footer-track-actions {
+  align-items: center; align-self: center;
+}
+.app.daw.header-v3 #nowPlayingPanel :is(.daw-play-btn,.daw-iconbtn.btn-transport,.speed-btn,
+  .pitch-btn,.pitch-reset,#t-metro,.metro-vol-btn,#t-metro-more,#t-export-btn,
+  .loop-btn,.footer-loop-btn) {
+  box-sizing: border-box; height: 30px; min-height: 30px;
+  align-self: center; vertical-align: middle;
+}
+.app.daw.header-v3 #nowPlayingPanel .footer-group-position .footer-group-body {
+  align-items: center;
+}
+@media (min-width: 1400px) {
+  .app.daw.header-v3 .daw-composer.header-compact {
+    align-items: center;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .footer-clusters {
+    grid-template-rows: 30px;
+    align-items: center;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-position {
+    align-items: center; align-self: center;
+  }
+}
+
+/* PR #26 — player hierarchy: track identity gets remaining width;
+   playback controls keep intrinsic widths and never float apart. */
+@media (min-width: 1550px) {
+  .app.daw.header-v3 .daw-composer.header-compact > #nowPlayingPanel {
+    grid-template-columns: minmax(170px, 1fr) max-content;
+    column-gap: 10px;
+    align-items: center;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .track-panel-head {
+    min-width: 0;
+    width: 100%;
+    align-self: center;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .track-panel-info {
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .track-panel-title {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .song-controls {
+    box-sizing: border-box;
+    width: max-content;
+    max-width: 100%;
+    min-width: 0;
+    padding-left: 10px;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .footer-clusters {
+    display: grid;
+    width: max-content;
+    grid-template-columns: max-content max-content max-content max-content max-content max-content;
+    grid-template-rows: 30px;
+    column-gap: 7px;
+    row-gap: 0;
+    justify-content: end;
+    align-items: center;
+  }
+  /* Order follows the user's task: transport, speed, key, click, loop/seek, export. */
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-transport { grid-area: 1 / 1; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-speed { grid-area: 1 / 2; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-key { grid-area: 1 / 3; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-click { grid-area: 1 / 4; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-position { grid-area: 1 / 5; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-track-actions { grid-area: 1 / 6; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-position {
+    width: auto;
+    min-width: 0;
+    align-self: center;
+  }
+  .app.daw.header-v3 #nowPlayingPanel #footer-scrub {
+    width: 70px;
+    min-width: 55px;
+    max-width: 70px;
+    height: 7px;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-click {
+    position: relative;
+    align-self: center;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .footer-track-actions {
+    align-self: center;
+    justify-self: end;
+  }
+}
+/* Clear separation between listening tools and view settings; same alignment. */
+.studio-view-tools .view-control-group > span[data-i18n="view.timelineZoom"] {
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* PR #26 visual polish: disclosures share the same footprint and chevron. */
+.app.daw.header-v3 #nowPlayingPanel :is(#song-loop-more, #t-metro-more) {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 30px;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--fg-2);
+  cursor: pointer;
+  line-height: 1;
+}
+.app.daw.header-v3 #nowPlayingPanel :is(#song-loop-more, #t-metro-more) svg {
+  width: 12px;
+  height: 12px;
+  transform: rotate(180deg);
+  transition: transform .14s ease;
+}
+.app.daw.header-v3 #nowPlayingPanel :is(#song-loop-more, #t-metro-more)[aria-expanded="true"] svg {
+  transform: rotate(0deg);
+}
+.app.daw.header-v3 #nowPlayingPanel :is(#song-loop-more, #t-metro-more):hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--panel-2);
+}
+.app.daw.header-v3 #nowPlayingPanel :is(#song-loop-more, #t-metro-more):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* A menu opened from the song card must not participate in its width or height. */
+#nowPlayingPanel .song-menu {
+  position: fixed;
+  right: auto;
+  bottom: auto;
+  top: auto;
+  width: 260px;
+  max-width: calc(100vw - 24px);
+  z-index: 900;
+}
+#nowPlayingPanel .song-notice:not(:empty) {
+  position: absolute;
+  z-index: 350;
+  top: calc(100% + 5px);
+  left: 8px;
+  max-width: min(350px, calc(100vw - 32px));
+  padding: 7px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--panel);
+  box-shadow: 0 6px 20px #0002;
+  pointer-events: none;
+}
+/* Musical shorthand is primary, expanded mode secondary; confidence is named. */
+.daw-meta-card[data-meta="key"] .meta-card-main {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.daw-meta-card[data-meta="key"] #summary-key {
+  font-weight: 700;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.daw-meta-card[data-meta="key"] #summary-key-symbol {
+  font-weight: 500;
+  font-size: 10px;
+  color: var(--fg-2);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.daw-meta-card[data-meta="key"] .key-confidence-label {
+  font-size: 9px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--muted);
+  margin-left: auto;
+}
+.daw-meta-card[data-meta="key"] .meta-card-main:has(#summary-confidence.hidden) .key-confidence-label {
+  display: none;
+}
+/* View toggles form one intrinsic-width segmented group; neither can drift. */
+.app.daw .studio-view-tools .daw-panel-toggles {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: max-content;
+  min-width: 0;
+  max-width: 100%;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 3px;
+  padding: 2px;
+  margin: 0;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 7px;
+}
+.app.daw .studio-view-tools .daw-panel-toggles > .daw-panel-toggle {
+  position: static;
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 0;
+  height: 28px;
+  min-height: 28px;
+  padding: 0 10px;
+  align-self: center;
+  justify-self: auto;
+}
+/* Consistent vertical centering even when a control group contains a popup. */
+.app.daw.header-v3 #nowPlayingPanel .track-panel-head,
+.app.daw.header-v3 #nowPlayingPanel .song-controls,
+.app.daw.header-v3 #nowPlayingPanel .footer-clusters,
+.app.daw.header-v3 #nowPlayingPanel .footer-group,
+.app.daw.header-v3 #nowPlayingPanel .footer-group-body {
+  align-items: center;
+  align-self: center;
+}
+.app.daw.header-v3 #nowPlayingPanel .footer-clusters > :is(.footer-group,.footer-track-actions) {
+  min-height: 30px;
+  align-self: center;
+}
+
+/* Final PR #26 polish: icon-only navigation, readable confidence and true center alignment. */
+.app.daw .sidebar-rail {
+  box-sizing: border-box;
+  align-items: center;
+}
+.app.daw .sidebar-rail > .rail-btn,
+.app.daw .sidebar-rail .daw-notif-wrap > .rail-btn {
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  min-height: 42px;
+  padding: 0;
+  gap: 0;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+}
+.app.daw .sidebar-rail .rail-btn > svg {
+  width: 19px;
+  height: 19px;
+  margin: 0;
+  flex: none;
+}
+.app.daw .sidebar-rail .rail-btn > span:not(.rail-badge):not(.daw-notif-badge) {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0,0,0,0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+/* The library rail keeps badges and tooltips even though text labels are hidden. */
+.app.daw .sidebar-rail .rail-btn {
+  position: relative;
+}
+.app.daw .sidebar-rail .rail-badge,
+.app.daw .sidebar-rail .daw-notif-badge {
+  position: absolute;
+}
+/* The analysis key needs exactly one visible shorthand; confidence must fit inside the ring. */
+.app.daw .daw-meta-card[data-meta="key"] #summary-key-symbol:empty {
+  display: none;
+}
+.app.daw .daw-meta-card[data-meta="key"] .meta-card-main {
+  min-width: 0;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+.app.daw .daw-meta-card[data-meta="key"] .key-confidence-label {
+  margin-left: auto;
+  min-width: 0;
+}
+.app.daw .daw-meta-card[data-meta="key"] #summary-confidence.daw-camelot-ring {
+  box-sizing: border-box;
+  width: 37px;
+  min-width: 37px;
+  height: 37px;
+  min-height: 37px;
+  padding: 2px;
+  line-height: 1;
+  font-size: 10px;
+  letter-spacing: -.04em;
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  border-radius: 50%;
+  align-items: center;
+  justify-content: center;
+}
+/* Use the actual topbar row as the vertical reference, not legacy two-row grid. */
+@media (min-width: 1400px) {
+  .app.daw.header-v3 .daw-topbar,
+  .app.daw.header-v3 .daw-topbar > .daw-composer-stack,
+  .app.daw.header-v3 .daw-composer.header-compact {
+    align-items: center;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact > .import-layout-toggle,
+  .app.daw.header-v3 .daw-composer.header-compact > .reextract-action {
+    display: inline-flex !important;
+    position: relative;
+    top: 0;
+    bottom: auto;
+    transform: none;
+    box-sizing: border-box;
+    align-items: center !important;
+    justify-content: center !important;
+    align-self: center !important;
+    justify-self: stretch;
+    margin: 0;
+    padding: 0 7px;
+    height: 30px !important;
+    min-height: 30px !important;
+    max-height: 30px;
+    line-height: 1 !important;
+    vertical-align: middle;
+  }
+}
+
+/* PR #26: fix the layout origin, not the button's text alignment.
+   The compact composer must fill the entire topbar from the logo onward.
+   Its first two grid tracks are exactly the two extraction buttons. */
+@media (min-width: 1400px) {
+  .app.daw.header-v3 .daw-topbar {
+    justify-content: flex-start;
+  }
+  .app.daw.header-v3 .daw-topbar > .daw-composer-stack {
+    box-sizing: border-box;
+    flex: 1 1 0;
+    width: auto;
+    max-width: none;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    align-items: stretch;
+    justify-content: center;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact {
+    box-sizing: border-box;
+    flex: 0 0 42px;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    justify-content: stretch;
+    align-content: center;
+    grid-template-columns: 118px 90px minmax(0, 1fr);
+    grid-template-rows: 36px;
+    column-gap: 6px;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact > .import-layout-toggle {
+    grid-column: 1;
+    grid-row: 1;
+    width: 100%;
+    margin: 0;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact > .reextract-action {
+    grid-column: 2;
+    grid-row: 1;
+    width: 100%;
+    margin: 0;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact > #nowPlayingPanel {
+    grid-column: 3;
+    grid-row: 1;
+    min-width: 0;
+    margin: 0;
+  }
+}
+
+/* PR #26: one-row header with real full-height extraction actions and
+   waveform/karaoke switcher immediately before transport.
+   This is the layout contract, not independent centering offsets. */
+.app.daw.header-v3 #nowPlayingPanel .studio-mode-tabs {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  flex-direction: row;
+  width: max-content;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  margin: 0;
+  gap: 3px;
+  border: 0;
+  background: transparent;
+}
+.app.daw.header-v3 #nowPlayingPanel .studio-mode-tabs button {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 9px;
+  white-space: nowrap;
+  font-size: 10px;
+  line-height: 1;
+}
+.app.daw.header-v3 #nowPlayingPanel .studio-mode-tabs button[aria-selected="true"] {
+  color: var(--fg);
+  background: var(--panel);
+  border-color: var(--border-strong);
+  box-shadow: inset 0 -2px var(--accent);
+}
+@media (min-width: 1400px) {
+  .app.daw.header-v3 .daw-topbar > .daw-composer-stack {
+    width: 0;
+    min-width: 0;
+    flex: 1 1 0;
+    margin: 0;
+    padding: 0;
+    justify-content: center;
+    align-items: stretch;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact {
+    display: grid;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    height: 42px;
+    max-height: 42px;
+    flex: 0 0 42px;
+    grid-template-columns: 118px 90px minmax(0, 1fr);
+    grid-template-rows: 40px;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    justify-content: stretch;
+    align-content: center;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact > :is(.import-layout-toggle,.reextract-action) {
+    box-sizing: border-box;
+    width: 100%;
+    height: 40px !important;
+    min-height: 40px !important;
+    max-height: 40px !important;
+    margin: 0;
+    padding-inline: 6px;
+    align-self: center !important;
+    justify-self: stretch;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact > #nowPlayingPanel {
+    grid-column: 3;
+    grid-row: 1;
+    box-sizing: border-box;
+    height: 40px;
+    min-height: 40px;
+    max-height: 40px;
+    margin: 0;
+    padding-block: 0;
+    align-items: center;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .footer-clusters {
+    display: grid;
+    width: max-content;
+    min-width: 0;
+    grid-template-columns: repeat(7, max-content);
+    grid-template-rows: 40px;
+    column-gap: 5px;
+    row-gap: 0;
+    justify-content: end;
+    align-items: center;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .studio-mode-tabs { grid-area: 1 / 1; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-transport { grid-area: 1 / 2; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-speed { grid-area: 1 / 3; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-key { grid-area: 1 / 4; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-click { grid-area: 1 / 5; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-position { grid-area: 1 / 6; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-track-actions { grid-area: 1 / 7; }
+}
+@media (max-width: 1399px) {
+  /* Original responsive transport remains available; tabs occupy the first
+     row instead of requiring another full-width row above the waveform. */
+  .app.daw.header-v3 #nowPlayingPanel .studio-mode-tabs {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    justify-self: start;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .footer-clusters {
+    grid-template-rows: 40px 30px 30px;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-transport { grid-row: 2; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-position { grid-row: 2; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-speed,
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-key,
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-click,
+  .app.daw.header-v3 #nowPlayingPanel .footer-track-actions { grid-row: 3; }
+}
+
+/* PR #26 — single header alignment contract.
+   All three components are placed in ONE 40px grid track, with the same
+   vertical midpoint. Children use intrinsic 30px controls inside it.
+   This replaces the competing late alignment patches. */
+@media (min-width: 1400px) {
+  .app.daw.header-v3 .daw-topbar {
+    --header-row: 40px;
+    --header-control: 30px;
+    --header-inner: calc(var(--header-row) - 2px);
+    display: flex;
+    height: 54px;
+    min-height: 54px;
+    max-height: 54px;
+    align-items: center;
+  }
+  .app.daw.header-v3 .daw-topbar > .daw-composer-stack {
+    flex: 1 1 0;
+    min-width: 0;
+    width: 0;
+    height: var(--header-row);
+    padding: 0;
+    margin: 0;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact {
+    display: grid;
+    width: 100%;
+    height: var(--header-row);
+    min-height: var(--header-row);
+    max-height: var(--header-row);
+    flex: 0 0 var(--header-row);
+    grid-template-columns: 118px 90px minmax(0, 1fr);
+    grid-template-rows: var(--header-row);
+    column-gap: 6px;
+    row-gap: 0;
+    margin: 0;
+    padding: 0;
+    align-items: stretch;
+    align-content: stretch;
+    justify-content: stretch;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact > :is(.import-layout-toggle,.reextract-action) {
+    box-sizing: border-box;
+    display: flex !important;
+    width: 100%;
+    height: var(--header-row) !important;
+    min-height: var(--header-row) !important;
+    max-height: var(--header-row) !important;
+    align-self: stretch !important;
+    justify-self: stretch;
+    align-items: center !important;
+    justify-content: center !important;
+    margin: 0 !important;
+    padding: 0 8px !important;
+    line-height: 1.2;
+    text-align: center;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact > .import-layout-toggle { grid-area: 1 / 1; }
+  .app.daw.header-v3 .daw-composer.header-compact > .reextract-action { grid-area: 1 / 2; }
+  .app.daw.header-v3 .daw-composer.header-compact > #nowPlayingPanel {
+    grid-area: 1 / 3;
+    box-sizing: border-box;
+    display: grid;
+    /* A bordered 40px card has 38px of actual content. */
+    grid-template-rows: minmax(0, 1fr);
+    min-width: 0;
+    height: var(--header-row);
+    min-height: var(--header-row);
+    max-height: var(--header-row);
+    padding-top: 0;
+    padding-bottom: 0;
+    margin: 0;
+    align-items: center;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .track-panel-head,
+  .app.daw.header-v3 #nowPlayingPanel .song-controls {
+    height: var(--header-inner);
+    min-height: 0;
+    align-self: center;
+    display: flex;
+    align-items: center;
+    margin-block: 0;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .track-panel-info {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .app.daw.header-v3 #nowPlayingPanel :is(.track-panel-title,.np-artist) {
+    line-height: 1.2;
+    margin-block: 0;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .footer-clusters {
+    display: grid;
+    grid-template-columns: repeat(7, max-content);
+    grid-template-rows: var(--header-inner);
+    width: max-content;
+    height: var(--header-inner);
+    min-height: 0;
+    align-items: center;
+    gap: 0 5px;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .studio-mode-tabs { grid-area: 1 / 1; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-transport { grid-area: 1 / 2; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-speed { grid-area: 1 / 3; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-key { grid-area: 1 / 4; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-click { grid-area: 1 / 5; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-position { grid-area: 1 / 6; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-track-actions { grid-area: 1 / 7; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-clusters > :is(.footer-group,.footer-track-actions),
+  .app.daw.header-v3 #nowPlayingPanel .studio-mode-tabs {
+    box-sizing: border-box;
+    display: flex;
+    height: var(--header-inner);
+    min-height: 0;
+    align-self: center;
+    align-items: center;
+    justify-content: center;
+    margin-block: 0;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-body {
+    display: flex;
+    align-items: center;
+    min-height: var(--header-control);
+  }
+  .app.daw.header-v3 #nowPlayingPanel .studio-mode-tabs button {
+    box-sizing: border-box;
+    display: inline-flex;
+    height: var(--header-control);
+    min-height: var(--header-control);
+    align-items: center;
+    justify-content: center;
+    line-height: 1.2;
+  }
+  .app.daw.header-v3 #nowPlayingPanel :is(.footer-elapsed,.footer-total,.pitch-value) {
+    line-height: 1.2;
+    align-self: center;
+  }
+}
+
+/* Root cause fix: the original compact player still declares
+   display:block!important, top padding and a full-height left border.
+   Replace those declarations only in the single-row desktop layout. */
+@media (min-width: 1400px) {
+  .app.daw.header-v3 .daw-composer.header-compact #nowPlayingPanel > .song-controls {
+    position: relative;
+    box-sizing: border-box;
+    display: flex !important;
+    flex: 0 0 auto;
+    align-items: center !important;
+    justify-content: flex-end;
+    width: max-content;
+    max-width: 100%;
+    height: var(--header-inner);
+    min-height: 0;
+    max-height: var(--header-inner);
+    padding: 0 0 0 12px !important;
+    margin: 0;
+    border: 0 !important;
+    background: transparent;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact #nowPlayingPanel > .song-controls::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 1px;
+    height: 24px;
+    transform: translateY(-50%);
+    background: var(--border-strong);
+    pointer-events: none;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact #nowPlayingPanel .footer-main,
+  .app.daw.header-v3 .daw-composer.header-compact #nowPlayingPanel .footer-row-controls {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    width: max-content;
+    height: var(--header-inner);
+    min-height: 0;
+    padding: 0;
+    margin: 0;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact #nowPlayingPanel .track-panel-head {
+    display: flex;
+    height: var(--header-inner);
+    align-items: center;
+    align-self: center;
+    padding: 0;
+    margin: 0;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact #nowPlayingPanel .track-panel-info {
+    display: flex;
+    flex-flow: row nowrap;
+    align-items: center;
+    min-width: 0;
+    height: 30px;
+    padding: 0;
+    margin: 0;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact #nowPlayingPanel :is(.track-panel-title,.np-artist) {
+    display: inline-block;
+    line-height: 30px;
+    height: 30px;
+    margin: 0;
+    padding: 0;
+    vertical-align: middle;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact #nowPlayingPanel .footer-clusters {
+    box-sizing: border-box;
+    align-self: center;
+    height: var(--header-inner);
+    margin: 0;
+    padding: 0;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact #nowPlayingPanel .footer-clusters > :is(.footer-group,.footer-track-actions,.studio-mode-tabs) {
+    align-self: center;
+    justify-self: center;
+    height: var(--header-inner);
+    margin: 0;
+    padding: 0;
+  }
+}

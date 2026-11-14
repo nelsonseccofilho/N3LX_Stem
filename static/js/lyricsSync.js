@@ -145,6 +145,7 @@ function atTime(line, time) {
   return {
     ...line,
     time,
+    ...(Number.isFinite(line.end) ? { end: line.end + delta } : {}),
     ...(line.words ? { words: line.words.map((w) => ({ ...w, time: (w.time ?? line.time) + delta })) } : {}),
   };
 }

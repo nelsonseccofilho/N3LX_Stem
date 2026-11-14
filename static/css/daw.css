@@ -7966,3 +7966,12 @@ input, textarea { font-family: inherit; }
     padding: 0;
   }
 }
+/* Optical alignment of the single header row.
+   The entire composer (import, track, tabs, transport and export) shares
+   one small offset; never shift individual children independently. */
+@media (min-width: 1400px) {
+  .app.daw.header-v3 .daw-topbar > .daw-composer-stack {
+    position: relative;
+    top: 3px;
+  }
+}

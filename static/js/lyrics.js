@@ -1404,7 +1404,9 @@ function buildSyncPanel(session) {
   saveState.setAttribute("aria-live", "polite");
   head.append(el("h3", "lyrics-sync-title", t("lyrics.sync.manualTitle")), kind, saveState);
 
-  const next = el("p", "lyrics-sync-next");
+  // The full-sized lyric immediately below is the visual source of truth.
+  // Keep the next-phrase status available to screen readers without duplicating it.
+  const next = el("p", "lyrics-sync-next lyrics-sync-visually-hidden");
   const nextLabel = el("span", "lyrics-sync-next-label");
   const nextText = el("span", "lyrics-sync-next-text");
   next.append(nextLabel, nextText);

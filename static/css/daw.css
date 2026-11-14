@@ -7751,6 +7751,7 @@ input, textarea { font-family: inherit; }
   .app.daw.header-v3 .daw-topbar {
     --header-row: 40px;
     --header-control: 30px;
+    --header-inner: calc(var(--header-row) - 2px);
     display: flex;
     height: 54px;
     min-height: 54px;
@@ -7807,6 +7808,8 @@ input, textarea { font-family: inherit; }
     grid-area: 1 / 3;
     box-sizing: border-box;
     display: grid;
+    /* A bordered 40px card has 38px of actual content. */
+    grid-template-rows: minmax(0, 1fr);
     min-width: 0;
     height: var(--header-row);
     min-height: var(--header-row);
@@ -7818,8 +7821,8 @@ input, textarea { font-family: inherit; }
   }
   .app.daw.header-v3 #nowPlayingPanel .track-panel-head,
   .app.daw.header-v3 #nowPlayingPanel .song-controls {
-    height: var(--header-row);
-    min-height: var(--header-row);
+    height: var(--header-inner);
+    min-height: 0;
     align-self: center;
     display: flex;
     align-items: center;
@@ -7838,10 +7841,10 @@ input, textarea { font-family: inherit; }
   .app.daw.header-v3 #nowPlayingPanel .footer-clusters {
     display: grid;
     grid-template-columns: repeat(7, max-content);
-    grid-template-rows: var(--header-row);
+    grid-template-rows: var(--header-inner);
     width: max-content;
-    height: var(--header-row);
-    min-height: var(--header-row);
+    height: var(--header-inner);
+    min-height: 0;
     align-items: center;
     gap: 0 5px;
   }
@@ -7856,8 +7859,8 @@ input, textarea { font-family: inherit; }
   .app.daw.header-v3 #nowPlayingPanel .studio-mode-tabs {
     box-sizing: border-box;
     display: flex;
-    height: var(--header-row);
-    min-height: var(--header-row);
+    height: var(--header-inner);
+    min-height: 0;
     align-self: center;
     align-items: center;
     justify-content: center;
@@ -7896,9 +7899,9 @@ input, textarea { font-family: inherit; }
     justify-content: flex-end;
     width: max-content;
     max-width: 100%;
-    height: 40px;
-    min-height: 40px;
-    max-height: 40px;
+    height: var(--header-inner);
+    min-height: 0;
+    max-height: var(--header-inner);
     padding: 0 0 0 12px !important;
     margin: 0;
     border: 0 !important;
@@ -7921,14 +7924,14 @@ input, textarea { font-family: inherit; }
     display: flex;
     align-items: center;
     width: max-content;
-    height: 40px;
-    min-height: 40px;
+    height: var(--header-inner);
+    min-height: 0;
     padding: 0;
     margin: 0;
   }
   .app.daw.header-v3 .daw-composer.header-compact #nowPlayingPanel .track-panel-head {
     display: flex;
-    height: 40px;
+    height: var(--header-inner);
     align-items: center;
     align-self: center;
     padding: 0;
@@ -7954,24 +7957,15 @@ input, textarea { font-family: inherit; }
   .app.daw.header-v3 .daw-composer.header-compact #nowPlayingPanel .footer-clusters {
     box-sizing: border-box;
     align-self: center;
-    height: 40px;
+    height: var(--header-inner);
     margin: 0;
     padding: 0;
   }
   .app.daw.header-v3 .daw-composer.header-compact #nowPlayingPanel .footer-clusters > :is(.footer-group,.footer-track-actions,.studio-mode-tabs) {
     align-self: center;
     justify-self: center;
-    height: 40px;
+    height: var(--header-inner);
     margin: 0;
     padding: 0;
-  }
-}
-/* Optical alignment of the single header row.
-   The entire composer (import, track, tabs, transport and export) shares
-   one small offset; never shift individual children independently. */
-@media (min-width: 1400px) {
-  .app.daw.header-v3 .daw-topbar > .daw-composer-stack {
-    position: relative;
-    top: 3px;
   }
 }

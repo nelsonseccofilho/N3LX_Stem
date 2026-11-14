@@ -1439,10 +1439,18 @@ function buildSyncPanel(session) {
   const message = el("p", "lyrics-align-message");
   message.setAttribute("aria-live", "polite");
   const keys = el("p", "lyrics-sync-keys", t("lyrics.sync.keys"));
-  const done = alignButton(t("lyrics.sync.done"), () => closeSync(true), "lyrics-align-done");
+  const done = alignButton(t("lyrics.sync.saveExit"), () => closeSync(true), "lyrics-align-done");
   done.title = t("lyrics.sync.doneTitle");
 
-  panel.append(head, next, tap, edits, opts, resets, message, keys, done);
+  // Manual phrase timing is the default task. Sequential tapping, voice
+  // detection, resets and their options remain available on demand.
+  const actions = el("div", "lyrics-sync-primary");
+  actions.append(undo, done);
+  head.append(actions);
+  const advanced = el("details", "lyrics-sync-advanced");
+  const advancedLabel = el("summary", "", t("lyrics.sync.advanced"));
+  advanced.append(advancedLabel, next, tap, opts, resets, keys);
+  panel.append(head, advanced, message);
 
   // The line in hand's own controls, shown under it in the list.
   const lineTools = el("div", "lyrics-line-tools");
@@ -1458,7 +1466,9 @@ function buildSyncPanel(session) {
   };
   const here = alignButton(t("lyrics.sync.here"), lineToPlayhead, "lyrics-line-here");
   here.title = t("lyrics.sync.hereTitle");
-  lineTools.append(lineStep(-NUDGE_COARSE), lineStep(-NUDGE_FINE), lineStep(NUDGE_FINE), lineStep(NUDGE_COARSE), here);
+  // Only fine nudges are needed in the default editor. Coarse movement and
+  // playhead capture remain available via the timing fields.
+  lineTools.append(lineStep(-NUDGE_FINE), lineStep(NUDGE_FINE));
 
   // Inline controls are placed beneath the currently selected lyric.
   const range = el("div", "lyrics-phrase-range");
@@ -1826,7 +1836,7 @@ function anotherEditorOpen() {
  * arrows would scroll the list. */
 function onSyncKey(e) {
   if (!sync || !visible || isTyping(e.target)) return;
-  if (karaokeVisible && (!document.getElementById("karaokeSettings")?.open || e.key === "Escape")) return;
+  if (karaokeVisible && document.getElementById("karaokeSettings")?.open) return;
   const mod = e.ctrlKey || e.metaKey;
   // The keyboard belongs to whatever else is open on top: the beat-grid
   // editor, a dialog, a menu or panel outside the Lyrics panel. Heard first
@@ -1843,12 +1853,14 @@ function onSyncKey(e) {
   } else if (mod || e.altKey) {
     handled = false;
   } else if (e.code === "KeyT") {
-    tapNow();
+    if (sync.tap.closest("details")?.open) tapNow();
+    else handled = false;
   } else if (e.key === "Enter") {
     // Enter on another button presses that button.
     const control = e.target?.closest?.("button, a, [role='button']");
     if (control && control !== sync.tap) handled = false;
-    else tapNow();
+    else if (sync.tap.closest("details")?.open) tapNow();
+    else handled = false;
   } else if (e.key === "Backspace") {
     undoSync();
   } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {

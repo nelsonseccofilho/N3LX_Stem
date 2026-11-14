@@ -41,6 +41,7 @@ import { confirmAction } from "./confirmAction.js";
 import { lyricsEditorText, editedLyrics, untimedLines } from "./lyricsEditing.js";
 import { karaokePreviewFromTiming, hasProtectedLyrics, timingForMatchingEditedLyrics } from "./karaokeTiming.js";
 import { createLyricsAutoSyncController } from "./lyricsAutoSync.js";
+import { parseLyricClock, anchorFirstSungLine } from "./lyricsStartAnchor.js";
 import { t, getLanguage, onLanguageChange } from "./i18n.js";
 import { storeGet, storeSet } from "./utils.js";
 import { getCurrentTrackInfo, getCurrentTrackArtist } from "./catalog.js";
@@ -62,6 +63,7 @@ import {
 import {
   timingOf,
   serializeLrc,
+  formatStamp,
   snapToVoice,
   applyTime,
   SyncSession,
@@ -492,6 +494,7 @@ function renderAutoSync() {
       setPlayheadTime(0);
       if (!transport()?.isPlaying?.()) togglePlayPause();
     }, true);
+    button("lyricsAutoSync.anchor", openFirstLineTiming);
     button("lyricsAutoSync.manual", () => {
       getAutoSyncController().dismiss();
       const dialog = document.getElementById("karaokeSettings");
@@ -545,6 +548,72 @@ function getAutoSyncController() {
   });
   return autoSyncController;
 }
+
+/** Fix the first sung phrase at an explicitly supplied time, leaving the
+ * subsequent matched anchors intact unless they would overlap the correction.
+ * This is a manual correction after automatic matching, not a regeneration. */
+function openFirstLineTiming() {
+  const info = getCurrentTrackInfo();
+  if (!info?.id || !shownEntry || document.getElementById("lyricsFirstLineTiming") ||
+      autoSyncView?.state === "running") return;
+  const index = lines.findIndex((line) => line.text?.trim() && line.text.trim() !== "♪");
+  if (index < 0) return;
+  const trackId = info.id;
+  const initial = lines[index].time;
+  const dialog = el("dialog", "lyrics-editor");
+  dialog.id = "lyricsFirstLineTiming";
+  const form = el("form", "lyrics-editor-form");
+  const title = el("h2", "", t("lyricsAutoSync.anchorTitle"));
+  const detail = el("p", "lyrics-note", t("lyricsAutoSync.anchorHint"));
+  const phrase = el("p", "lyrics-note", lines[index].text);
+  const label = el("label", "", t("lyricsAutoSync.anchorTime"));
+  const input = el("input", "lyrics-anchor-clock");
+  input.type = "text";
+  input.value = formatStamp(initial);
+  input.placeholder = "00:22";
+  input.autocomplete = "off";
+  input.setAttribute("aria-label", t("lyricsAutoSync.anchorTime"));
+  label.append(input);
+  const error = el("p", "lyrics-status error");
+  error.setAttribute("role", "alert");
+  const actions = el("div", "lyrics-editor-actions");
+  const cancel = el("button", "lyrics-align-btn", t("karaoke.cancel"));
+  cancel.type = "button";
+  const save = el("button", "lyrics-align-btn lyrics-generate-btn", t("lyricsAutoSync.anchorSave"));
+  save.type = "submit";
+  const close = () => { dialog.close(); dialog.remove(); };
+  cancel.addEventListener("click", close);
+  dialog.addEventListener("cancel", (event) => { event.preventDefault(); close(); });
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (getCurrentTrackInfo()?.id !== trackId || !shownEntry) {
+      error.textContent = t("karaoke.changedTrack");
+      return;
+    }
+    const duration = totalDuration > 0 ? totalDuration : Infinity;
+    const seconds = parseLyricClock(input.value, duration);
+    const revision = seconds === null ? null : anchorFirstSungLine(lines, seconds, duration);
+    if (!revision) {
+      error.textContent = t("lyricsAutoSync.anchorInvalid");
+      return;
+    }
+    save.disabled = true;
+    setDisplayLines(revision.lines);
+    const lrc = serializeLrc(revision.lines);
+    saveUserTiming(lrc);
+    await flushUserSave();
+    updateTimingNote();
+    close();
+  });
+  actions.append(cancel, save);
+  form.append(title, detail, phrase, label, error, actions);
+  dialog.append(form);
+  document.body.append(dialog);
+  dialog.showModal();
+  input.focus();
+  input.select();
+}
+
 function startAutoSync() {
   const info = getCurrentTrackInfo();
   if (!info?.id || !shownEntry || !(shownEntry.plain || shownEntry.synced)) return;
@@ -2178,6 +2247,14 @@ export function initLyrics() {
   });
   document.getElementById("lyricsEditBtn")?.addEventListener("click", editLyrics);
   document.getElementById("lyricsAutoSyncBtn")?.addEventListener("click", startAutoSync);
+  const syncBtn = document.getElementById("lyricsAutoSyncBtn");
+  if (syncBtn && !document.getElementById("lyricsAnchorStartBtn")) {
+    const anchor = el("button", "lyrics-align-btn", t("lyricsAutoSync.anchor"));
+    anchor.id = "lyricsAnchorStartBtn";
+    anchor.type = "button";
+    anchor.addEventListener("click", openFirstLineTiming);
+    syncBtn.after(anchor);
+  }
   document.addEventListener("tracktags", (e) => {
     if (visible && nothingKnownFor && e.detail?.id === nothingKnownFor) loadForCurrentTrack();
   });
@@ -2185,6 +2262,8 @@ export function initLyrics() {
     updateKaraokeControls();
     setKaraokeMessage(karaokeMessageKey, karaokeMessageKind);
     updateTimingNote();
+    const anchor = document.getElementById("lyricsAnchorStartBtn");
+    if (anchor) anchor.textContent = t("lyricsAutoSync.anchor");
   });
 }
 
@@ -2202,6 +2281,8 @@ function updateTimingNote() {
     : getCurrentTrackInfo() ? t("karaoke.addLyrics") : "";
   const auto = document.getElementById("lyricsAutoSyncBtn");
   if (auto) auto.disabled = !(shownEntry?.plain || shownEntry?.synced) || autoSyncView?.state === "running";
+  const anchor = document.getElementById("lyricsAnchorStartBtn");
+  if (anchor) anchor.disabled = !lines.length || autoSyncView?.state === "running";
   const edit = document.getElementById("lyricsEditBtn");
   if (edit) edit.disabled = !getCurrentTrackInfo() || autoSyncView?.state === "running";
 }

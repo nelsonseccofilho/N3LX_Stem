@@ -66,7 +66,7 @@ export function preciseStamp(seconds) {
 
 /** Parse a manual mm:ss.mmm time without rounding away fine corrections. */
 export function parsePreciseStamp(value, duration = Infinity) {
-  const match = /^(\\d{1,3}):(\\d{2})(?:\\.(\\d{1,3}))?$/.exec(String(value ?? "").trim());
+  const match = /^(\d{1,3}):(\d{2})(?:\.(\d{1,3}))?$/.exec(String(value ?? "").trim());
   if (!match || Number(match[2]) >= 60) return null;
   const seconds = Number(match[1]) * 60 + Number(match[2]) +
     Number((match[3] || "").padEnd(3, "0")) / 1000;

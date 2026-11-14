@@ -218,6 +218,12 @@ function applyStemRowAriaLabels(scope) {
 // ─────────────────────────────────────────────────────────────────────────
 
 const en = {
+  "lyricsAutoSync.anchor": "Set first phrase start",
+  "lyricsAutoSync.anchorTitle": "Correct the first phrase's start",
+  "lyricsAutoSync.anchorHint": "Set the time when this phrase actually begins. The other matched phrases are kept wherever possible. This does not re-transcribe the song.",
+  "lyricsAutoSync.anchorTime": "Start time (mm:ss)",
+  "lyricsAutoSync.anchorSave": "Save start time",
+  "lyricsAutoSync.anchorInvalid": "Enter a valid time within the song, such as 00:22.",
   "lyricsAutoSync.title": "Synchronizing your lyrics",
   "lyricsAutoSync.working": "Finding the sung lines in the vocal track…",
   "lyricsAutoSync.progress": "Analyzing the vocals… {percent}%",
@@ -4881,6 +4887,12 @@ const de = {
 };
 
 const pt = {
+  "lyricsAutoSync.anchor": "Ajustar início da primeira frase",
+  "lyricsAutoSync.anchorTitle": "Corrigir início da primeira frase",
+  "lyricsAutoSync.anchorHint": "Informe quando a frase realmente começa. As demais frases alinhadas serão preservadas sempre que possível. A música não será transcrita novamente.",
+  "lyricsAutoSync.anchorTime": "Início (mm:ss)",
+  "lyricsAutoSync.anchorSave": "Salvar início",
+  "lyricsAutoSync.anchorInvalid": "Digite um tempo válido dentro da música, por exemplo 00:22.",
   "lyricsAutoSync.title": "Sincronizando sua letra",
   "lyricsAutoSync.working": "Encontrando os tempos das frases nos vocais…",
   "lyricsAutoSync.progress": "Analisando os vocais… {percent}%",

@@ -122,6 +122,8 @@ async def _generate(job, job_dir: Path, run, replace: bool, cli: str, model: Pat
                 raise KaraokeTimingError("vocals changed during transcription")
             _phase(run, "finalize")
             timing["model"] = model.stem.removeprefix("ggml-")
+            # Reuse WhisperX timings only while the underlying vocals stem matches.
+            timing["vocals"] = [after[0], after[1]]
             output = job_dir / _SIDE_CAR
             await asyncio.to_thread(store_timing, output, timing, replace=replace)
             run.state = "done"

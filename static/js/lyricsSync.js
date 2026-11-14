@@ -74,9 +74,12 @@ export function parsePreciseStamp(value, duration = Infinity) {
 }
 
 export function serializeLrc(lines) {
+  // Once any phrase has an explicit millisecond-precision end, all rows
+  // (including instrumental clear markers) need the same precision. Otherwise
+  // a clear at 26.501 is rounded to 26.50, hiding a phrase ending at 26.500.
+  const stamp = lines.some(line => Number.isFinite(line.end)) ? preciseStamp : formatStamp;
   return lines
     .map((line) => {
-      const stamp = line.end != null ? preciseStamp : formatStamp;
       const head = `[${stamp(line.time)}]`;
       const text = line.words?.length
         ? line.words.map((w) => `<${stamp(w.time ?? line.time)}>${w.text}`).join("").trimEnd()

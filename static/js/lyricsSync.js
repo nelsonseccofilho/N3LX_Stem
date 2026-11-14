@@ -322,6 +322,20 @@ export class SyncSession {
     return true;
   }
 
+  /** Confirm both boundaries of a sung phrase as one undoable edit.
+   * Unlike sequential start taps, other sung phrases remain fixed. */
+  markPhraseRange(start, end) {
+    if (this.done) return false;
+    const revised = editPhraseRange(this.lines, this.cursor, start, end, this.max);
+    if (!revised) return false;
+    const index = this.cursor;
+    this.record();
+    this.lines = revised;
+    this.touched.add(index);
+    this.cursor = nextSungIndex(this.lines, index);
+    return true;
+  }
+
   /** Move line `index` to `time` without passing its neighbours (a drag), or
    * with the lines after it when `ripple` is on. */
   move(index, time) {

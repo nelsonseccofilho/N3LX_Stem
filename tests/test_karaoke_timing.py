@@ -227,3 +227,23 @@ def test_english_fails_before_worker_when_model_missing(monkeypatch, tmp_path: P
     monkeypatch.setattr(k, "english_alignment_ready", lambda: False)
     with pytest.raises(k.KaraokeTimingError, match="checkpoint not available"):
         k.generate_timing(audio, whisper_cli="whisper-cli", model=model, language="en")
+
+
+def test_api_exposes_pt_while_english_checkpoint_is_missing(monkeypatch, tmp_path: Path):
+    from fastapi import HTTPException
+    from app.api import karaoke as api
+
+    model = tmp_path / "ggml-large-v3.bin"
+    model.write_bytes(b"fixture")
+    monkeypatch.setenv("N3LX_WHISPER_CLI", "test-whisper-cli")
+    monkeypatch.setenv("N3LX_WHISPER_LARGE_MODEL", str(model))
+    monkeypatch.setattr(api.shutil, "which", lambda value: value)
+    monkeypatch.setattr(api, "aligned_worker_resources", lambda: (
+        tmp_path / "python.exe", tmp_path / "src/transcrever_gpu.py"))
+    monkeypatch.setattr(api, "english_alignment_ready", lambda: False)
+    monkeypatch.setattr(api, "ffmpeg_executable", lambda: "ffmpeg")
+    assert api._configuration("large-v3", "pt")[1] == model
+    with pytest.raises(HTTPException) as error:
+        api._configuration("large-v3", "en")
+    assert error.value.status_code == 503
+    assert "not cached" in error.value.detail

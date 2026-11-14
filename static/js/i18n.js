@@ -218,6 +218,18 @@ function applyStemRowAriaLabels(scope) {
 // ─────────────────────────────────────────────────────────────────────────
 
 const en = {
+  "lyrics.sync.methodLabel": "Timing method",
+  "lyrics.sync.methodPlay": "By playback",
+  "lyrics.sync.methodExact": "Exact time",
+  "lyrics.sync.tapStart": "Mark start",
+  "lyrics.sync.tapEnd": "Mark end",
+  "lyrics.sync.startMarked": "Start: {time} · now mark the end",
+  "lyrics.sync.tapRangeHelp": "Play the song. Tap once at the beginning of the phrase, and again at its end. The next phrase is selected automatically. T or Enter.",
+  "lyrics.sync.playOptions": "Playback assistance",
+  "lyrics.sync.lineOptions": "Effect on other lines",
+  "lyrics.sync.moreActions": "Recalculate and restore",
+  "karaokeTiming.readyShort": "Karaoke available",
+  "karaoke.timedShort": "Lyrics synchronized",
   "lyrics.sync.manualTitle": "Manual adjustment",
   "lyrics.sync.saveExit": "Save and close",
   "lyrics.sync.advanced": "More synchronization tools",
@@ -4898,6 +4910,18 @@ const de = {
 };
 
 const pt = {
+  "lyrics.sync.methodLabel": "Método de sincronização",
+  "lyrics.sync.methodPlay": "Por reprodução",
+  "lyrics.sync.methodExact": "Tempo exato",
+  "lyrics.sync.tapStart": "Marcar início",
+  "lyrics.sync.tapEnd": "Marcar fim",
+  "lyrics.sync.startMarked": "Início: {time} · marque o fim",
+  "lyrics.sync.tapRangeHelp": "Reproduza a música. Toque uma vez no início da frase e outra vez no fim. A próxima frase será selecionada automaticamente. T ou Enter.",
+  "lyrics.sync.playOptions": "Auxílio na reprodução",
+  "lyrics.sync.lineOptions": "Efeito sobre outras linhas",
+  "lyrics.sync.moreActions": "Recalcular e restaurar",
+  "karaokeTiming.readyShort": "Karaokê disponível",
+  "karaoke.timedShort": "Letra sincronizada",
   "lyrics.sync.manualTitle": "Ajuste manual",
   "lyrics.sync.saveExit": "Salvar e sair",
   "lyrics.sync.advanced": "Mais ferramentas de sincronização",

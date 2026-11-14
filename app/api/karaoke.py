@@ -199,19 +199,25 @@ def karaoke_status(job_id: str) -> dict:
         run = None
     output = job_dir / _SIDE_CAR
     language_models = {}
+    language_issues = {}
     for language in ("pt", "en"):
         language_models[language] = []
         for name in ("large-v3",):
             try:
                 _configuration(name, language)
                 language_models[language].append(name)
-            except HTTPException:
-                pass
+            except HTTPException as exc:
+                language_issues[language] = (
+                    "model_cache_missing"
+                    if language == "en" and "alignment model not cached" in str(exc.detail)
+                    else "unavailable"
+                )
     models = language_models["pt"]
     now = time.monotonic()
     return {
         "state": run.state if run is not None else "idle",
         "available": output.is_file(), "models": models, "language_models": language_models,
+        "language_issues": language_issues,
         "language": getattr(run, "karaoke_language", None) if run is not None else None,
         "phase": getattr(run, "karaoke_phase", "queued") if run is not None else None,
         "elapsed_seconds": round(max(0, now - getattr(run, "karaoke_started", now))),

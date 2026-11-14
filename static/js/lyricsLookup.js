@@ -552,6 +552,7 @@ export function shiftLines(lines, offset) {
   return lines.map((line) => ({
     ...line,
     time: line.time + offset,
+    ...(Number.isFinite(line.end) ? { end: line.end + offset } : {}),
     ...(line.words ? { words: line.words.map((w) => (w.time == null ? w : { ...w, time: w.time + offset })) } : {}),
   }));
 }

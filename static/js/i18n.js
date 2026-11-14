@@ -218,6 +218,13 @@ function applyStemRowAriaLabels(scope) {
 // ─────────────────────────────────────────────────────────────────────────
 
 const en = {
+  "lyrics.sync.editPhrase": "Edit phrase timing",
+  "lyrics.sync.rangeStart": "Phrase start",
+  "lyrics.sync.rangeEnd": "Phrase end",
+  "lyrics.sync.capture": "Use playhead",
+  "lyrics.sync.saveRange": "Save phrase times",
+  "lyrics.sync.savedRange": "Saved",
+  "lyrics.sync.rangeInvalid": "Check the times: the end must follow the start, and the start must remain between the neighbouring phrases.",
   "lyricsAutoSync.anchor": "Set first phrase start",
   "lyricsAutoSync.anchorTitle": "Correct the first phrase's start",
   "lyricsAutoSync.anchorHint": "Set the time when this phrase actually begins. The other matched phrases are kept wherever possible. This does not re-transcribe the song.",
@@ -4888,6 +4895,13 @@ const de = {
 };
 
 const pt = {
+  "lyrics.sync.editPhrase": "Editar sincronização",
+  "lyrics.sync.rangeStart": "Início da frase",
+  "lyrics.sync.rangeEnd": "Fim da frase",
+  "lyrics.sync.capture": "Usar reprodução",
+  "lyrics.sync.saveRange": "Salvar tempos",
+  "lyrics.sync.savedRange": "Salvo",
+  "lyrics.sync.rangeInvalid": "Confira os tempos: o fim deve ser posterior ao início, e o início deve ficar entre as frases vizinhas.",
   "lyricsAutoSync.anchor": "Ajustar início da primeira frase",
   "lyricsAutoSync.anchorTitle": "Corrigir início da primeira frase",
   "lyricsAutoSync.anchorHint": "Informe quando a frase realmente começa. As demais frases alinhadas serão preservadas sempre que possível. A música não será transcrita novamente.",

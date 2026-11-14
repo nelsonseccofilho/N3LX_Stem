@@ -150,3 +150,28 @@ test("Electron keeps exports outside package, persists choice and enables deskto
     /Unauthorized window/,
   );
 });
+
+test("Storage appears as the second native Settings tab, without a second modal", () => {
+  const catalog = fs.readFileSync(
+    path.resolve(path.dirname(entryPath), "../static/js/catalog.js"), "utf8"
+  );
+  const html = fs.readFileSync(
+    path.resolve(path.dirname(entryPath), "../static/index.html"), "utf8"
+  );
+  const storage = fs.readFileSync(
+    path.resolve(path.dirname(entryPath), "../static/js/storageSettings.js"), "utf8"
+  );
+
+  const general = catalog.indexOf('data-tab="general"');
+  const storageTab = catalog.indexOf('data-tab="storage"');
+  const details = catalog.indexOf('data-tab="details"');
+  assert.ok(general >= 0 && general < storageTab && storageTab < details);
+  assert.match(catalog, /data-pane="storage"/);
+  assert.match(catalog, /wireStorageSettings\(overlay\)/);
+  assert.match(catalog, /id="storageExportsChange"/);
+  assert.match(catalog, /id="storageStemsChange"[^>]*disabled/);
+  assert.doesNotMatch(html, /storageSettingsDialog|src="\/js\/storageSettings\.js"/);
+  assert.match(storage, /export function wireStorageSettings\(overlay\)/);
+  assert.match(storage, /only_if_source_empty: true/);
+  assert.doesNotMatch(storage, /showModal\(/);
+});

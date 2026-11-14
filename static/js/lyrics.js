@@ -598,6 +598,7 @@ function openFirstLineTiming() {
       return;
     }
     save.disabled = true;
+    if (sync) closeSync(false);
     setDisplayLines(revision.lines);
     const lrc = serializeLrc(revision.lines);
     saveUserTiming(lrc);

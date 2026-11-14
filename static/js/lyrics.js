@@ -40,10 +40,11 @@ import { confirmAction } from "./confirmAction.js";
 
 import { lyricsEditorText, editedLyrics, untimedLines } from "./lyricsEditing.js";
 import { karaokePreviewFromTiming, hasProtectedLyrics, timingForMatchingEditedLyrics } from "./karaokeTiming.js";
+import { createLyricsAutoSyncController } from "./lyricsAutoSync.js";
 import { t, getLanguage, onLanguageChange } from "./i18n.js";
 import { storeGet, storeSet } from "./utils.js";
 import { getCurrentTrackInfo, getCurrentTrackArtist } from "./catalog.js";
-import { transport, setPlayheadTime } from "./transport.js";
+import { transport, setPlayheadTime, togglePlayPause } from "./transport.js";
 import { totalDuration } from "./state.js";
 import {
   parseLrc,
@@ -446,6 +447,114 @@ function restoreKaraokeLyrics() {
   updateKaraokeControls();
 }
 
+
+/** Automatic line timing runs apart from the manual T/Enter editor.
+ * Progress is backend-reported only, and corrected text is never rewritten. */
+let autoSyncController = null;
+let autoSyncView = null;
+function renderAutoSync() {
+  const heading = document.getElementById("lyricsGeneratorStatus");
+  if (!heading) return;
+  let panel = document.getElementById("lyricsAutoSyncProgress");
+  if (!panel) {
+    panel = el("section", "lyrics-auto-sync");
+    panel.id = "lyricsAutoSyncProgress";
+    panel.setAttribute("role", "status");
+    panel.setAttribute("aria-live", "polite");
+    heading.after(panel);
+  }
+  const same = Boolean(autoSyncView && getCurrentTrackInfo()?.id === autoSyncView.trackId);
+  const running = same && autoSyncView.state === "running";
+  panel.hidden = !same;
+  document.getElementById("lyricsPanel")?.classList.toggle("is-auto-sync-processing", running);
+  if (!same) return;
+  panel.replaceChildren(el("h3", "", t("lyricsAutoSync.title")));
+  const state = autoSyncView.state;
+  if (running) {
+    const pct = autoSyncView.progress;
+    panel.append(el("p", "", pct === null ? t("lyricsAutoSync.working")
+      : t("lyricsAutoSync.progress", { percent: Math.round(pct * 100) })));
+    const progress = el("progress"); progress.max = 1;
+    if (pct !== null) progress.value = pct;
+    panel.append(progress, el("p", "lyrics-note", t("lyricsAutoSync.preserved")));
+  } else {
+    const result = state === "done" && autoSyncView.lines !== null
+      ? t("lyricsAutoSync.done", { matched: autoSyncView.linesMatched, count: autoSyncView.lines })
+      : t("lyricsAutoSync." + (["unsure", "changed", "timeout"].includes(state) ? state : state === "done" ? "doneGeneric" : "failed"));
+    panel.append(el("p", "", result), el("p", "lyrics-note", t("lyricsAutoSync.preserved")));
+    const actions = el("div", "lyrics-auto-sync-actions");
+    const button = (key, click, accent = false) => {
+      const b = el("button", accent ? "lyrics-align-btn lyrics-generate-btn" : "lyrics-align-btn", t(key));
+      b.type = "button"; b.addEventListener("click", click); actions.append(b);
+    };
+    if (state === "done") button("lyricsAutoSync.review", () => {
+      getAutoSyncController().dismiss();
+      setPlayheadTime(0);
+      if (!transport()?.isPlaying?.()) togglePlayPause();
+    }, true);
+    button("lyricsAutoSync.manual", () => {
+      getAutoSyncController().dismiss();
+      const dialog = document.getElementById("karaokeSettings");
+      if (dialog && !dialog.open) dialog.showModal();
+      openSync();
+    });
+    button("lyricsAutoSync.dismiss", () => getAutoSyncController().dismiss());
+    panel.append(actions);
+  }
+}
+function getAutoSyncController() {
+  if (autoSyncController) return autoSyncController;
+  autoSyncController = createLyricsAutoSyncController({
+    startRequest: (run) => fetch(`/api/jobs/${encodeURIComponent(run.trackId)}/lyrics/retime`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(run.from === "server" ? {} : {
+        plain: run.entry.plain || "", synced: run.entry.synced || "",
+      }),
+    }),
+    readStatus: async (run) => {
+      const res = await fetch(`/api/jobs/${encodeURIComponent(run.trackId)}/lyrics/retime`, { cache: "no-store" });
+      if (!res.ok) throw Error("HTTP " + res.status);
+      return res.json();
+    },
+    commit: async (run, status) => {
+      if (run.from === "server") {
+        const result = await serverLyrics(run.trackId);
+        if (!result?.entry?.aligned?.synced) throw Error("Aligned lyrics missing");
+        if (getCurrentTrackInfo()?.id === run.trackId && !document.getElementById("lyricsEditor"))
+          show(result.entry, result.others, "server");
+        return;
+      }
+      const aligned = alignedFrom(status.aligned);
+      if (!aligned || !parseLrc(aligned.synced).length) throw Error("Aligned lyrics missing");
+      if (run.from === "store") {
+        const stored = await storeGet(storeKey(run.trackId), null);
+        if (stored?.entry?.plain !== run.entry.plain || stored?.entry?.synced !== run.entry.synced) {
+          const err = Error("Lyrics changed during timing");
+          err.code = "LYRICS_CHANGED";
+          throw err;
+        }
+        const updated = { ...stored.entry, aligned };
+        await storeSet(storeKey(run.trackId), { ...stored, entry: updated });
+        if (getCurrentTrackInfo()?.id === run.trackId && !document.getElementById("lyricsEditor"))
+          show(updated, stored.others || [], "store");
+      } else if (getCurrentTrackInfo()?.id === run.trackId) {
+        show({ ...run.entry, aligned }, run.others, run.from);
+      }
+    },
+    notify: (view) => { autoSyncView = view; renderAutoSync(); updateTimingNote(); },
+  });
+  return autoSyncController;
+}
+function startAutoSync() {
+  const info = getCurrentTrackInfo();
+  if (!info?.id || !shownEntry || !(shownEntry.plain || shownEntry.synced)) return;
+  if (getAutoSyncController().current()?.state === "running" || karaokeRunning) return;
+  if (sync) closeSync(false);
+  const run = { trackId: info.id, from: shownFrom, entry: { ...shownEntry }, others: [...shownOthers] };
+  document.getElementById("karaokeSettings")?.close();
+  void getAutoSyncController().start(run);
+}
+
 function selectKaraokeTrack(trackId) {
   if (karaokeTrackId === trackId) return;
   karaokeTrackId = trackId;
@@ -459,6 +568,7 @@ function selectKaraokeTrack(trackId) {
   setKaraokeMessage();
   updateKaraokeControls();
   if (trackId) void inspectKaraokeStatus(trackId, karaokeRequestToken);
+  renderAutoSync();
 }
 
 const karaokeApi = (trackId, tail) =>
@@ -2067,10 +2177,7 @@ export function initLyrics() {
     if (alignOpen) closeAlign(false);
   });
   document.getElementById("lyricsEditBtn")?.addEventListener("click", editLyrics);
-  document.getElementById("lyricsAutoSyncBtn")?.addEventListener("click", () => {
-    openSync();
-    retimeFromVocals();
-  });
+  document.getElementById("lyricsAutoSyncBtn")?.addEventListener("click", startAutoSync);
   document.addEventListener("tracktags", (e) => {
     if (visible && nothingKnownFor && e.detail?.id === nothingKnownFor) loadForCurrentTrack();
   });
@@ -2094,9 +2201,9 @@ function updateTimingNote() {
     : shownEntry ? t(lines.length && !provisional ? "karaoke.timed" : "karaoke.untimed")
     : getCurrentTrackInfo() ? t("karaoke.addLyrics") : "";
   const auto = document.getElementById("lyricsAutoSyncBtn");
-  if (auto) auto.disabled = !(shownEntry?.plain || shownEntry?.synced);
+  if (auto) auto.disabled = !(shownEntry?.plain || shownEntry?.synced) || autoSyncView?.state === "running";
   const edit = document.getElementById("lyricsEditBtn");
-  if (edit) edit.disabled = !getCurrentTrackInfo();
+  if (edit) edit.disabled = !getCurrentTrackInfo() || autoSyncView?.state === "running";
 }
 
 function editLyrics() {

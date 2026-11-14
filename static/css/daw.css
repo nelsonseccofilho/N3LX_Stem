@@ -7621,3 +7621,124 @@ input, textarea { font-family: inherit; }
     margin: 0;
   }
 }
+
+/* PR #26: one-row header with real full-height extraction actions and
+   waveform/karaoke switcher immediately before transport.
+   This is the layout contract, not independent centering offsets. */
+.app.daw.header-v3 #nowPlayingPanel .studio-mode-tabs {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  flex-direction: row;
+  width: max-content;
+  height: 40px;
+  min-height: 40px;
+  padding: 0;
+  margin: 0;
+  gap: 3px;
+  border: 0;
+  background: transparent;
+}
+.app.daw.header-v3 #nowPlayingPanel .studio-mode-tabs button {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 9px;
+  white-space: nowrap;
+  font-size: 10px;
+  line-height: 1;
+}
+.app.daw.header-v3 #nowPlayingPanel .studio-mode-tabs button[aria-selected="true"] {
+  color: var(--fg);
+  background: var(--panel);
+  border-color: var(--border-strong);
+  box-shadow: inset 0 -2px var(--accent);
+}
+@media (min-width: 1400px) {
+  .app.daw.header-v3 .daw-topbar > .daw-composer-stack {
+    width: 0;
+    min-width: 0;
+    flex: 1 1 0;
+    margin: 0;
+    padding: 0;
+    justify-content: center;
+    align-items: stretch;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact {
+    display: grid;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    height: 42px;
+    max-height: 42px;
+    flex: 0 0 42px;
+    grid-template-columns: 118px 90px minmax(0, 1fr);
+    grid-template-rows: 40px;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    justify-content: stretch;
+    align-content: center;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact > :is(.import-layout-toggle,.reextract-action) {
+    box-sizing: border-box;
+    width: 100%;
+    height: 40px !important;
+    min-height: 40px !important;
+    max-height: 40px !important;
+    margin: 0;
+    padding-inline: 6px;
+    align-self: center !important;
+    justify-self: stretch;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact > #nowPlayingPanel {
+    grid-column: 3;
+    grid-row: 1;
+    box-sizing: border-box;
+    height: 40px;
+    min-height: 40px;
+    max-height: 40px;
+    margin: 0;
+    padding-block: 0;
+    align-items: center;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .footer-clusters {
+    display: grid;
+    width: max-content;
+    min-width: 0;
+    grid-template-columns: repeat(7, max-content);
+    grid-template-rows: 40px;
+    column-gap: 5px;
+    row-gap: 0;
+    justify-content: end;
+    align-items: center;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .studio-mode-tabs { grid-area: 1 / 1; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-transport { grid-area: 1 / 2; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-speed { grid-area: 1 / 3; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-key { grid-area: 1 / 4; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-click { grid-area: 1 / 5; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-position { grid-area: 1 / 6; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-track-actions { grid-area: 1 / 7; }
+}
+@media (max-width: 1399px) {
+  /* Original responsive transport remains available; tabs occupy the first
+     row instead of requiring another full-width row above the waveform. */
+  .app.daw.header-v3 #nowPlayingPanel .studio-mode-tabs {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    justify-self: start;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .footer-clusters {
+    grid-template-rows: 40px 30px 30px;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-transport { grid-row: 2; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-position { grid-row: 2; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-speed,
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-key,
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-click,
+  .app.daw.header-v3 #nowPlayingPanel .footer-track-actions { grid-row: 3; }
+}

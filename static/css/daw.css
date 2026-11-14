@@ -4127,6 +4127,15 @@ input, textarea { font-family: inherit; }
   display: flex; flex-direction: column; gap: 7px;
   padding: 8px; border: 1px solid var(--accent); border-radius: 8px; background: var(--panel);
 }
+.lyrics-sync-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.lyrics-sync-primary { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.lyrics-sync-primary .lyrics-align-btn { min-height: 30px; padding: 4px 10px; }
+.lyrics-sync-primary .lyrics-align-done { color: var(--bg); background: var(--accent); border-color: var(--accent); }
+.lyrics-sync-advanced { border-top: 1px solid var(--border-subtle, var(--border)); padding-top: 5px; }
+.lyrics-sync-advanced > summary { cursor: pointer; width: fit-content; padding: 4px 2px; font-size: 11px; color: var(--fg-2); }
+.lyrics-sync-advanced[open] { display: flex; flex-direction: column; gap: 7px; }
+.lyrics-sync-advanced .lyrics-sync-next { margin-top: 3px; }
+.lyrics-sync:has(.lyrics-sync-advanced:not([open])) { gap: 4px; }
 .lyrics-sync-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .lyrics-sync-title { margin: 0; font-size: 12px; font-weight: 700; color: var(--fg); }
 .lyrics-sync-kind { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -89,21 +89,37 @@ export function serializeLrc(lines) {
     .join("\n");
 }
 
-/** Edit an individual phrase without moving its neighbours or changing its text. */
+/** Edit one sung phrase. Existing instrumental/pause markers may need to
+ * follow its new boundary; other sung phrases and their timecodes never move.
+ * Avoid a saved range being silently cut short by the next sung phrase.
+ */
 export function editPhraseRange(lines, index, start, end, duration = Infinity) {
   const line = lines[index];
   if (!line || !line.text?.trim() || !Number.isFinite(start) || !Number.isFinite(end) ||
-      start < 0 || end <= start || end > duration ||
-      (index > 0 && start <= lines[index - 1].time) ||
-      (index + 1 < lines.length && start >= lines[index + 1].time)) return null;
+      start < 0 || end <= start || end > duration) return null;
+  const previousSung = lines.slice(0, index).findLast(l => l.text?.trim());
+  const nextSung = lines.slice(index + 1).find(l => l.text?.trim());
+  if ((previousSung && start <= previousSung.time) ||
+      (nextSung && (start >= nextSung.time || end > nextSung.time))) return null;
   const shift = start - line.time;
-  // Keep the user's detailed word accents where possible. Only move those
-  // stamps with the phrase onset; the new end caps display of the final word.
+  // Preserve the original order of syllables, adjusting their onset with the
+  // phrase, and only clip to the manually confirmed end if needed.
   const words = line.words?.filter(w => w.text).map(w => ({
     ...w, time: Math.min(end, Math.max(start, (w.time ?? line.time) + shift)),
   }));
-  const edited = { ...line, time: start, end, ...(words ? { words } : {}) };
-  return lines.map((item, i) => i === index ? edited : item);
+  const out = lines.map((item, i) => i === index
+    ? { ...line, time: start, end, ...(words ? { words } : {}) }
+    : item);
+  // Empty LRC rows mark where the display clears during a pause. They must
+  // not override a corrected phrase at its new start or before its new end.
+  for (let i = index - 1; i >= 0 && !out[i].text?.trim(); i--) {
+    if (out[i].time >= start) out[i] = { ...out[i], time: Math.max(0, start - (index - i) * 0.001) };
+  }
+  for (let i = index + 1; i < out.length && !out[i].text?.trim(); i++) {
+    if (out[i].time <= end) out[i] = { ...out[i], time: end + (i - index) * 0.001 };
+    if (out[i].time >= (nextSung?.time ?? duration)) return null;
+  }
+  return out;
 }
 
 /**

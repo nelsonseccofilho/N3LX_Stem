@@ -65,11 +65,14 @@ def _configuration(model_name: str | None = None, language: str = "pt") -> tuple
         raise HTTPException(status_code=503, detail="Vulkan Whisper Large v3 worker not configured")
     if language not in {"pt", "en"}:
         raise HTTPException(status_code=422, detail="unsupported karaoke language")
-    if language == "pt":
-        try:
-            aligned_worker_resources()
-        except KaraokeTimingError:
-            raise HTTPException(status_code=503, detail="WhisperGPU alignment environment not configured") from None
+    # Both supported languages require the same WhisperX alignment worker.
+    # Do not advertise EN as available if only the legacy PT-only worker exists.
+    try:
+        _, worker = aligned_worker_resources()
+        if language == "en" and worker.parent.name != "src":
+            raise KaraokeTimingError("English WhisperX alignment worker unavailable")
+    except KaraokeTimingError:
+        raise HTTPException(status_code=503, detail=f"WhisperX {language.upper()} alignment worker not configured") from None
     return cli, model, ffmpeg_executable()
 
 

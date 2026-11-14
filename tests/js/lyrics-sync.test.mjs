@@ -225,5 +225,33 @@ const USER = "[00:00.00]\n[00:01.50] One line\n[00:03.50] Two line\n[00:05.50] T
     editPhraseRange(source, 0, 22, 26, 25) === null);
 }
 
+// Playback mode: staged start is UI-only; complete range is one undoable,
+// persistent change, and the next sung phrase is selected automatically.
+{
+  const source = parseLrc("[00:19.000] First phrase\n[00:27.000]\n[00:29.000] Second phrase\n[00:39.000] Third phrase");
+  const session = new SyncSession(source, { max: 70 });
+  check("two-tap range commits start and end together",
+    session.markPhraseRange(22, 26.5) &&
+    session.lines[0].time === 22 && session.lines[0].end === 26.5);
+  check("two-tap advances to next sung phrase, skipping pauses",
+    session.cursor === 2 && session.lines[2].time === 29);
+  check("two-tap does not move another sung phrase",
+    session.lines[2].time === 29 && session.lines[3].time === 39);
+  const saved = serializeLrc(session.lines);
+  const reloaded = parseLrc(saved);
+  check("two-tap range persists with millisecond precision",
+    reloaded[0].time === 22 && reloaded[0].end === 26.5);
+  check("undo restores earlier timing and selection",
+    session.undo() && session.cursor === 0 &&
+    session.lines[0].time === 19 && !Number.isFinite(session.lines[0].end));
+  check("redo restores timing and next phrase",
+    session.redo() && session.cursor === 2 &&
+    session.lines[0].time === 22 && session.lines[0].end === 26.5);
+  check("invalid playback end does not mutate any lyrics",
+    !session.markPhraseRange(32, 31) && session.lines[2].time === 29);
+  check("overlapping subsequent phrase is rejected",
+    !session.markPhraseRange(30, 42) && session.lines[3].time === 39);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);

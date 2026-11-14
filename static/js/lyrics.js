@@ -1503,7 +1503,7 @@ function buildSyncPanel(session) {
   lineTools.append(range);
 
   return { panel, session, kind, saveState, nextLabel, nextText, tap, undo, retimeBtn, message,
-    lineTools, rangeStart: begin.input, rangeEnd: finish.input, rangeError, rangeSave: saveRange };
+    lineTools, rangePanel: range, rangeStart: begin.input, rangeEnd: finish.input, rangeError, rangeSave: saveRange };
 }
 
 /** Where the singing starts near `time`, with Snap on and Alt not held. */
@@ -1530,6 +1530,7 @@ function onCursor({ reveal = false } = {}) {
   const line = lines[index];
   sync.tap.disabled = !line;
   sync.nextText.removeAttribute("lang");
+  if (sync.rangePanel) sync.rangePanel.hidden = !line?.text?.trim();
   if (line) {
     sync.nextLabel.textContent = t("lyrics.sync.next", { n: index + 1, count: lines.length });
     sync.nextText.textContent = line.text || "♪";

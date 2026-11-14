@@ -6893,6 +6893,29 @@ input, textarea { font-family: inherit; }
 .lyrics-generator-language { display:flex; align-items:center; flex-wrap:wrap; gap:6px 10px; }
 .lyrics-generator-language select { min-height:30px; max-width:100%; }
 
+/* Automatic lyric alignment has its own lifecycle; manual tapping is opt-in. */
+.lyrics-auto-sync[hidden] { display:none; }
+.lyrics-auto-sync {
+  flex: 1 0 auto; min-height:260px; box-sizing:border-box;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:14px; padding:28px 20px; border:1px solid var(--border);
+  border-radius:8px; background:var(--panel); text-align:center;
+}
+.lyrics-auto-sync h3 { color:var(--fg); margin:0; font-size:17px; }
+.lyrics-auto-sync p { margin:0; max-width:540px; color:var(--fg-2); line-height:1.5; }
+.lyrics-auto-sync .lyrics-note { color:var(--muted); }
+.lyrics-auto-sync progress { width:min(100%,320px); accent-color:var(--accent); }
+.lyrics-auto-sync-actions { display:flex; flex-wrap:wrap; justify-content:center; gap:10px; }
+.lyrics-auto-sync-actions button { min-height:36px; }
+#lyricsPanel.is-auto-sync-processing > :not(.lyrics-heading):not(#lyricsGeneratorStatus):not(#lyricsAutoSyncProgress) { display:none!important; }
+
+.lyrics-editor-form .lyrics-anchor-clock {
+  display:block; width:136px; min-height:36px; box-sizing:border-box; margin-top:8px;
+  padding:6px 10px; border:1px solid var(--border-strong); border-radius:6px;
+  background:var(--bg); color:var(--fg); font:inherit;
+}
+.lyrics-editor-form .lyrics-anchor-clock:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+
 /* Karaoke settings are secondary; the song and lyrics stay in view. */
 .karaoke-settings { width:min(680px,calc(100vw - 32px)); max-height:min(85vh,760px); overflow:auto; padding:20px; border:1px solid var(--border-strong); border-radius:12px; background:var(--bg-2); color:var(--fg); box-shadow:var(--shadow-panel); }
 .karaoke-settings::backdrop { background:#000a; }

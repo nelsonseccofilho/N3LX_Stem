@@ -314,6 +314,28 @@ def _run_command(
                 proc.wait(timeout=5)
 
 
+# WhisperX 3.8.x defaults to torchaudio's WAV2VEC2_ASR_BASE_960H for EN.
+# Check the cache without importing torch/torchaudio or downloading weights.
+# WhisperX uses torch.hub.get_dir()/checkpoints when model_dir is unspecified.
+ENGLISH_ALIGN_CHECKPOINT = "wav2vec2_fairseq_base_ls960_asr_ls960.pth"
+
+
+def english_alignment_checkpoint() -> Path:
+    """Locate the English acoustic alignment model in torch's effective cache."""
+    torch_home = os.environ.get("TORCH_HOME")
+    if torch_home:
+        base = Path(torch_home)
+    else:
+        base = Path(os.environ.get("XDG_CACHE_HOME") or (Path.home() / ".cache")) / "torch"
+    return base.expanduser() / "hub" / "checkpoints" / ENGLISH_ALIGN_CHECKPOINT
+
+
+def english_alignment_ready() -> bool:
+    """Never advertise English when WhisperX would fetch a missing model."""
+    checkpoint = english_alignment_checkpoint()
+    return checkpoint.is_file() and checkpoint.stat().st_size > 16 * 1024 * 1024
+
+
 def aligned_worker_resources() -> tuple[Path, Path]:
     """Locate the existing NELX worker; no downloads or implicit GPU fallback.
 
@@ -380,6 +402,8 @@ def generate_timing(
     if language not in {"pt", "en"}:
         raise KaraokeTimingError("unsupported karaoke language")
     python, worker = aligned_worker_resources()
+    if language == "en" and not english_alignment_ready():
+        raise KaraokeTimingError("English WhisperX acoustic checkpoint not available in torch cache")
     # Legacy experimental DirectML alignment was built only for PT. The modern
     # WhisperX worker supports a language-specific acoustic model for PT and EN.
     if language == "en" and worker.parent.name != "src":

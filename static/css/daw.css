@@ -7742,3 +7742,65 @@ input, textarea { font-family: inherit; }
   .app.daw.header-v3 #nowPlayingPanel .footer-group-click,
   .app.daw.header-v3 #nowPlayingPanel .footer-track-actions { grid-row: 3; }
 }
+
+/* PR #26: final optical alignment. All items use the exact same 40px
+   grid row; control contents are centered within it, not top-aligned. */
+@media (min-width: 1400px) {
+  .app.daw.header-v3 .daw-topbar {
+    display: flex;
+    align-items: center;
+  }
+  .app.daw.header-v3 .daw-topbar > .daw-composer-stack {
+    height: 100%;
+    align-self: center;
+    justify-content: center;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact {
+    height: 40px;
+    min-height: 40px;
+    max-height: 40px;
+    flex: 0 0 40px;
+    grid-template-rows: 40px;
+    align-items: center;
+    align-content: center;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact > #nowPlayingPanel {
+    height: 40px;
+    min-height: 40px;
+    max-height: 40px;
+    align-self: center;
+    align-items: center;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .track-panel-head,
+  .app.daw.header-v3 #nowPlayingPanel .song-controls,
+  .app.daw.header-v3 #nowPlayingPanel .footer-clusters,
+  .app.daw.header-v3 #nowPlayingPanel .studio-mode-tabs,
+  .app.daw.header-v3 #nowPlayingPanel .footer-clusters > :is(.footer-group,.footer-track-actions) {
+    align-self: center;
+    align-items: center;
+    margin-top: 0;
+    margin-bottom: 0;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .footer-clusters {
+    height: 40px;
+    min-height: 40px;
+    grid-template-rows: 40px;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .footer-clusters > .footer-group {
+    display: flex;
+    justify-content: center;
+    height: 40px;
+    min-height: 40px;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-body {
+    display: flex;
+    align-items: center;
+    align-self: center;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .footer-clusters > .footer-track-actions {
+    display: flex;
+    height: 40px;
+    min-height: 40px;
+    align-items: center;
+  }
+}

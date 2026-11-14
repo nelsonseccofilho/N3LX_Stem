@@ -7302,6 +7302,13 @@ input, textarea { font-family: inherit; }
     justify-content: end;
     align-items: center;
   }
+  /* Order follows the user's task: transport, speed, key, click, loop/seek, export. */
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-transport { grid-area: 1 / 1; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-speed { grid-area: 1 / 2; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-key { grid-area: 1 / 3; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-click { grid-area: 1 / 4; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-position { grid-area: 1 / 5; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-track-actions { grid-area: 1 / 6; }
   .app.daw.header-v3 #nowPlayingPanel .footer-group-position {
     width: auto;
     min-width: 0;

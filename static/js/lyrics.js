@@ -567,7 +567,6 @@ function openManualPhraseEditor() {
   const index = lines[candidate]?.text?.trim() ? candidate
     : lines.findIndex(line => line.text?.trim());
   if (index < 0) return;
-  document.getElementById("karaokeSettings")?.close();
   selectLine(index);
   sync.rangeStart?.focus();
   sync.rangeStart?.select();
@@ -1321,8 +1320,13 @@ function openSync({ focus = false } = {}) {
     meta: { kind: timingKind },
   });
   sync = buildSyncPanel(session);
-  syncToggleEl?.closest(".lyrics-tools")?.after(sync.panel);
+  // The settings dialog is a modal; editing under that dialog would be
+  // inaccessible. Keep the editor adjacent to the lyrics, not in the modal.
+  sync.manualMode = true;
+  versionsEl?.before(sync.panel);
   syncToggleEl?.setAttribute("aria-expanded", "true");
+  const settingsDialog = document.getElementById("karaokeSettings");
+  if (settingsDialog?.open) settingsDialog.close();
   bodyEl.classList.add("syncing");
   showLineTimes();
   showLane(lines, laneLength(), {
@@ -1461,7 +1465,7 @@ function buildSyncPanel(session) {
   const rangeError = el("p", "lyrics-align-message");
   rangeError.setAttribute("role", "alert");
   const rangeField = (labelKey) => {
-    const wrap = el("label", "lyrics-phrase-range-field");
+    const wrap = el("div", "lyrics-phrase-range-field");
     const label = el("span", "", t(labelKey));
     const input = el("input", "lyrics-phrase-time");
     input.type = "text";
@@ -2314,7 +2318,7 @@ export function initLyrics() {
   document.getElementById("lyricsKaraokeModel")?.addEventListener("change", updateKaraokeControls);
   document.getElementById("karaokeProcessingCancel")?.addEventListener("click", () => void cancelKaraoke());
   document.getElementById("karaokeSettings")?.addEventListener("close", () => {
-    if (sync?.retimeBtn?.getAttribute("aria-busy") !== "true") closeSync(false);
+    if (!sync?.manualMode && sync?.retimeBtn?.getAttribute("aria-busy") !== "true") closeSync(false);
     if (alignOpen) closeAlign(false);
   });
   document.getElementById("lyricsEditBtn")?.addEventListener("click", editLyrics);

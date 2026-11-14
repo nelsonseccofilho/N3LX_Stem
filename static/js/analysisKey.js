@@ -20,10 +20,14 @@ export function refreshAnalysisKey() {
   const shift = shifts.size === 1 ? [...shifts][0] : 0;
   const original = formatKey(originalKey, originalScale, t);
   const adjusted = transposeKey(originalKey, shift);
-  node.textContent = mixed && originalKey ? t("key.mixed") : formatKey(adjusted, originalScale, t) || "—";
+  const readable = formatKey(adjusted, originalScale, t);
+  const shorthand = keySymbol(adjusted, originalScale);
+  // Show the familiar musician shorthand as the primary value, and spell out
+  // the mode below so F# major cannot be mistaken for F# minor.
+  node.textContent = mixed && originalKey ? t("key.mixed") : shorthand || readable || "—";
   const symbol = document.getElementById("summary-key-symbol");
   if (symbol) {
-    symbol.textContent = mixed ? "—" : keySymbol(adjusted, originalScale) || "—";
+    symbol.textContent = mixed ? "" : shorthand && readable && readable !== shorthand ? readable : "";
     symbol.title = t("meta.keySymbol");
   }
   node.title = original ? t("key.originalHint", { key: original }) : "";

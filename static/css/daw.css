@@ -7743,135 +7743,142 @@ input, textarea { font-family: inherit; }
   .app.daw.header-v3 #nowPlayingPanel .footer-track-actions { grid-row: 3; }
 }
 
-/* PR #26: final optical alignment. All items use the exact same 40px
-   grid row; control contents are centered within it, not top-aligned. */
+/* PR #26 — single header alignment contract.
+   All three components are placed in ONE 40px grid track, with the same
+   vertical midpoint. Children use intrinsic 30px controls inside it.
+   This replaces the competing late alignment patches. */
 @media (min-width: 1400px) {
   .app.daw.header-v3 .daw-topbar {
+    --header-row: 40px;
+    --header-control: 30px;
     display: flex;
+    height: 54px;
+    min-height: 54px;
+    max-height: 54px;
     align-items: center;
   }
   .app.daw.header-v3 .daw-topbar > .daw-composer-stack {
-    height: 100%;
-    align-self: center;
+    flex: 1 1 0;
+    min-width: 0;
+    width: 0;
+    height: var(--header-row);
+    padding: 0;
+    margin: 0;
+    display: flex;
+    align-items: stretch;
     justify-content: center;
   }
   .app.daw.header-v3 .daw-composer.header-compact {
-    height: 40px;
-    min-height: 40px;
-    max-height: 40px;
-    flex: 0 0 40px;
-    grid-template-rows: 40px;
-    align-items: center;
-    align-content: center;
+    display: grid;
+    width: 100%;
+    height: var(--header-row);
+    min-height: var(--header-row);
+    max-height: var(--header-row);
+    flex: 0 0 var(--header-row);
+    grid-template-columns: 118px 90px minmax(0, 1fr);
+    grid-template-rows: var(--header-row);
+    column-gap: 6px;
+    row-gap: 0;
+    margin: 0;
+    padding: 0;
+    align-items: stretch;
+    align-content: stretch;
+    justify-content: stretch;
   }
+  .app.daw.header-v3 .daw-composer.header-compact > :is(.import-layout-toggle,.reextract-action) {
+    box-sizing: border-box;
+    display: flex !important;
+    width: 100%;
+    height: var(--header-row) !important;
+    min-height: var(--header-row) !important;
+    max-height: var(--header-row) !important;
+    align-self: stretch !important;
+    justify-self: stretch;
+    align-items: center !important;
+    justify-content: center !important;
+    margin: 0 !important;
+    padding: 0 8px !important;
+    line-height: 1.2;
+    text-align: center;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact > .import-layout-toggle { grid-area: 1 / 1; }
+  .app.daw.header-v3 .daw-composer.header-compact > .reextract-action { grid-area: 1 / 2; }
   .app.daw.header-v3 .daw-composer.header-compact > #nowPlayingPanel {
-    height: 40px;
-    min-height: 40px;
-    max-height: 40px;
-    align-self: center;
+    grid-area: 1 / 3;
+    box-sizing: border-box;
+    display: grid;
+    min-width: 0;
+    height: var(--header-row);
+    min-height: var(--header-row);
+    max-height: var(--header-row);
+    padding-top: 0;
+    padding-bottom: 0;
+    margin: 0;
     align-items: center;
   }
   .app.daw.header-v3 #nowPlayingPanel .track-panel-head,
-  .app.daw.header-v3 #nowPlayingPanel .song-controls,
-  .app.daw.header-v3 #nowPlayingPanel .footer-clusters,
-  .app.daw.header-v3 #nowPlayingPanel .studio-mode-tabs,
-  .app.daw.header-v3 #nowPlayingPanel .footer-clusters > :is(.footer-group,.footer-track-actions) {
+  .app.daw.header-v3 #nowPlayingPanel .song-controls {
+    height: var(--header-row);
+    min-height: var(--header-row);
     align-self: center;
-    align-items: center;
-    margin-top: 0;
-    margin-bottom: 0;
-  }
-  .app.daw.header-v3 #nowPlayingPanel .footer-clusters {
-    height: 40px;
-    min-height: 40px;
-    grid-template-rows: 40px;
-  }
-  .app.daw.header-v3 #nowPlayingPanel .footer-clusters > .footer-group {
-    display: flex;
-    justify-content: center;
-    height: 40px;
-    min-height: 40px;
-  }
-  .app.daw.header-v3 #nowPlayingPanel .footer-group-body {
     display: flex;
     align-items: center;
-    align-self: center;
-  }
-  .app.daw.header-v3 #nowPlayingPanel .footer-clusters > .footer-track-actions {
-    display: flex;
-    height: 40px;
-    min-height: 40px;
-    align-items: center;
-  }
-}
-
-/* PR #26 — consistent 40px shell / 30px interactive interior.
-   A text baseline cannot be reliably centered with position or transforms:
-   center every content row and use one line-height for all controls. */
-@media (min-width: 1400px) {
-  .app.daw.header-v3 .daw-composer.header-compact > :is(.import-layout-toggle,.reextract-action) {
-    display: flex !important;
-    box-sizing: border-box;
-    align-items: center !important;
-    justify-content: center !important;
-    height: 40px !important;
-    min-height: 40px !important;
-    max-height: 40px !important;
-    padding: 0 8px !important;
-    margin: 0 !important;
-    line-height: 1.2 !important;
-    text-align: center;
-    vertical-align: middle;
-  }
-  .app.daw.header-v3 #nowPlayingPanel {
-    display: grid;
-    align-items: center !important;
-  }
-  .app.daw.header-v3 #nowPlayingPanel .track-panel-head {
-    display: flex;
-    box-sizing: border-box;
-    align-items: center !important;
-    height: 40px !important;
-    min-height: 40px;
-    margin: 0;
-    padding: 0;
+    margin-block: 0;
   }
   .app.daw.header-v3 #nowPlayingPanel .track-panel-info {
-    display: flex;
     min-width: 0;
-    flex-direction: row;
+    display: flex;
     align-items: center;
     gap: 5px;
-    line-height: 1.2;
   }
-  .app.daw.header-v3 #nowPlayingPanel .track-panel-title,
-  .app.daw.header-v3 #nowPlayingPanel .np-artist {
+  .app.daw.header-v3 #nowPlayingPanel :is(.track-panel-title,.np-artist) {
     line-height: 1.2;
     margin-block: 0;
   }
-  .app.daw.header-v3 #nowPlayingPanel .song-controls,
-  .app.daw.header-v3 #nowPlayingPanel .footer-clusters,
+  .app.daw.header-v3 #nowPlayingPanel .footer-clusters {
+    display: grid;
+    grid-template-columns: repeat(7, max-content);
+    grid-template-rows: var(--header-row);
+    width: max-content;
+    height: var(--header-row);
+    min-height: var(--header-row);
+    align-items: center;
+    gap: 0 5px;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .studio-mode-tabs { grid-area: 1 / 1; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-transport { grid-area: 1 / 2; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-speed { grid-area: 1 / 3; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-key { grid-area: 1 / 4; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-click { grid-area: 1 / 5; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-position { grid-area: 1 / 6; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-track-actions { grid-area: 1 / 7; }
+  .app.daw.header-v3 #nowPlayingPanel .footer-clusters > :is(.footer-group,.footer-track-actions),
   .app.daw.header-v3 #nowPlayingPanel .studio-mode-tabs {
-    height: 40px;
-    min-height: 40px;
-    align-self: center !important;
+    box-sizing: border-box;
+    display: flex;
+    height: var(--header-row);
+    min-height: var(--header-row);
+    align-self: center;
+    align-items: center;
+    justify-content: center;
+    margin-block: 0;
   }
   .app.daw.header-v3 #nowPlayingPanel .footer-group-body {
     display: flex;
     align-items: center;
-    justify-content: center;
-    min-height: 30px;
-  }
-  .app.daw.header-v3 #nowPlayingPanel :is(.footer-elapsed,.footer-total,.pitch-value,.loop-btn-label) {
-    line-height: 1.2;
-    align-self: center;
+    min-height: var(--header-control);
   }
   .app.daw.header-v3 #nowPlayingPanel .studio-mode-tabs button {
+    box-sizing: border-box;
     display: inline-flex;
+    height: var(--header-control);
+    min-height: var(--header-control);
     align-items: center;
     justify-content: center;
     line-height: 1.2;
-    height: 30px;
-    min-height: 30px;
+  }
+  .app.daw.header-v3 #nowPlayingPanel :is(.footer-elapsed,.footer-total,.pitch-value) {
+    line-height: 1.2;
+    align-self: center;
   }
 }

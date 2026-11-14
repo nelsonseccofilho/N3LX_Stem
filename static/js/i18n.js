@@ -218,6 +218,7 @@ function applyStemRowAriaLabels(scope) {
 // ─────────────────────────────────────────────────────────────────────────
 
 const en = {
+  "key.confidence": "Confidence",
   "view.timelineZoom": "Timeline zoom",
   "lyrics.sync.methodLabel": "Timing method",
   "lyrics.sync.methodPlay": "By playback",
@@ -4911,6 +4912,7 @@ const de = {
 };
 
 const pt = {
+  "key.confidence": "Confiança",
   "view.timelineZoom": "Zoom da timeline",
   "lyrics.sync.methodLabel": "Método de sincronização",
   "lyrics.sync.methodPlay": "Por reprodução",

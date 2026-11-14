@@ -621,14 +621,74 @@ function openFirstLineTiming() {
   input.select();
 }
 
-function startAutoSync() {
+/**
+ * One user action: obtain a verified, current acoustic alignment when needed,
+ * then fit that evidence to the user's corrected words. Do not preview the
+ * machine transcript over user edits, and do not repeat GPU recognition when
+ * the validated WhisperX sidecar is already current.
+ */
+async function startAutoSync() {
   const info = getCurrentTrackInfo();
   if (!info?.id || !shownEntry || !(shownEntry.plain || shownEntry.synced)) return;
   if (getAutoSyncController().current()?.state === "running" || karaokeRunning) return;
   if (sync) closeSync(false);
   const run = { trackId: info.id, from: shownFrom, entry: { ...shownEntry }, others: [...shownOthers] };
+  const language = document.getElementById("lyricsKaraokeLanguage")?.value || "pt";
+  const token = ++karaokeRequestToken;
   document.getElementById("karaokeSettings")?.close();
-  void getAutoSyncController().start(run);
+  try {
+    const status = await fetchKaraokeStatus(run.trackId);
+    if (token !== karaokeRequestToken || getCurrentTrackInfo()?.id !== run.trackId) return;
+    if (status.current_alignment?.[language] !== true) {
+      // Failed generation keeps the previous sidecar intact; the API commits a
+      // replacement only after the worker finishes and verifies the source.
+      if (!(status.language_models?.[language] || []).includes("large-v3")) {
+        setKaraokeMessage(language === "en" && status.language_issues?.en === "model_cache_missing"
+          ? "karaokeTiming.englishModelCacheMissing" : "karaokeTiming.modelUnavailable", "error");
+        return;
+      }
+      karaokeRunning = true;
+      updateKaraokeProgress({ phase: "queued", elapsed_seconds: 0, language });
+      setKaraokeMessage("karaokeTiming.running");
+      updateKaraokeControls();
+      const response = await fetch(karaokeApi(run.trackId, "generate"), {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ replace: status.available === true, model: "large-v3", language }),
+      });
+      if (!response.ok) throw new Error(`Acoustic alignment HTTP ${response.status}`);
+      let completed = false;
+      for (let attempt = 0; attempt < KARAOKE_MAX_POLLS; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, KARAOKE_POLL_MS));
+        if (token !== karaokeRequestToken || getCurrentTrackInfo()?.id !== run.trackId) return;
+        const next = await fetchKaraokeStatus(run.trackId);
+        updateKaraokeProgress(next);
+        if (next.state === "failed" || next.state === "idle") {
+          throw new Error("Acoustic alignment failed or was cancelled");
+        }
+        if (next.state === "done") {
+          completed = next.current_alignment?.[language] === true;
+          break;
+        }
+      }
+      if (!completed) throw new Error("Acoustic alignment incomplete");
+      karaokeAvailable = true;
+    }
+    if (token !== karaokeRequestToken || getCurrentTrackInfo()?.id !== run.trackId) return;
+    karaokeRunning = false;
+    updateKaraokeControls();
+    // The controller still owns consistency checks and protects concurrent
+    // edits. An unsure match never replaces the original user timing.
+    await getAutoSyncController().start(run);
+  } catch (error) {
+    console.warn("automatic acoustic lyric sync failed", error);
+    if (token === karaokeRequestToken && getCurrentTrackInfo()?.id === run.trackId)
+      setKaraokeMessage("karaokeTiming.failed", "error");
+  } finally {
+    if (token === karaokeRequestToken && getCurrentTrackInfo()?.id === run.trackId) {
+      karaokeRunning = false;
+      updateKaraokeControls();
+    }
+  }
 }
 
 function selectKaraokeTrack(trackId) {

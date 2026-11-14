@@ -7036,3 +7036,45 @@ input, textarea { font-family: inherit; }
 .karaoke-sections[hidden] { display:none; }
 .karaoke-section { position:absolute; top:0; bottom:0; box-sizing:border-box; display:flex; align-items:center; padding:0 7px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; border:1px solid var(--section-color,var(--border)); border-radius:4px; color:var(--section-color,var(--fg-2)); background:var(--bg-2); font-size:10px; font-weight:700; }
 .karaoke-section.is-active { box-shadow:inset 0 -2px 0 var(--section-color,var(--accent)); }
+
+
+/* PR #26 — compact karaoke editing: lyrics are the preview, not a duplicate card. */
+.lyrics-sync-visually-hidden {
+  position: absolute !important;
+  width: 1px !important; height: 1px !important;
+  padding: 0 !important; margin: -1px !important; border: 0 !important;
+  overflow: hidden !important; clip: rect(0,0,0,0) !important;
+  white-space: nowrap !important;
+}
+.lyrics-sync {
+  gap: 5px;
+  padding: 7px 9px;
+  border-color: var(--border-strong);
+}
+.lyrics-sync-head { align-items: center; }
+.lyrics-sync-method { gap: 6px; }
+.lyrics-sync-method .lyrics-align-btn {
+  flex: 0 1 auto; min-width: 126px; height: 30px; min-height: 30px;
+  padding: 4px 12px; font-size: 11px; font-weight: 600;
+  color: var(--fg-2); background: transparent;
+  border-color: var(--border-strong); border-radius: 6px;
+}
+.lyrics-sync-method [aria-pressed="true"] {
+  background: var(--panel-2); color: var(--fg);
+  border-color: var(--fg-2); box-shadow: inset 0 -2px 0 var(--accent);
+}
+.lyrics-sync-method [aria-pressed="true"]:hover { background: var(--panel-2); color: var(--fg); }
+.lyrics-sync-play-controls { gap: 3px; }
+.lyrics-sync-play-controls .lyrics-sync-tap {
+  align-self: flex-start; min-width: 152px; width: auto;
+  height: 32px; min-height: 32px; padding: 4px 16px;
+  font-size: 12px; letter-spacing: 0; border-radius: 6px;
+}
+.lyrics-sync-play-controls > .lyrics-sync-keys { font-size: 10px; }
+.lyrics-sync-primary .lyrics-align-btn { height: 30px; min-height: 30px; }
+.lyrics-sync-advanced { padding-top: 3px; }
+.lyrics-sync-advanced > summary { font-size: 10.5px; }
+/* Keep interactive heights consistent without enlarging the whole panel. */
+.lyrics-heading > button, .lyrics-heading .lyrics-align-btn {
+  height: 30px; min-height: 30px; box-sizing: border-box;
+}

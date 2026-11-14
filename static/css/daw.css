@@ -4167,7 +4167,13 @@ input, textarea { font-family: inherit; }
   font-variant-numeric: tabular-nums;
 }
 .lyrics-body.syncing .lyrics-line.selected { background: var(--panel); outline: 1px solid var(--accent); outline-offset: -1px; }
-.lyrics-line-tools { display: flex; align-items: center; gap: 4px; padding: 2px 8px 6px; }
+.lyrics-line-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; padding: 2px 8px 6px; }
+.lyrics-phrase-range { display: flex; flex-basis: 100%; align-items: end; flex-wrap: wrap; gap: 8px; padding: 8px 0 4px; border-top: 1px solid var(--border-subtle, #d3d8dd); }
+.lyrics-phrase-range-field { display: flex; flex: 1 1 155px; flex-direction: column; gap: 4px; font-size: 11px; }
+.lyrics-phrase-range-field > span { font-weight: 600; }
+.lyrics-phrase-time { box-sizing: border-box; width: 100%; min-height: 30px; padding: 4px 8px; border: 1px solid var(--border-subtle, #a5adb7); border-radius: 5px; color: inherit; background: var(--surface, #fff); font: 12px var(--font-mono, monospace); font-variant-numeric: tabular-nums; }
+.lyrics-phrase-range .lyrics-align-message { flex-basis: 100%; margin: 0; }
+.lyrics-phrase-range > .lyrics-align-btn { min-height: 30px; }
 .lyrics-line-tools .lyrics-align-btn { min-height: 22px; padding: 0 6px; font-size: 10.5px; }
 .lyrics-line-tools .lyrics-align-nudge { font-family: var(--font-mono); }
 .lyrics-line-tools .lyrics-line-here { margin-left: auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--accent); border-color: var(--accent); }

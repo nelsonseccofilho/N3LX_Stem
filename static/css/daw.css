@@ -4127,6 +4127,11 @@ input, textarea { font-family: inherit; }
   display: flex; flex-direction: column; gap: 7px;
   padding: 8px; border: 1px solid var(--accent); border-radius: 8px; background: var(--panel);
 }
+.lyrics-heading .lyrics-generation-status {
+  display: inline-flex; align-items: center; max-width: 260px;
+  font-size: 11px; line-height: 1.25; color: var(--muted); margin: 0;
+}
+.lyrics-heading .lyrics-generation-status:empty { display: none; }
 /* Two methods share one editor and one persistence pipeline. */
 .lyrics-sync-method { display: flex; flex-wrap: wrap; gap: 4px; }
 .lyrics-sync-method .lyrics-align-btn { flex: 1 1 120px; min-height: 32px; }

@@ -4127,6 +4127,15 @@ input, textarea { font-family: inherit; }
   display: flex; flex-direction: column; gap: 7px;
   padding: 8px; border: 1px solid var(--accent); border-radius: 8px; background: var(--panel);
 }
+/* Two methods share one editor and one persistence pipeline. */
+.lyrics-sync-method { display: flex; flex-wrap: wrap; gap: 4px; }
+.lyrics-sync-method .lyrics-align-btn { flex: 1 1 120px; min-height: 32px; }
+.lyrics-sync-method [aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 700; }
+.lyrics-sync-play-controls { display: flex; flex-direction: column; gap: 6px; }
+.lyrics-sync-play-controls .lyrics-sync-tap { min-height: 42px; }
+.lyrics-sync-options-group { display: flex; flex-wrap: wrap; align-items: center; gap: 7px 12px; padding: 4px 0; }
+.lyrics-sync-options-group > strong { flex: 1 0 100%; font-size: 11px; color: var(--muted); }
+.lyrics-sync-play-controls[hidden], .lyrics-line-tools[hidden], .lyrics-phrase-range[hidden] { display: none !important; }
 .lyrics-sync-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
 .lyrics-sync-primary { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .lyrics-sync-primary .lyrics-align-btn { min-height: 30px; padding: 4px 10px; }

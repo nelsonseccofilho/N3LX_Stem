@@ -27,8 +27,11 @@ export function refreshAnalysisKey() {
   node.textContent = mixed && originalKey ? t("key.mixed") : shorthand || readable || "—";
   const symbol = document.getElementById("summary-key-symbol");
   if (symbol) {
-    symbol.textContent = mixed ? "" : shorthand && readable && readable !== shorthand ? readable : "";
-    symbol.title = t("meta.keySymbol");
+    // The user prefers one concise key notation. Preserve the expanded mode
+    // as a tooltip rather than repeating it in the card.
+    symbol.textContent = "";
+    symbol.title = readable || t("meta.keySymbol");
+    symbol.setAttribute("aria-label", readable || t("meta.keySymbol"));
   }
   node.title = original ? t("key.originalHint", { key: original }) : "";
   const confidence = document.getElementById("summary-confidence");

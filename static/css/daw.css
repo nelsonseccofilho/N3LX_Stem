@@ -7177,3 +7177,86 @@ input, textarea { font-family: inherit; }
   .app.daw.header-v3 #nowPlayingPanel .footer-total { font-size: 10px; }
   .app.daw.header-v3 #nowPlayingPanel .footer-elapsed { font-size: 12px; }
 }
+
+/* PR #26 — remove the redundant title strip; keep the icon-only brand link. */
+.app.daw .daw-brand a { min-height: 0; height: 100%; justify-content: center; }
+.app.daw .daw-brand img { width: 28px; height: 28px; }
+.rail-community-action {
+  width: 100%; display: flex; justify-content: center;
+  border-top: 1px solid var(--border); padding-top: 7px; margin-top: 4px;
+}
+.rail-community-action .github-star-shortcut {
+  width: 40px; height: 40px; box-sizing: border-box;
+  padding: 0; display: flex; justify-content: center; align-items: center;
+  border: 1px solid var(--border-strong); background: transparent;
+  color: var(--muted); border-radius: 8px;
+}
+.rail-community-action .github-star-shortcut span { display: none; }
+.rail-community-action .github-star-shortcut svg { width: 18px; height: 18px; }
+.rail-community-action .github-star-shortcut:hover,
+.rail-community-action .github-star-shortcut:focus-visible {
+  background: var(--panel); border-color: var(--accent); color: var(--accent);
+}
+/* Analysis / Sections are visibility toggles, not main actions.
+   Neutral chips, consistent alignment, and an unambiguous off state. */
+.studio-view-tools .daw-panel-toggles {
+  display: inline-flex; flex: 0 0 auto; align-items: center;
+  gap: 4px; padding: 2px; margin-left: 8px;
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 7px;
+}
+.studio-view-tools .daw-panel-toggle {
+  box-sizing: border-box; display: inline-flex; justify-content: center;
+  align-items: center; height: 30px; min-height: 30px;
+  padding: 0 11px; border: 1px solid transparent;
+  border-radius: 5px; font-size: 11px; font-weight: 600;
+  letter-spacing: 0; text-transform: none; text-decoration: none;
+}
+.studio-view-tools .daw-panel-toggle[aria-pressed="true"] {
+  background: var(--bg-2); border-color: var(--border-strong);
+  color: var(--fg); opacity: 1; box-shadow: 0 1px 2px #0001;
+}
+.studio-view-tools .daw-panel-toggle[aria-pressed="false"] {
+  background: transparent; border-color: transparent;
+  color: var(--muted); opacity: .85;
+  text-decoration: none;
+}
+.studio-view-tools .daw-panel-toggle:hover {
+  background: var(--panel-2); border-color: var(--border-strong);
+}
+.studio-view-tools .daw-panel-toggle:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+}
+/* All transport and editing controls share a 30px hit area and centered baseline. */
+.app.daw.header-v3 .daw-composer.header-compact > :is(.import-layout-toggle,.reextract-action) {
+  box-sizing: border-box; display: inline-flex; align-items: center;
+  justify-content: center; height: 30px; min-height: 30px;
+  margin-block: 0; align-self: center; line-height: 1;
+}
+.app.daw.header-v3 #nowPlayingPanel .footer-clusters,
+.app.daw.header-v3 #nowPlayingPanel .footer-group,
+.app.daw.header-v3 #nowPlayingPanel .footer-group-body,
+.app.daw.header-v3 #nowPlayingPanel .footer-track-actions {
+  align-items: center; align-self: center;
+}
+.app.daw.header-v3 #nowPlayingPanel :is(.daw-play-btn,.daw-iconbtn.btn-transport,.speed-btn,
+  .pitch-btn,.pitch-reset,#t-metro,.metro-vol-btn,#t-metro-more,#t-export-btn,
+  .loop-btn,.footer-loop-btn) {
+  box-sizing: border-box; height: 30px; min-height: 30px;
+  align-self: center; vertical-align: middle;
+}
+.app.daw.header-v3 #nowPlayingPanel .footer-group-position .footer-group-body {
+  align-items: center;
+}
+@media (min-width: 1400px) {
+  .app.daw.header-v3 .daw-composer.header-compact {
+    align-items: center;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .footer-clusters {
+    grid-template-rows: 30px;
+    align-items: center;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .footer-group-position {
+    align-items: center; align-self: center;
+  }
+}

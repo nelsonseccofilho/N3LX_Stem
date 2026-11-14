@@ -59,14 +59,51 @@ export function formatStamp(seconds) {
  * stamps for a line that has them: what PUT .../lyrics/user-synced keeps, and
  * what parseLrc reads back to the same lines.
  */
+export function preciseStamp(seconds) {
+  const ms = Math.max(0, Math.round(seconds * 1000));
+  return `${String(Math.floor(ms / 60000)).padStart(2, "0")}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, "0")}.${String(ms % 1000).padStart(3, "0")}`;
+}
+
+/** Parse a manual mm:ss.mmm time without rounding away fine corrections. */
+export function parsePreciseStamp(value, duration = Infinity) {
+  const match = /^(\\d{1,3}):(\\d{2})(?:\\.(\\d{1,3}))?$/.exec(String(value ?? "").trim());
+  if (!match || Number(match[2]) >= 60) return null;
+  const seconds = Number(match[1]) * 60 + Number(match[2]) +
+    Number((match[3] || "").padEnd(3, "0")) / 1000;
+  return Number.isFinite(seconds) && seconds >= 0 && seconds <= duration ? seconds : null;
+}
+
 export function serializeLrc(lines) {
   return lines
     .map((line) => {
-      const head = `[${formatStamp(line.time)}]`;
-      if (line.words?.length) return head + line.words.map((w) => `<${formatStamp(w.time ?? line.time)}>${w.text}`).join("").trimEnd();
-      return line.text ? `${head} ${line.text}` : head;
+      const stamp = line.end != null ? preciseStamp : formatStamp;
+      const head = `[${stamp(line.time)}]`;
+      const text = line.words?.length
+        ? line.words.map((w) => `<${stamp(w.time ?? line.time)}>${w.text}`).join("").trimEnd()
+        : line.text ? ` ${line.text}` : "";
+      // The empty trailing enhanced-LRC timecode is a phrase boundary.
+      // No extra blank lyric line, and compatible with existing lyric storage.
+      return head + text + (Number.isFinite(line.end) && line.end > line.time
+        ? `<${preciseStamp(line.end)}>` : "");
     })
     .join("\n");
+}
+
+/** Edit an individual phrase without moving its neighbours or changing its text. */
+export function editPhraseRange(lines, index, start, end, duration = Infinity) {
+  const line = lines[index];
+  if (!line || !line.text?.trim() || !Number.isFinite(start) || !Number.isFinite(end) ||
+      start < 0 || end <= start || end > duration ||
+      (index > 0 && start <= lines[index - 1].time) ||
+      (index + 1 < lines.length && start >= lines[index + 1].time)) return null;
+  const shift = start - line.time;
+  // Keep the user's detailed word accents where possible. Only move those
+  // stamps with the phrase onset; the new end caps display of the final word.
+  const words = line.words?.filter(w => w.text).map(w => ({
+    ...w, time: Math.min(end, Math.max(start, (w.time ?? line.time) + shift)),
+  }));
+  const edited = { ...line, time: start, end, ...(words ? { words } : {}) };
+  return lines.map((item, i) => i === index ? edited : item);
 }
 
 /**

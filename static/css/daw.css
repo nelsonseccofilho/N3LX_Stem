@@ -7882,3 +7882,87 @@ input, textarea { font-family: inherit; }
     align-self: center;
   }
 }
+
+/* Root cause fix: the original compact player still declares
+   display:block!important, top padding and a full-height left border.
+   Replace those declarations only in the single-row desktop layout. */
+@media (min-width: 1400px) {
+  .app.daw.header-v3 .daw-composer.header-compact #nowPlayingPanel > .song-controls {
+    position: relative;
+    box-sizing: border-box;
+    display: flex !important;
+    flex: 0 0 auto;
+    align-items: center !important;
+    justify-content: flex-end;
+    width: max-content;
+    max-width: 100%;
+    height: 40px;
+    min-height: 40px;
+    max-height: 40px;
+    padding: 0 0 0 12px !important;
+    margin: 0;
+    border: 0 !important;
+    background: transparent;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact #nowPlayingPanel > .song-controls::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 1px;
+    height: 24px;
+    transform: translateY(-50%);
+    background: var(--border-strong);
+    pointer-events: none;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact #nowPlayingPanel .footer-main,
+  .app.daw.header-v3 .daw-composer.header-compact #nowPlayingPanel .footer-row-controls {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    width: max-content;
+    height: 40px;
+    min-height: 40px;
+    padding: 0;
+    margin: 0;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact #nowPlayingPanel .track-panel-head {
+    display: flex;
+    height: 40px;
+    align-items: center;
+    align-self: center;
+    padding: 0;
+    margin: 0;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact #nowPlayingPanel .track-panel-info {
+    display: flex;
+    flex-flow: row nowrap;
+    align-items: center;
+    min-width: 0;
+    height: 30px;
+    padding: 0;
+    margin: 0;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact #nowPlayingPanel :is(.track-panel-title,.np-artist) {
+    display: inline-block;
+    line-height: 30px;
+    height: 30px;
+    margin: 0;
+    padding: 0;
+    vertical-align: middle;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact #nowPlayingPanel .footer-clusters {
+    box-sizing: border-box;
+    align-self: center;
+    height: 40px;
+    margin: 0;
+    padding: 0;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact #nowPlayingPanel .footer-clusters > :is(.footer-group,.footer-track-actions,.studio-mode-tabs) {
+    align-self: center;
+    justify-self: center;
+    height: 40px;
+    margin: 0;
+    padding: 0;
+  }
+}

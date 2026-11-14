@@ -235,6 +235,11 @@
         <!-- Every playback and click control, in labelled clusters -->
         <div class="footer-row-controls">
           <div class="footer-clusters">
+          <!-- One view switcher, before playback; moved from the body to save a row. -->
+          <div class="studio-mode-tabs" role="tablist" aria-label="Visão da música" data-i18n-aria-label="karaoke.views">
+            <button id="studioWaveformsTab" type="button" role="tab" aria-selected="true" aria-controls="lanes" data-i18n="karaoke.waveforms">Formas de onda</button>
+            <button id="studioKaraokeTab" type="button" role="tab" aria-selected="false" aria-controls="karaokeStage" tabindex="-1" data-i18n="karaoke.title">Karaokê</button>
+          </div>
           <div class="footer-group footer-group-transport">
             <span class="footer-group-label" data-i18n="transport.group">Transport</span>
             <div class="footer-group-body">
@@ -802,10 +807,6 @@
 
         <!-- ── Main area ── -->
         <div class="daw-main-col">
-        <div class="studio-mode-tabs" role="tablist" aria-label="Visão da música" data-i18n-aria-label="karaoke.views">
-          <button id="studioWaveformsTab" type="button" role="tab" aria-selected="true" aria-controls="lanes" data-i18n="karaoke.waveforms">Formas de onda</button>
-          <button id="studioKaraokeTab" type="button" role="tab" aria-selected="false" aria-controls="karaokeStage" tabindex="-1" data-i18n="karaoke.title">Karaokê</button>
-        </div>
         <section id="karaokeStage" role="tabpanel" aria-labelledby="studioKaraokeTab" hidden>
           <button id="karaokeCinemaExit" class="cinema-exit" type="button" data-i18n="karaoke.cinemaExit" hidden>Sair do cinema</button>
           <div class="karaoke-overview">

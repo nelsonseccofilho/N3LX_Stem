@@ -7467,3 +7467,105 @@ input, textarea { font-family: inherit; }
   min-height: 30px;
   align-self: center;
 }
+
+/* Final PR #26 polish: icon-only navigation, readable confidence and true center alignment. */
+.app.daw .sidebar-rail {
+  box-sizing: border-box;
+  align-items: center;
+}
+.app.daw .sidebar-rail > .rail-btn,
+.app.daw .sidebar-rail .daw-notif-wrap > .rail-btn {
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  min-height: 42px;
+  padding: 0;
+  gap: 0;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+}
+.app.daw .sidebar-rail .rail-btn > svg {
+  width: 19px;
+  height: 19px;
+  margin: 0;
+  flex: none;
+}
+.app.daw .sidebar-rail .rail-btn > span:not(.rail-badge):not(.daw-notif-badge) {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0,0,0,0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+/* The library rail keeps badges and tooltips even though text labels are hidden. */
+.app.daw .sidebar-rail .rail-btn {
+  position: relative;
+}
+.app.daw .sidebar-rail .rail-badge,
+.app.daw .sidebar-rail .daw-notif-badge {
+  position: absolute;
+}
+/* The analysis key needs exactly one visible shorthand; confidence must fit inside the ring. */
+.app.daw .daw-meta-card[data-meta="key"] #summary-key-symbol:empty {
+  display: none;
+}
+.app.daw .daw-meta-card[data-meta="key"] .meta-card-main {
+  min-width: 0;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+.app.daw .daw-meta-card[data-meta="key"] .key-confidence-label {
+  margin-left: auto;
+  min-width: 0;
+}
+.app.daw .daw-meta-card[data-meta="key"] #summary-confidence.daw-camelot-ring {
+  box-sizing: border-box;
+  width: 37px;
+  min-width: 37px;
+  height: 37px;
+  min-height: 37px;
+  padding: 2px;
+  line-height: 1;
+  font-size: 10px;
+  letter-spacing: -.04em;
+  text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  border-radius: 50%;
+  align-items: center;
+  justify-content: center;
+}
+/* Use the actual topbar row as the vertical reference, not legacy two-row grid. */
+@media (min-width: 1400px) {
+  .app.daw.header-v3 .daw-topbar,
+  .app.daw.header-v3 .daw-topbar > .daw-composer-stack,
+  .app.daw.header-v3 .daw-composer.header-compact {
+    align-items: center;
+  }
+  .app.daw.header-v3 .daw-composer.header-compact > .import-layout-toggle,
+  .app.daw.header-v3 .daw-composer.header-compact > .reextract-action {
+    display: inline-flex !important;
+    position: relative;
+    top: 0;
+    bottom: auto;
+    transform: none;
+    box-sizing: border-box;
+    align-items: center !important;
+    justify-content: center !important;
+    align-self: center !important;
+    justify-self: stretch;
+    margin: 0;
+    padding: 0 7px;
+    height: 30px !important;
+    min-height: 30px !important;
+    max-height: 30px;
+    line-height: 1 !important;
+    vertical-align: middle;
+  }
+}

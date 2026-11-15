@@ -68,14 +68,13 @@ from app.pipeline.lyrics_align import detect_offset
 from app.pipeline.lyrics_lookup import (
     _TEXT_MAX_CHARS,
     NotTheseLyrics,
+    LyricsQuery,
     build_query,
     candidates_path,
     copy_lyrics,
-    find_lyrics,
     keep_answer,
     lookup_lyrics,
     lyrics_path,
-    lyrics_settled,
     read_candidates,
     read_lyrics,
     saved_lyrics_belong,
@@ -949,14 +948,13 @@ async def refresh_audio_tags(job_id: str) -> dict:
     if (
         job.audio_tags
         and (job.artist or not tagged_artist_name(job.audio_tags.get("artist")))
-        and lyrics_settled(job_dir)
         and not _wants_identity(job, job.audio_tags)
         and not _wants_work(job, job.identity, job.audio_tags)
     ):
         return {
             "audio_tags": job.audio_tags,
             "artist": job.artist,
-            "has_lyrics": True,
+            "has_lyrics": lyrics_path(job_dir).is_file(),
             "identity": job.identity,
             "work": job.work,
         }
@@ -1028,23 +1026,8 @@ async def refresh_audio_tags(job_id: str) -> dict:
                 )
             except asyncio.TimeoutError:
                 logger.info("[%s] work lookup timed out", job_id)
-        lyrics = None
-        query = build_query(job, audio_tags=tags, band=artist, identity=identity)
-        # Not asked again while LRCLIB's last "nothing" is recent.
-        if query is not None and not lyrics_settled(job_dir):
-            # find_lyrics never raises, and starts no request past its budget.
-            try:
-                lyrics = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        find_lyrics,
-                        query,
-                        cancelled=lambda: registry_get(job_id) is not job,
-                        fallback_title=job.title or "",
-                    ),
-                    timeout=LYRICS_LOOKUP_BUDGET_SEC + TIMEOUT_LYRICS_LOOKUP + 1,
-                )
-            except asyncio.TimeoutError:
-                logger.info("[%s] lyrics lookup timed out", job_id)
+        # Explicit search policy: metadata backfill must never contact LRCLIB
+        # for lyrics. Only POST /lyrics/lookup invoked by the user may do so.
     finally:
         _TAG_LOOKUPS.discard(job_id)
 
@@ -1057,12 +1040,6 @@ async def refresh_audio_tags(job_id: str) -> dict:
             "identity": None,
             "work": None,
         }
-    if (
-        lyrics
-        and not lyrics_path(job_dir).is_file()
-        and await asyncio.to_thread(keep_answer, job, job_dir, lyrics)
-    ):
-        registry_persist(JOBS_DIR)
     found: dict[str, object] = {}
     if tags and not job.audio_tags:
         found["audio_tags"] = tags
@@ -1262,6 +1239,9 @@ class LookupBand(BaseModel):
 
 class LyricsLookupBody(BaseModel):
     band: LookupBand | None = None
+    # Optional explicit search identity, never saved into track metadata.
+    artist: str | None = Field(default=None, max_length=300)
+    title: str | None = Field(default=None, max_length=300)
 
 
 # Jobs whose lyrics the tab is looking up now, so a second request for the
@@ -1280,18 +1260,28 @@ async def lookup_lyrics_route(job_id: str, body: LyricsLookupBody | None = None)
     import's own lookup instead, keeps what it finds the way the import does,
     and answers exactly as GET .../lyrics would afterwards.
 
-    Only ever asked when the tab is opened on a track with no lyrics, or the
-    user presses Look up again: LRCLIB is never reached on its own. 502 when
-    LRCLIB cannot be reached, so the tab can offer to try again; 404 with
-    {"nothing_known": true} when the track says too little to look up.
+    Only a user-invoked action calls this route. When explicit artist/title
+    are supplied, return candidates for selection without modifying lyrics.json,
+    the job identity or any manually edited lyrics. 502 when LRCLIB is offline.
     """
     job, job_dir = _lyrics_job(job_id)
-    if await asyncio.to_thread(lyrics_path(job_dir).is_file):
+    manual = body is not None and (body.artist is not None or body.title is not None)
+    if not manual and await asyncio.to_thread(lyrics_path(job_dir).is_file):
         return await asyncio.to_thread(get_lyrics, job_id)
     if job_id in _LYRICS_LOOKUPS:
         raise HTTPException(status_code=409, detail="already looking")
     band = body.band.model_dump() if body and body.band else None
-    query = build_query(job, band=band)
+    if manual:
+        artist = (body.artist or "").strip()
+        title = (body.title or "").strip()
+        if not artist or not title:
+            raise HTTPException(status_code=422, detail="artist and title are required")
+        query = LyricsQuery(
+            artist=artist, track=title, album="",
+            duration=float(job.duration_sec or 0),
+        )
+    else:
+        query = build_query(job, band=band)
     if query is None:
         return JSONResponse(
             {"detail": "nothing to look up", "others": [], "nothing_known": True}, status_code=404
@@ -1317,6 +1307,14 @@ async def lookup_lyrics_route(job_id: str, body: LyricsLookupBody | None = None)
         _LYRICS_LOOKUPS.discard(job_id)
     if registry_get(job_id) is not job:
         raise HTTPException(status_code=404, detail="job not found")
+    if manual:
+        # Searching does not replace a lyric. The user selects a candidate.
+        options = ([answer.lyrics] if answer and answer.lyrics else [])
+        options += answer.others if answer else []
+        return JSONResponse(
+            {"detail": "choose a version" if options else "no lyrics", "others": options},
+            status_code=200 if options else 404,
+        )
     if (
         answer is not None
         and not lyrics_path(job_dir).is_file()

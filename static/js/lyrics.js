@@ -2,19 +2,10 @@ import { confirmAction } from "./confirmAction.js";
 // The Lyrics tab: a view of the sidebar where the open track's lyrics are
 // found, kept, and shown in time with playback, karaoke style (#699).
 //
-// Where they come from, in order:
-//   0. what the user chose for the track, kept here; else what the server
-//      found while the track was separated (GET /api/jobs/{id}/lyrics: the
-//      file's own, LRCLIB's, or a transcription), shown but not kept here, so
-//      a better answer from the server later still shows. Failing both:
-//   1. lyrics the file itself carried (an upload's embedded lyrics tag);
-//   2. LRCLIB (lyricsLookup.js), looked up by itself when the tab opens, by
-//      the artist and song the file was tagged with, or failing that the band
-//      saved from the artist box and the song's name cleaned out of the
-//      title. Kept straight away only when a version is the same length as
-//      the track; otherwise the versions are offered to pick from.
-// There is no search box: what is looked up is what the track says it is.
-// What was kept belongs to the track and comes back whenever it is open.
+// Existing saved or embedded lyrics load locally; no external requests.
+// LRCLIB search happens only after Find lyrics in Karaoke settings is
+// explicitly submitted with artist and song. A result is never selected
+// automatically. Generating karaoke with Whisper is a separate local action.
 //
 // Synced lyrics follow playback: the line being sung fills with colour word by
 // word, the next line is raised a step, the view keeps the line in the middle,

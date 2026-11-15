@@ -133,13 +133,6 @@ let currentIndex = -1;
 let frame = 0;
 let searchController = null;
 let loadToken = 0; // guards against a slow store read landing after a switch
-// The track the tab said "nothing known" for, so tags read for it after it
-// was opened (catalog.js, "tracktags") can be looked up without a reopen.
-let nothingKnownFor = null;
-// Per track, a lookup this session that kept nothing: { song, matches }, the
-// versions offered or none. Opening the tab again shows it rather than asking
-// LRCLIB the same question.
-const answered = new Map();
 // The vocals stem's level over time for one track, { hop, db }, which times
 // the wipe to the singing (lyricsLookup.js wordTimings). Only the open
 // track's is kept: it is asked for again, cheaply, when a track comes back.
@@ -435,6 +428,8 @@ function updateKaraokeControls() {
   if (regenerate) { regenerate.disabled = !same || !karaokeAvailable || busy || modelUnavailable; regenerate.hidden = !karaokeAvailable; }
   const remove = document.getElementById("lyricsDeleteKaraokeBtn");
   if (remove) { remove.disabled = !same || !karaokeAvailable || busy; remove.hidden = !karaokeAvailable; }
+  const search = document.getElementById("lyricsOpenSearchBtn");
+  if (search) search.disabled = !same || busy;
   const language = document.getElementById("lyricsKaraokeLanguage");
   if (language) language.disabled = !same || busy;
   const model = document.getElementById("lyricsKaraokeModel");
@@ -1964,7 +1959,7 @@ function offer(matches) {
 async function keep(match, others) {
   const info = getCurrentTrackInfo();
   if (!info) return;
-  const entry = { v: 1, source: "lrclib", ...match, savedAt: Date.now() };
+  const entry = { v: 1, source: "lrclib", ...match, manualSelected: true, savedAt: Date.now() };
   // Another version, at its own timing: the offset and the timing line by
   // line were the old one's.
   delete entry.offsetSec;
@@ -1972,7 +1967,6 @@ async function keep(match, others) {
   delete entry.aligned;
   await dropStoreSave();
   await storeSet(storeKey(info.id), { entry, others });
-  answered.delete(info.id);
   if (getCurrentTrackInfo()?.id !== info.id) return;
   show(entry, others);
 }
@@ -1985,94 +1979,109 @@ async function removeLyrics() {
   if (!info) return;
   await dropStoreSave();
   await storeSet(storeKey(info.id), { dismissed: true });
-  answered.delete(info.id);
   showRemoved();
 }
 
 function showRemoved() {
   clearLyrics();
   setStatus(t("lyrics.removed"), "muted");
-  versionsEl.append(lookAgainButton());
+  // Manual lookup remains available in Karaoke settings.
 }
 
-/** "Look up again": forget what is kept for the open track and find it anew. */
-function lookAgainButton() {
-  const again = el("button", "lyrics-link", t("lyrics.lookAgain"));
-  again.type = "button";
-  again.addEventListener("click", async () => {
-    const info = getCurrentTrackInfo();
-    if (!info) return;
-    await storeSet(storeKey(info.id), null);
-    if (getCurrentTrackInfo()?.id !== info.id) return;
-    const { song } = knownSong(info);
-    if (song) void lookUp(info, { song });
-    else setStatus(t("lyrics.nothingKnown"), "muted");
-  });
-  return again;
+/** Suggestions only: do not submit artist/title without an explicit click. */
+function manualLookupNames(info) {
+  const tags = info.audioTags || {};
+  const identity = info.identity || {};
+  const band = getCurrentTrackArtist();
+  let artist = String(identity.artist || tags.artist || band?.englishName || band?.name || "").trim();
+  let title = String(identity.title || tags.title || "").trim();
+  if (!artist) {
+    // Untagged file, for example "CPM 22 - Não Sei Viver Sem Ter Você".
+    const match = String(info.title || "").match(/^(.+?)\s+[-–—]\s+(.+)$/u);
+    if (match) {
+      artist = match[1].replace(/^\d{1,2}\s*[.)]\s*/, "").trim();
+      title ||= match[2].trim();
+    }
+  }
+  title ||= songFromTitle(info.title, artist) || info.title || "";
+  return { artist, title };
 }
 
-/**
- * Ask the server to look the open track up on LRCLIB (#719).
- *
- * The tab used to search LRCLIB itself, with its own copy of the rules that
- * decide which version is this song by this artist and which length fits.
- * The two copies were kept equal by hand, and a track could get lyrics at
- * import and none here. Now there is one copy, the import's, and what it
- * finds is kept on the server like the import's answer, so the phone sees it
- * too. The band saved from the artist box goes along: it lives in this side's
- * store, and the server may not have it yet.
- *
- * What came back without lyrics is remembered for the session, so opening the
- * tab again does not ask again. A failed connection is not, so the next
- * opening tries again.
- */
-async function lookUp(info, { song }) {
-  searchController?.abort();
-  const controller = new AbortController();
-  searchController = controller;
-  setStatus(t("lyrics.loading", { song }), "loading");
-  try {
-    const band = getCurrentTrackArtist();
-    const res = await fetch(`/api/jobs/${encodeURIComponent(info.id)}/lyrics/lookup`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(band ? { band } : {}),
-      signal: controller.signal,
-    });
-    if (controller.signal.aborted || getCurrentTrackInfo()?.id !== info.id) return;
-    if (!res.ok && res.status !== 404) throw new Error(`lyrics lookup -> ${res.status}`);
-    const data = await res.json().catch(() => null);
-    if (res.status === 404 && data?.nothing_known) {
-      setStatus(t("lyrics.nothingKnown"), "muted");
-      nothingKnownFor = info.id;
-      return;
-    }
-    const found = fromServerLyrics(data);
-    if (found?.entry) {
-      show(found.entry, found.others, "server");
-      return;
-    }
-    answered.set(info.id, { song, matches: found?.others || [] });
-    showAnswer(answered.get(info.id));
-  } catch (err) {
-    // Aborted only by another track being opened.
-    if (controller.signal.aborted) return;
-    console.warn("lyrics lookup failed", err);
-    setStatus(t("lyrics.offline"), "error");
-    // There is no search box to press again, so the retry is offered here.
-    versionsEl.replaceChildren(lookAgainButton());
-  } finally {
-    if (searchController === controller) searchController = null;
+function toggleManualLyricsSearch() {
+  const info = getCurrentTrackInfo();
+  const form = document.getElementById("lyricsSearchForm");
+  const opener = document.getElementById("lyricsOpenSearchBtn");
+  if (!info || !form || !opener) return;
+  form.hidden = !form.hidden;
+  opener.setAttribute("aria-expanded", String(!form.hidden));
+  if (form.hidden) return;
+  const names = manualLookupNames(info);
+  document.getElementById("lyricsSearchArtist").value = names.artist;
+  document.getElementById("lyricsSearchTitle").value = names.title;
+  document.getElementById("lyricsSearchStatus").textContent = "";
+  (names.artist ? document.getElementById("lyricsSearchTitle")
+    : document.getElementById("lyricsSearchArtist")).focus();
+}
+
+/** Display options; preserve the current lyrics until the user selects one. */
+function showManualLookupChoices(matches) {
+  document.getElementById("lyricsManualLookupChoices")?.remove();
+  if (shownEntry) {
+    const section = el("section", "lyrics-manual-choices");
+    section.id = "lyricsManualLookupChoices";
+    section.append(el("p", "lyrics-status", t("lyrics.searchChoose")), versionList(matches, matches));
+    versionsEl.append(section);
+  } else {
+    clearLyrics();
+    setStatus(t("lyrics.searchChoose"), "muted");
+    versionsEl.append(versionList(matches, matches));
   }
 }
 
-/** A lookup's answer that kept nothing: versions to pick from, or none. */
-function showAnswer({ song, matches }) {
-  if (matches.length) offer(matches);
-  else {
-    setStatus(t("lyrics.notFound", { song }), "muted");
-    // Keep the on-demand retry introduced in rc.10, even after the first lookup.
-    versionsEl.replaceChildren(lookAgainButton());
+async function submitManualLyricsSearch(event) {
+  event.preventDefault();
+  const info = getCurrentTrackInfo();
+  if (!info || karaokeRunning || karaokeDeleting) return;
+  const artist = document.getElementById("lyricsSearchArtist").value.trim();
+  const title = document.getElementById("lyricsSearchTitle").value.trim();
+  const status = document.getElementById("lyricsSearchStatus");
+  const submit = document.getElementById("lyricsSearchSubmitBtn");
+  if (!artist || !title) {
+    status.textContent = t("lyrics.nothingKnown");
+    return;
+  }
+  searchController?.abort();
+  const controller = new AbortController();
+  searchController = controller;
+  submit.disabled = true;
+  status.textContent = t("lyrics.searchBusy");
+  try {
+    const response = await fetch("/api/jobs/" + encodeURIComponent(info.id) + "/lyrics/lookup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ artist, title }),
+      signal: controller.signal,
+    });
+    if (controller.signal.aborted || getCurrentTrackInfo()?.id !== info.id) return;
+    if (response.status !== 404 && !response.ok) throw new Error("Lyrics lookup HTTP " + response.status);
+    const data = await response.json().catch(() => null);
+    const matches = fromServerLyrics(data)?.others || [];
+    if (!matches.length) {
+      status.textContent = t("lyrics.searchNoResults");
+      return;
+    }
+    showManualLookupChoices(matches);
+    document.getElementById("lyricsSearchForm").hidden = true;
+    document.getElementById("lyricsOpenSearchBtn")?.setAttribute("aria-expanded", "false");
+    document.getElementById("karaokeSettings")?.close();
+  } catch (error) {
+    if (!controller.signal.aborted) {
+      console.warn("manual LRCLIB lookup failed", error);
+      status.textContent = t("lyrics.searchFailed");
+    }
+  } finally {
+    if (searchController === controller) searchController = null;
+    submit.disabled = false;
   }
 }
 
@@ -2133,7 +2142,7 @@ function knownSong(info) {
  * a cover say, is their choice.
  */
 function keptForAnotherSong(entry, info) {
-  if (entry?.source !== "lrclib") return false;
+  if (entry?.source !== "lrclib" || entry.manualSelected === true) return false;
   const { song } = knownSong(info);
   if (!song || !entry.track) return false;
   const titles = [song, info.identity?.title, ...(info.identity?.titleAliases || [])].filter(Boolean);
@@ -2149,7 +2158,6 @@ async function loadForCurrentTrack() {
   }
   shownTrackId = info?.id ?? null;
   selectKaraokeTrack(shownTrackId);
-  nothingKnownFor = null;
   searchController?.abort();
   searchController = null;
   clearLyrics();
@@ -2256,18 +2264,8 @@ async function loadForCurrentTrack() {
     }, []);
     return;
   }
-  if (!song) {
-    setStatus(t("lyrics.nothingKnown"), "muted");
-    nothingKnownFor = info.id;
-    return;
-  }
-  if (answered.has(info.id)) {
-    showAnswer(answered.get(info.id));
-    return;
-  }
-  // Preserve the existing automatic LRCLIB lookup when local sources have
-  // no lyrics. The generated karaoke sidecar still takes priority.
-  void lookUp(info, { song });
+  // Only the button in Karaoke settings can query LRCLIB.
+  setStatus(t(song ? "lyrics.searchManually" : "lyrics.nothingKnown"), "muted");
 }
 
 // While the tab is on screen: notice a different track being opened, mark the
@@ -2375,6 +2373,8 @@ export function initLyrics() {
     setVisible(sidebarVisible || karaokeVisible);
   });
   document.getElementById("lyricsGenerateKaraokeBtn")?.addEventListener("click", () => void generateKaraoke());
+  document.getElementById("lyricsOpenSearchBtn")?.addEventListener("click", toggleManualLyricsSearch);
+  document.getElementById("lyricsSearchForm")?.addEventListener("submit", (event) => void submitManualLyricsSearch(event));
   document.getElementById("lyricsRegenerateKaraokeBtn")?.addEventListener("click", () => void generateKaraoke({ replace: true }));
   document.getElementById("lyricsDeleteKaraokeBtn")?.addEventListener("click", () => void deleteGeneratedKaraoke());
   document.getElementById("lyricsCancelKaraokeBtn")?.addEventListener("click", () => void cancelKaraoke());
@@ -2395,9 +2395,6 @@ export function initLyrics() {
     edit.addEventListener("click", openManualPhraseEditor);
     syncBtn.after(edit);
   }
-  document.addEventListener("tracktags", (e) => {
-    if (visible && nothingKnownFor && e.detail?.id === nothingKnownFor) loadForCurrentTrack();
-  });
   onLanguageChange(() => {
     updateKaraokeControls();
     setKaraokeMessage(karaokeMessageKey, karaokeMessageKind);
@@ -2456,8 +2453,7 @@ function editLyrics() {
     await dropStoreSave();
     const entry = editedLyrics(original, text.value);
     await storeSet(storeKey(info.id), { entry, others: [] });
-    answered.delete(info.id);
-    if (getCurrentTrackInfo()?.id === info.id) { syncOpen = false; show(entry, [], "store"); }
+      if (getCurrentTrackInfo()?.id === info.id) { syncOpen = false; show(entry, [], "store"); }
     close();
   });
   actions.append(cancel, save); form.append(title, hint, text, error, actions); dialog.append(form);

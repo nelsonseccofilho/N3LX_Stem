@@ -138,3 +138,69 @@ def test_generate_timing_nonzero_exit_emits_diagnostic_without_gpu(
     assert "PRIVATE_LYRIC_FROM_WORKER" not in stored
     assert '"category_hint": "missing_python_dependency"' in stored
     assert audio.read_bytes() == b"stub audio"
+
+
+def test_separate_vulkan_mention_does_not_falsely_blame_gpu():
+    from app.pipeline.karaoke_diagnostics import analyze_worker_failure
+
+    result = analyze_worker_failure(
+        "[1/4] preparing audio\n"
+        "whisper-cli using Vulkan0 backend\n"
+        "[2/4] recognition\n"
+        "[3/4] alignment\n"
+        "RuntimeError: generic failure without backend evidence\n"
+    )
+    assert result["category_hint"] == "worker_failure_unclassified"
+    assert result["exception_type"] == "RuntimeError"
+    assert result["last_worker_stage_marker"] == "3/4"
+    assert result["classification_basis"] == "insufficient_evidence"
+
+
+def test_only_explicit_terminal_vulkan_error_is_flagged():
+    from app.pipeline.karaoke_diagnostics import analyze_worker_failure
+
+    result = analyze_worker_failure(
+        "[2/4] recognition\n"
+        "ERROR: Vulkan initialization failed\n"
+    )
+    assert result["category_hint"] == "vulkan_error"
+    assert result["classification_basis"] == "explicit_log_line"
+
+
+def test_worker_argument_error_is_identified_without_saving_raw_arguments():
+    from app.pipeline.karaoke_diagnostics import analyze_worker_failure
+
+    result = analyze_worker_failure(
+        "usage: transcrever_gpu.py\n"
+        "error: unrecognized arguments: --private-value user-secret\n"
+    )
+    assert result["category_hint"] == "worker_argument_error"
+    assert "user-secret" not in str(result)
+
+
+def test_allowlisted_missing_module_is_recorded_without_arbitrary_names(
+    monkeypatch, tmp_path: Path,
+):
+    monkeypatch.setenv("STEMDECK_LOGS_DIR", str(tmp_path / "logs"))
+    log = tmp_path / "worker.log"
+    log.write_text(
+        "[3/4] alignment\n"
+        "Traceback (most recent call last):\n"
+        "ModuleNotFoundError: No module named 'torchaudio'\n"
+        "PRIVATE_TRANSCRIBED_TEXT\n",
+        encoding="utf-8",
+    )
+    report_id = record_worker_failure(
+        logfile=log, audio=tmp_path / "vocals.wav",
+        language="pt", phase="align", exit_code=2, alignment_backend="cpu",
+    )
+    assert report_id is not None
+    report = tmp_path / "logs/karaoke-diagnostics" / (
+        f"karaoke-failure-{report_id}.json"
+    )
+    document = json.loads(report.read_text(encoding="utf-8"))
+    assert document["missing_dependency"] == "torchaudio"
+    assert document["last_worker_stage_marker"] == "3/4"
+    assert document["classification_basis"] == "python_exception"
+    assert "PRIVATE_TRANSCRIBED_TEXT" not in report.read_text(encoding="utf-8")
+

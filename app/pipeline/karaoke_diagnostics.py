@@ -37,30 +37,104 @@ def _worker_log_tail(path: Path) -> str:
         return ""
 
 
-def classify_worker_failure(log_text: str) -> tuple[str, str | None]:
-    """Return allowlisted metadata only; raw lyrics/paths never leave memory."""
-    normalized = log_text.casefold()
-    if "modulenotfounderror" in normalized or "no module named" in normalized:
-        category = "missing_python_dependency"
-    elif "winerror 32" in normalized or "permissionerror" in normalized:
-        category = "file_locked_or_permission_denied"
-    elif "out of memory" in normalized or "memoryerror" in normalized:
-        category = "out_of_memory"
-    elif "no such file or directory" in normalized or "filenotfounderror" in normalized:
-        category = "missing_file"
-    elif "offline" in normalized and ("model" in normalized or "cache" in normalized):
-        category = "model_unavailable_offline"
-    elif "vulkan" in normalized and ("failed" in normalized or "error" in normalized):
-        category = "vulkan_error"
-    elif "align" in normalized and ("failed" in normalized or "error" in normalized):
-        category = "alignment_error"
-    elif "ffmpeg" in normalized and ("failed" in normalized or "error" in normalized):
-        category = "audio_preparation_error"
-    else:
-        category = "worker_failure_unclassified"
+# Only module names from this allowlist can be written to diagnostic JSON.
+_KNOWN_DEPENDENCIES = frozenset({
+    "torch", "torchaudio", "torchvision", "whisperx", "transformers",
+    "numpy", "scipy", "onnxruntime", "accelerate", "soundfile",
+    "librosa", "huggingface_hub", "faster_whisper",
+})
+_MISSING_MODULE_RE = re.compile(
+    r"\bno module named\s+['\"]?([a-zA-Z_][a-zA-Z0-9_.]*)", re.IGNORECASE
+)
+_WORKER_STAGE_RE = re.compile(r"\[([1-4])/4\]")
+_EXPLICIT_VULKAN_FAILURE = re.compile(
+    r"\bvulkan\b.*\b(?:failed|failure|error|unavailable)\b"
+    r"|\b(?:failed|failure|error)\b.*\bvulkan\b", re.IGNORECASE
+)
+_EXPLICIT_ALIGNMENT_FAILURE = re.compile(
+    r"\b(?:align|alignment|whisperx)\b.*\b(?:failed|failure|error)\b"
+    r"|\b(?:failed|failure|error)\b.*\b(?:align|alignment|whisperx)\b",
+    re.IGNORECASE,
+)
+_EXPLICIT_FFMPEG_FAILURE = re.compile(
+    r"\bffmpeg\b.*\b(?:failed|failure|error)\b"
+    r"|\b(?:failed|failure|error)\b.*\bffmpeg\b", re.IGNORECASE
+)
+_WORKER_ARG_ERROR = re.compile(
+    r"\b(?:unrecognized arguments|invalid choice|arguments are required)\b",
+    re.IGNORECASE,
+)
 
+
+def analyze_worker_failure(log_text: str) -> dict[str, str | None]:
+    """Produce only fixed labels and allowlisted metadata from worker output.
+
+    Do not infer that Vulkan failed merely because the log contains 'Vulkan'
+    somewhere and a separate error elsewhere. Generic errors remain unknown.
+    Raw messages may contain lyrics, paths or sensitive text: never persist them.
+    """
     matches = _ERROR_CLASS_RE.findall(log_text)
-    return category, matches[-1] if matches else None
+    exception_type = matches[-1] if matches else None
+
+    module_match = _MISSING_MODULE_RE.search(log_text)
+    module = None
+    if module_match:
+        candidate = module_match.group(1).split(".")[0].lower()
+        if candidate in _KNOWN_DEPENDENCIES:
+            module = candidate
+
+    lines = log_text.splitlines()
+    # Stage marker is an observation, not proof that a stage completed.
+    stage_markers = _WORKER_STAGE_RE.findall(log_text)
+    last_stage = f"{stage_markers[-1]}/4" if stage_markers else None
+
+    # Only the terminal portion can identify a subsystem-specific failure.
+    # Earlier Vulkan startup information followed by unrelated errors is not
+    # evidence that the GPU or Vulkan was at fault.
+    terminal_lines = lines[-48:]
+    if module_match or exception_type == "ModuleNotFoundError":
+        category, basis = "missing_python_dependency", "python_exception"
+    elif exception_type == "ImportError":
+        category, basis = "python_dependency_import_error", "python_exception"
+    elif exception_type == "PermissionError" or any(
+        "winerror 32" in line.casefold() for line in terminal_lines
+    ):
+        category, basis = "file_locked_or_permission_denied", "python_exception"
+    elif exception_type == "MemoryError" or any(
+        "out of memory" in line.casefold() for line in terminal_lines
+    ):
+        category, basis = "out_of_memory", "python_exception_or_message"
+    elif exception_type == "FileNotFoundError":
+        category, basis = "missing_file", "python_exception"
+    elif any(
+        "offline" in line.casefold()
+        and ("model" in line.casefold() or "cache" in line.casefold())
+        for line in terminal_lines
+    ):
+        category, basis = "model_unavailable_offline", "explicit_log_line"
+    elif any(_WORKER_ARG_ERROR.search(line) for line in terminal_lines):
+        category, basis = "worker_argument_error", "explicit_log_line"
+    elif any(_EXPLICIT_ALIGNMENT_FAILURE.search(line) for line in terminal_lines):
+        category, basis = "alignment_error", "explicit_log_line"
+    elif any(_EXPLICIT_VULKAN_FAILURE.search(line) for line in terminal_lines):
+        category, basis = "vulkan_error", "explicit_log_line"
+    elif any(_EXPLICIT_FFMPEG_FAILURE.search(line) for line in terminal_lines):
+        category, basis = "audio_preparation_error", "explicit_log_line"
+    else:
+        category, basis = "worker_failure_unclassified", "insufficient_evidence"
+    return {
+        "category_hint": category,
+        "exception_type": exception_type,
+        "missing_dependency": module,
+        "last_worker_stage_marker": last_stage,
+        "classification_basis": basis,
+    }
+
+
+def classify_worker_failure(log_text: str) -> tuple[str, str | None]:
+    """Backward-compatible category/exception contract for existing tests."""
+    analysis = analyze_worker_failure(log_text)
+    return analysis["category_hint"], analysis["exception_type"]
 
 
 def _log_directory() -> Path:
@@ -84,7 +158,7 @@ def record_worker_failure(
     report_path = None
     pending_path = None
     try:
-        category, exception_type = classify_worker_failure(_worker_log_tail(logfile))
+        analysis = analyze_worker_failure(_worker_log_tail(logfile))
         job_name = audio.parent.parent.name
         job_id = job_name if _JOB_ID.fullmatch(job_name) else None
         report_id = uuid.uuid4().hex[:12]
@@ -101,8 +175,11 @@ def record_worker_failure(
             "language": language if language in {"pt", "en"} else "unknown",
             "last_observed_phase": phase if phase in _ALLOWED_PHASES else "unknown",
             "exit_code": int(exit_code),
-            "category_hint": category,
-            "exception_type": exception_type,
+            "category_hint": analysis["category_hint"],
+            "exception_type": analysis["exception_type"],
+            "missing_dependency": analysis["missing_dependency"],
+            "last_worker_stage_marker": analysis["last_worker_stage_marker"],
+            "classification_basis": analysis["classification_basis"],
             "requested_recognition_backend": "vulkan:0",
             "requested_alignment_backend": (
                 alignment_backend if alignment_backend in {"cpu", "directml"} else "unknown"

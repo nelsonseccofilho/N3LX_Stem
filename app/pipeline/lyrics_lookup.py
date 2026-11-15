@@ -1,14 +1,9 @@
-"""A job's lyrics, found on LRCLIB while it separates, kept as lyrics.json.
+"""File lyrics and optional, user-invoked LRCLIB lookup.
 
-The Lyrics tab used to find them itself, in the browser, the first time it was
-opened on a track. Done here, beside separation the way the band is
-(artist_lookup.py), a track has its lyrics the moment the import is done, on
-every device that opens it.
-
-What is looked up, best source first: the recording the job was identified as
-(``job.identity``), else the file's own tags, else the band saved on the job
-with the song's name cleaned out of the title. Lyrics the file itself carried
-win over anything LRCLIB has, and need no request at all.
+Embedded lyrics remain local and require no network request. LRCLIB is
+searched only after an explicit user action, not when importing/opening
+tracks or refreshing metadata. The manual route returns choices without
+automatically saving or replacing existing lyrics.
 
 The LRCLIB cascade, stopping at the first answer kept:
 

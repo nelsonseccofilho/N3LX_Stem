@@ -948,6 +948,7 @@ async def refresh_audio_tags(job_id: str) -> dict:
     if (
         job.audio_tags
         and (job.artist or not tagged_artist_name(job.audio_tags.get("artist")))
+        and (not job.audio_tags.get("lyrics") or lyrics_path(job_dir).is_file())
         and not _wants_identity(job, job.audio_tags)
         and not _wants_work(job, job.identity, job.audio_tags)
     ):
@@ -1026,8 +1027,18 @@ async def refresh_audio_tags(job_id: str) -> dict:
                 )
             except asyncio.TimeoutError:
                 logger.info("[%s] work lookup timed out", job_id)
-        # Explicit search policy: metadata backfill must never contact LRCLIB
-        # for lyrics. Only POST /lyrics/lookup invoked by the user may do so.
+        # A file's own embedded lyrics are local data, not an LRCLIB search.
+        # Keep them if the import did not already store them. Never contact
+        # LRCLIB during metadata backfill.
+        query = build_query(job, audio_tags=tags, band=artist, identity=identity)
+        if query is not None and query.embedded and not lyrics_path(job_dir).is_file():
+            answer = await asyncio.to_thread(
+                lookup_lyrics, query, fallback_title=job.title or "",
+            )
+            if answer is not None and await asyncio.to_thread(
+                keep_answer, job, job_dir, answer,
+            ):
+                registry_persist(JOBS_DIR)
     finally:
         _TAG_LOOKUPS.discard(job_id)
 

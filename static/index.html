@@ -769,8 +769,22 @@
                   <button id="lyricsSettingsClose" class="lyrics-align-btn" type="button" data-i18n="karaoke.close">Fechar</button>
                 </div>
                 <div class="karaoke-settings-content">
-                  <button id="lyricsGenerateKaraokeBtn" class="lyrics-align-btn lyrics-generate-btn" type="button" data-i18n="karaokeTiming.generate">Gerar karaokê</button>
-                  <button id="lyricsCancelKaraokeBtn" class="lyrics-align-btn" type="button" data-i18n="karaoke.cancel" hidden>Cancelar</button>
+                  <div class="karaoke-source-actions">
+                    <button id="lyricsGenerateKaraokeBtn" class="lyrics-align-btn lyrics-generate-btn" type="button" data-i18n="karaokeTiming.generate">Gerar karaokê</button>
+                    <button id="lyricsOpenSearchBtn" class="lyrics-align-btn" type="button" aria-controls="lyricsSearchForm" aria-expanded="false" data-i18n="lyrics.manualSearch">Buscar letra</button>
+                    <button id="lyricsCancelKaraokeBtn" class="lyrics-align-btn" type="button" data-i18n="karaoke.cancel" hidden>Cancelar</button>
+                  </div>
+                  <form id="lyricsSearchForm" class="karaoke-lookup-form" hidden>
+                    <p class="lyrics-note" data-i18n="lyrics.searchHint">Busca opcional no LRCLIB. Confira artista e música antes de pesquisar.</p>
+                    <div class="karaoke-lookup-fields">
+                      <label for="lyricsSearchArtist" data-i18n="lyrics.searchArtist">Artista</label>
+                      <input id="lyricsSearchArtist" name="artist" type="text" maxlength="300" required autocomplete="off" placeholder="Artista" data-i18n-placeholder="lyrics.searchArtist">
+                      <label for="lyricsSearchTitle" data-i18n="lyrics.searchSong">Música</label>
+                      <input id="lyricsSearchTitle" name="title" type="text" maxlength="300" required autocomplete="off" placeholder="Música" data-i18n-placeholder="lyrics.searchSong">
+                    </div>
+                    <button id="lyricsSearchSubmitBtn" class="lyrics-align-btn" type="submit" data-i18n="lyrics.searchSubmit">Buscar no LRCLIB</button>
+                    <p id="lyricsSearchStatus" class="lyrics-note" role="status" aria-live="polite"></p>
+                  </form>
               <div class="lyrics-generator-language">
                 <label for="lyricsKaraokeLanguage" data-i18n="karaokeTiming.language">Idioma da música</label>
                 <select id="lyricsKaraokeLanguage" aria-describedby="lyricsLanguageHelp">

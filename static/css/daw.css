@@ -6953,6 +6953,14 @@ input, textarea { font-family: inherit; }
 .karaoke-settings-content { display:flex; flex-direction:column; align-items:flex-start; gap:14px; }
 .karaoke-settings-content .lyrics-generator-language,.karaoke-settings-content .lyrics-generator-model,.karaoke-settings-content .lyrics-advanced-actions,.karaoke-settings-content .lyrics-tools { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
 .karaoke-settings-content button,.karaoke-settings-content select,.karaoke-settings-head button { min-height:34px; }
+.karaoke-source-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.karaoke-lookup-form { display:flex; flex-direction:column; gap:10px; width:min(100%,500px); padding:12px; background:var(--panel); border:1px solid var(--border); border-radius:8px; }
+.karaoke-lookup-form[hidden] { display:none; }
+.karaoke-lookup-form .lyrics-note { margin:0; }
+.karaoke-lookup-fields { display:grid; grid-template-columns:80px minmax(0,1fr); gap:8px 12px; align-items:center; }
+.karaoke-lookup-fields input { min-width:0; box-sizing:border-box; width:100%; min-height:34px; padding:6px 9px; border:1px solid var(--border-strong); border-radius:6px; color:var(--fg); background:var(--bg); font:inherit; }
+.karaoke-lookup-form button { align-self:flex-start; }
+@media(max-width:480px) { .karaoke-lookup-fields { grid-template-columns:1fr; } }
 .karaoke-settings :focus-visible,.cinema-exit:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .cinema-empty { display:none; }
 #karaokeStage:fullscreen { --bg:#0b0f12; --bg-2:#10171d; --panel:#18222a; --panel-2:#212c35; --fg:#f2f5f8; --fg-2:#a8bacb; --muted:#94a5b5; --accent:#f7b73d; --wave-unplayed:#718b9c; --border:#32424d; color-scheme:dark; background:var(--bg); color:var(--fg); width:100vw; height:100vh; padding:clamp(20px,4vw,64px); gap:24px; overflow:hidden; }

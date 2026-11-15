@@ -417,7 +417,7 @@ function updateKaraokeControls() {
   if (button) {
     const activePreview = shownFrom === "preview" && shownEntry?.machinePreview;
     button.textContent = t(activePreview && karaokeBeforePreview ? "karaokeTiming.restore"
-      : karaokeAvailable ? "karaokeTiming.view" : "karaokeTiming.generate");
+      : karaokeAvailable ? "karaokeTiming.view" : "karaokeTiming.generateAi");
     button.hidden = same && karaokeAvailable && ((activePreview && !karaokeBeforePreview) || shownEntry?.generatedTimingApplied === true);
     button.disabled = !same || busy || (!karaokeAvailable && modelUnavailable) || (activePreview && !karaokeBeforePreview);
     button.setAttribute("aria-busy", String(same && karaokeRunning));
@@ -641,6 +641,10 @@ async function startAutoSync() {
 function selectKaraokeTrack(trackId) {
   if (karaokeTrackId === trackId) return;
   karaokeTrackId = trackId;
+  // Search inputs belong to the open track; never carry them to another song.
+  const lookupForm = document.getElementById("lyricsSearchForm");
+  if (lookupForm) lookupForm.hidden = true;
+  document.getElementById("lyricsOpenSearchBtn")?.setAttribute("aria-expanded", "false");
   karaokeDeleting = false;
   karaokeLanguageModels = null;
   karaokeLanguageIssues = {};

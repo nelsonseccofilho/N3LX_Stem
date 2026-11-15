@@ -23,6 +23,8 @@ from pathlib import Path
 from collections.abc import Callable
 from typing import Any
 
+from app.pipeline.karaoke_diagnostics import record_worker_failure
+
 MAX_WORDS = 30_000
 MAX_BYTES = 8 * 1024 * 1024
 MAX_DURATION = 6 * 3600.0
@@ -462,6 +464,14 @@ def generate_timing(
                 issue = "alignment worker ran out of memory"
             else:
                 issue = f"WhisperGPU/WhisperX worker exited with code {code}"
+            # C27.4D: persist only classified metadata. Never keep raw worker
+            # stdout, which may contain transcribed lyrics or local paths.
+            report_id = record_worker_failure(
+                logfile=logfile, audio=audio, language=language, phase=phase,
+                exit_code=code, alignment_backend="cpu" if modern else "directml",
+            )
+            if report_id:
+                issue += f" [diagnostic: {report_id}]"
             raise KaraokeTimingError(issue)
         results = list(output.glob("*.integrado.json"))
         reports = list(output.glob("*.qualidade.json"))

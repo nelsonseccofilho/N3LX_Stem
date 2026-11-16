@@ -6964,6 +6964,7 @@ input, textarea { font-family: inherit; }
 .karaoke-lookup-status:empty { display:none; }
 .karaoke-lookup-status[data-state="error"] { border-color:var(--danger); color:var(--danger); background:color-mix(in srgb,var(--danger) 9%,var(--panel)); }
 .karaoke-lookup-status[data-state="loading"] { border-color:var(--accent); color:var(--fg); }
+.karaoke-lookup-status[data-state="empty"] { border-color:var(--accent); color:var(--fg); background:color-mix(in srgb,var(--accent) 11%,var(--panel)); }
 .karaoke-lookup-status[data-state="success"] { border-color:var(--border-strong); color:var(--fg); }
 .karaoke-lookup-results[hidden] { display:none; }
 .karaoke-lookup-results { display:flex; flex-direction:column; gap:7px; padding-top:8px; border-top:1px solid var(--border-strong); width:100%; min-width:0; }

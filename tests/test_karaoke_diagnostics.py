@@ -228,4 +228,3 @@ def test_allowlisted_missing_module_is_recorded_without_arbitrary_names(
     assert document["last_worker_stage_marker"] == "3/4"
     assert document["classification_basis"] == "python_exception"
     assert "PRIVATE_TRANSCRIBED_TEXT" not in report.read_text(encoding="utf-8")
-

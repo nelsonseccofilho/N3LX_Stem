@@ -169,19 +169,15 @@ def test_a_file_outside_the_jobs_directory_is_never_read(client, tmp_path):
 # ── the backfill ──
 
 
-def test_an_older_track_gets_its_lyrics_through_the_backfill(client, monkeypatch):
+def test_backfill_never_searches_lrclib_without_user_action(client, monkeypatch):
     lrclib = Lrclib(ROWS)
     monkeypatch.setattr(ll, "_fetch_json", lrclib)
     job = _done_job(audio_tags=TAGS, artist=DT)
     r = client.post(f"/api/jobs/{job.id}/audio-tags")
     assert r.status_code == 200
-    assert r.json().items() >= {"audio_tags": TAGS, "artist": DT, "has_lyrics": True}.items()
-    assert json.loads(_lyrics_file(job).read_text(encoding="utf-8"))["lrclib_id"] == 3
-    assert job.has_lyrics is True
-    registry = json.loads((jobs_mod.JOBS_DIR / "registry.json").read_text(encoding="utf-8"))
-    [record] = [j for j in registry["jobs"] if j["id"] == job.id]
-    assert record["has_lyrics"] is True
-    assert client.get(f"/api/jobs/{job.id}/lyrics").json()["lrclib_id"] == 3
+    assert r.json()["has_lyrics"] is False
+    assert not _lyrics_file(job).is_file()
+    assert lrclib.asked == []
 
 
 def test_a_track_that_has_lyrics_asks_nothing(client, monkeypatch):
@@ -202,15 +198,15 @@ def test_no_connection_leaves_an_older_track_without_lyrics(client):
     assert not _lyrics_file(job).exists()
 
 
-def test_tags_found_now_are_what_the_lyrics_are_looked_up_by(client, monkeypatch):
+def test_tag_backfill_does_not_search_external_lyrics(client, monkeypatch):
     lrclib = Lrclib(ROWS)
     monkeypatch.setattr(ll, "_fetch_json", lrclib)
     job = _done_job()
     (jobs_mod.JOBS_DIR / job.id / "source.flac").write_bytes(b"fLaC")
     with patch("app.api.jobs.probe_tags", return_value=TAGS):
         r = client.post(f"/api/jobs/{job.id}/audio-tags")
-    assert r.json()["has_lyrics"] is True
-    assert lrclib.asked[:2] == ["get", "search"]
+    assert r.json()["has_lyrics"] is False
+    assert not _lyrics_file(job).is_file()
 
 
 def test_embedded_lyrics_are_kept_without_asking_lrclib(client, monkeypatch):
@@ -285,28 +281,23 @@ def test_the_backfill_does_not_ask_again_while_lrclibs_nothing_is_recent(client,
     assert lrclib.asked == []
 
 
-def test_the_backfill_asks_again_once_lrclibs_nothing_is_old(client, monkeypatch):
+def test_backfill_does_not_retry_old_lrclib_lookup_without_user_action(client, monkeypatch):
     lrclib = Lrclib(ROWS)
     monkeypatch.setattr(ll, "_fetch_json", lrclib)
     job = _done_job(audio_tags=TAGS, artist=DT)
     _candidates(job, [], searched_at=time.time() - 31 * 86400)
-    assert client.post(f"/api/jobs/{job.id}/audio-tags").json()["has_lyrics"] is True
-    assert not (jobs_mod.JOBS_DIR / job.id / "lyrics_candidates.json").exists(), "superseded"
+    assert client.post(f"/api/jobs/{job.id}/audio-tags").json()["has_lyrics"] is False
+    assert (jobs_mod.JOBS_DIR / job.id / "lyrics_candidates.json").is_file()
+    assert lrclib.asked == []
 
 
-def test_the_backfill_records_lrclibs_nothing(client, monkeypatch):
+def test_backfill_creates_no_lrclib_lookup_marker(client, monkeypatch):
     lrclib = Lrclib([])
     monkeypatch.setattr(ll, "_fetch_json", lrclib)
     job = _done_job(audio_tags=TAGS, artist=DT)
     assert client.post(f"/api/jobs/{job.id}/audio-tags").json()["has_lyrics"] is False
-    asked = len(lrclib.asked)
-    assert asked > 0
-    marker = json.loads(
-        (jobs_mod.JOBS_DIR / job.id / "lyrics_candidates.json").read_text(encoding="utf-8")
-    )
-    assert marker["others"] == [] and marker["searched_at"] > 0
-    client.post(f"/api/jobs/{job.id}/audio-tags")
-    assert len(lrclib.asked) == asked, "not asked a second time"
+    assert not (jobs_mod.JOBS_DIR / job.id / "lyrics_candidates.json").is_file()
+    assert lrclib.asked == []
 
 
 def test_no_connection_records_nothing(client):
@@ -335,15 +326,16 @@ def test_a_resplit_takes_its_sources_lyrics_and_marker(client, monkeypatch):
     assert lrclib.asked == []
 
 
-def test_the_backfill_moves_a_version_of_another_length_onto_the_track(client, monkeypatch):
-    """An older track has its vocals stem, so the timing is moved at once."""
+def test_backfill_does_not_auto_align_remote_lyrics(client, monkeypatch):
     rows = [{**ROWS[0], "duration": 600}]
-    monkeypatch.setattr(ll, "_fetch_json", Lrclib(rows))
+    lrclib = Lrclib(rows)
+    monkeypatch.setattr(ll, "_fetch_json", lrclib)
     job = _done_job(audio_tags=TAGS, artist=DT)
     with patch("app.pipeline.lyrics_lookup.align_lyrics", return_value="shifted") as align:
-        assert client.post(f"/api/jobs/{job.id}/audio-tags").json()["has_lyrics"] is True
-    assert align.call_count == 1
-    assert json.loads(_lyrics_file(job).read_text(encoding="utf-8"))["timing"] == "unverified"
+        assert client.post(f"/api/jobs/{job.id}/audio-tags").json()["has_lyrics"] is False
+    align.assert_not_called()
+    assert lrclib.asked == []
+    assert not _lyrics_file(job).is_file()
 
 
 def test_lyrics_in_polish_are_served_as_utf8(client):
@@ -731,3 +723,140 @@ def test_lookup_refuses_a_malformed_band(client, band):
 def test_lookup_crafted_or_unknown_ids_are_refused_not_500(client, job_id):
     r = client.post(f"/api/jobs/{job_id}/lyrics/lookup", json={})
     assert r.status_code in (404, 405)
+
+
+def test_manual_lookup_without_tags_returns_choices_without_saving(client):
+    job = _done_job()
+    lrclib = Lrclib(ROWS)
+    with patch.object(ll, "_fetch_json", lrclib):
+        response = client.post(
+            f"/api/jobs/{job.id}/lyrics/lookup",
+            json={"artist": "Dream Theater", "title": "Metropolis"},
+        )
+    assert response.status_code == 200
+    choices = response.json()["others"]
+    assert len(choices) >= 1
+    assert choices[0]["track"] == "Metropolis"
+    assert choices[0]["artist"] == "Dream Theater"
+    assert not _lyrics_file(job).exists()
+    assert job.has_lyrics is False
+    assert lrclib.asked
+
+
+def test_manual_lookup_does_not_replace_existing_lyrics(client):
+    job = _done_job(has_lyrics=True, audio_tags=TAGS)
+    _lyrics_file(job).write_text(json.dumps(LYRICS), encoding="utf-8")
+    before = _lyrics_file(job).read_bytes()
+    with patch.object(ll, "_fetch_json", Lrclib(ROWS)):
+        response = client.post(
+            f"/api/jobs/{job.id}/lyrics/lookup",
+            json={"artist": "Dream Theater", "title": "Metropolis"},
+        )
+    assert response.status_code == 200
+    assert response.json()["others"]
+    assert _lyrics_file(job).read_bytes() == before
+
+
+@pytest.mark.parametrize("payload", [
+    {"artist": "Dream Theater"},
+    {"title": "Metropolis"},
+    {"artist": "  ", "title": "Metropolis"},
+    {"artist": "Dream Theater", "title": ""},
+])
+def test_manual_lookup_requires_both_names(client, payload):
+    job = _done_job()
+    response = client.post(f"/api/jobs/{job.id}/lyrics/lookup", json=payload)
+    assert response.status_code == 422
+def test_manual_lookup_compares_live_and_acoustic_without_touching_saved_lyrics(client):
+    job = _done_job(has_lyrics=True, audio_tags=TAGS)
+    _lyrics_file(job).write_text(json.dumps(LYRICS), encoding="utf-8")
+    before = _lyrics_file(job).read_bytes()
+    rows = [
+        {
+            "id": 91,
+            "trackName": "Não Sei Viver Sem Ter Você (Ao Vivo)",
+            "artistName": "CPM 22",
+            "albumName": "Ao Vivo",
+            "duration": 234,
+            "instrumental": False,
+            "syncedLyrics": "[00:22.00]Não há mais desculpas",
+            "plainLyrics": "Não há mais desculpas",
+        },
+        {
+            "id": 92,
+            "trackName": "Não Sei Viver Sem Ter Você",
+            "artistName": "CPM 22",
+            "albumName": "Acústico",
+            "duration": 245,
+            "instrumental": False,
+            "syncedLyrics": "",
+            "plainLyrics": "Não há mais desculpas",
+        },
+        {
+            "id": 93,
+            "trackName": "Não Sei Viver Sem Ter Você",
+            "artistName": "Outra banda",
+            "albumName": "Outro",
+            "duration": 234,
+            "instrumental": False,
+            "syncedLyrics": "",
+            "plainLyrics": "Outra letra",
+        },
+        {
+            "id": 94,
+            "trackName": "Não Sei Viver Sem Ter Você Depois",
+            "artistName": "CPM 22",
+            "albumName": "Outro",
+            "duration": 234,
+            "instrumental": False,
+            "syncedLyrics": "",
+            "plainLyrics": "Outra letra",
+        },
+    ]
+    # Reproduce the real failure: LRCLIB does not find the "Ao Vivo" query,
+    # but does have two versions under the composition's plain title.
+    class OnlyBaseSearch:
+        def __init__(self):
+            self.asked = []
+
+        def __call__(self, endpoint, params):
+            self.asked.append((endpoint, params))
+            return rows if params.get("track_name") == "Não Sei Viver Sem Ter Você" else []
+
+    lrclib = OnlyBaseSearch()
+    with patch.object(ll, "_fetch_json", lrclib):
+        response = client.post(
+            f"/api/jobs/{job.id}/lyrics/lookup",
+            json={"artist": "CPM 22", "title": "Não Sei Viver Sem Ter Você Ao Vivo"},
+        )
+    assert response.status_code == 200
+    choices = response.json()["others"]
+    assert {v["lrclib_id"] for v in choices} == {91, 92}
+    assert len(choices) == 2  # duplicate search results are deduplicated
+    assert _lyrics_file(job).read_bytes() == before
+    assert [params["track_name"] for _, params in lrclib.asked if "track_name" in params] == [
+        "Não Sei Viver Sem Ter Você Ao Vivo",
+        "Não Sei Viver Sem Ter Você",
+    ]
+
+
+def test_manual_lookup_plain_title_can_show_live_recordings(client):
+    job = _done_job()
+    rows = [{
+        "id": 91,
+        "trackName": "Não Sei Viver Sem Ter Você Ao Vivo",
+        "artistName": "CPM 22",
+        "albumName": "Ao Vivo",
+        "duration": 234,
+        "instrumental": False,
+        "syncedLyrics": "[00:22.00]Não há mais desculpas",
+        "plainLyrics": "Não há mais desculpas",
+    }]
+    with patch.object(ll, "_fetch_json", Lrclib(rows)):
+        response = client.post(
+            f"/api/jobs/{job.id}/lyrics/lookup",
+            json={"artist": "CPM 22", "title": "Não Sei Viver Sem Ter Você"},
+        )
+    assert response.status_code == 200
+    assert [v["lrclib_id"] for v in response.json()["others"]] == [91]
+    assert not _lyrics_file(job).exists()

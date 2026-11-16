@@ -68,8 +68,11 @@ check("nothing gives nothing", same(parseLrc(""), []) && same(parseLrc(null), []
 const enhanced = parseLrc("[00:12.00]<00:12.00>Hello <00:12.60>world<00:13.20>");
 check("a line with word stamps keeps its plain text", enhanced[0].text === "Hello world");
 check(
-  "and its words, each with its stamp",
-  same(enhanced[0].words.map((w) => [w.time, w.text]), [[12, "Hello "], [12.6, "world"], [13.2, ""]]),
+  "word stamps and explicit phrase end",
+  same(
+    enhanced[0].words.map((w) => [w.time, w.text]),
+    [[12, "Hello "], [12.6, "world"]]
+  ) && enhanced[0].end === 13.2,
 );
 check(
   "word stamps follow the offset too",

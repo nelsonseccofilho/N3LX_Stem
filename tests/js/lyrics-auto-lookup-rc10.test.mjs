@@ -127,6 +127,7 @@ const submitSource = extract(
 test("explicit search requires a button/form submission and never saves a match", async () => {
   const requests = [];
   const selected = [];
+  const closed = [];
   const fields = {
     lyricsSearchArtist: { value: "CPM 22" },
     lyricsSearchTitle: { value: "Não Sei Viver Sem Ter Você" },
@@ -134,7 +135,7 @@ test("explicit search requires a button/form submission and never saves a match"
     lyricsSearchSubmitBtn: { disabled: false },
     lyricsSearchForm: { hidden: false },
     lyricsOpenSearchBtn: { setAttribute: () => {} },
-    karaokeSettings: { close: () => {} },
+    karaokeSettings: { close: () => closed.push(true) },
   };
   const context = vm.createContext({
     searchController: null, karaokeRunning: false, karaokeDeleting: false,
@@ -160,7 +161,8 @@ test("explicit search requires a button/form submission and never saves a match"
     artist: "CPM 22", title: "Não Sei Viver Sem Ter Você",
   });
   assert.equal(selected.length, 1);
-  assert.equal(fields.lyricsSearchForm.hidden, true);
+  assert.equal(fields.lyricsSearchForm.hidden, false);
+  assert.equal(closed.length, 0); // Search must not close the modal.
 });
 
 test("manual search refuses an empty artist and does not contact LRCLIB", async () => {
@@ -184,4 +186,46 @@ test("manual search refuses an empty artist and does not contact LRCLIB", async 
   );
   await context.__submit({ preventDefault: () => {} });
   assert.equal(requests, 0);
+});
+test("a failed search stays visible inside the modal without clearing lyrics", async () => {
+  const fields = {
+    lyricsSearchArtist: { value: "CPM 22" },
+    lyricsSearchTitle: { value: "Não Sei Viver Sem Ter Você Ao Vivo" },
+    lyricsSearchStatus: { textContent: "", setAttribute: () => {} },
+    lyricsSearchSubmitBtn: { disabled: false },
+    lyricsSearchResults: { hidden: true, replaceChildren: () => {} },
+  };
+  const context = vm.createContext({
+    searchController: null, karaokeRunning: false, karaokeDeleting: false,
+    AbortController, getCurrentTrackInfo: () => ({ id: "fixture-track" }),
+    document: { getElementById: (id) => fields[id] || null },
+    t: (key) => key,
+    fetch: async () => ({ ok: false, status: 404, json: async () => ({ others: [] }) }),
+    fromServerLyrics: (value) => ({ others: value.others }),
+    console,
+  });
+  vm.runInContext(submitSource + "\nglobalThis.__submit = submitManualLyricsSearch;", context);
+  await context.__submit({ preventDefault: () => {} });
+  assert.equal(fields.lyricsSearchStatus.textContent, "lyrics.searchNoResults");
+});
+
+const manualChoicesSource = extract(
+  "function showManualLookupChoices(matches)",
+  "\nasync function submitManualLyricsSearch(event)",
+);
+
+test("manual options render inside settings without replacing the visible lyric", () => {
+  let renders = 0;
+  const results = { hidden: true, replaceChildren: (...items) => { renders = items.length; } };
+  const context = vm.createContext({
+    getCurrentTrackInfo: () => ({ id: "fixture-track", duration: 234 }),
+    document: { getElementById: (id) => id === "lyricsSearchResults" ? results : null },
+    versionList: () => ({}),
+    el: (_tag, _className, text) => ({ text }),
+    t: (key) => key,
+  });
+  vm.runInContext(manualChoicesSource + "\nglobalThis.__show = showManualLookupChoices;", context);
+  context.__show([{ lrclib_id: 91 }, { lrclib_id: 92 }]);
+  assert.equal(results.hidden, false);
+  assert.equal(renders, 2);
 });

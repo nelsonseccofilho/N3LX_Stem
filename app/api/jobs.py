@@ -74,6 +74,7 @@ from app.pipeline.lyrics_lookup import (
     copy_lyrics,
     keep_answer,
     lookup_lyrics,
+    lookup_manual_lyrics,
     lyrics_path,
     read_candidates,
     read_lyrics,
@@ -1301,10 +1302,10 @@ async def lookup_lyrics_route(job_id: str, body: LyricsLookupBody | None = None)
     try:
         answer = await asyncio.wait_for(
             asyncio.to_thread(
-                lookup_lyrics,
+                lookup_manual_lyrics if manual else lookup_lyrics,
                 query,
                 cancelled=lambda: registry_get(job_id) is not job,
-                fallback_title=job.title or "",
+                **({} if manual else {"fallback_title": job.title or ""}),
             ),
             timeout=LYRICS_LOOKUP_BUDGET_SEC + TIMEOUT_LYRICS_LOOKUP + 1,
         )
@@ -1320,8 +1321,9 @@ async def lookup_lyrics_route(job_id: str, body: LyricsLookupBody | None = None)
         raise HTTPException(status_code=404, detail="job not found")
     if manual:
         # Searching does not replace a lyric. The user selects a candidate.
-        options = ([answer.lyrics] if answer and answer.lyrics else [])
-        options += answer.others if answer else []
+        # The manual lookup returns *all* eligible recordings, never a winner.
+        # No lyrics.json, identity or timestamp is written by this request.
+        options = answer or []
         return JSONResponse(
             {"detail": "choose a version" if options else "no lyrics", "others": options},
             status_code=200 if options else 404,

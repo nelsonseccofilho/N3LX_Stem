@@ -14,8 +14,8 @@ const context = vm.createContext({
   storeGet:async(key, fallback)=>stored.get(key) || fallback,
   storeSetDebounced:(key,value)=>stored.set(key,structuredClone(value)), flushStoreWrites:async()=>{},
 });
-vm.runInContext(moduleSource("mixer.js") + "\nglobalThis.api={loadMixIntoState,prepareGuitarMix,getMixerReloadContext};", context);
-const guitar = {volume:.36, muted:true, soloed:false, pitch:3};
+vm.runInContext(moduleSource("stereoPan.js") + "\n" + moduleSource("mixer.js") + "\nglobalThis.api={loadMixIntoState,prepareGuitarMix,getMixerReloadContext};", context);
+const guitar = {volume:.36, muted:true, soloed:false, pitch:3, pan:0};
 const playlist = {mix:{guitar, bass:{volume:.8}}, save(value){this.saved=value;}};
 await context.api.loadMixIntoState("song", names, playlist);
 for (const name of names) assert.deepEqual({...context.mixerState[name]}, guitar);

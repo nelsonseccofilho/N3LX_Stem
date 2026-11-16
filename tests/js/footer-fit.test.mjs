@@ -82,6 +82,7 @@ const children = FIXED.concat([0]).map((_, i) => ({
 // Integers, as the real ones are: these are what the version before #633 read.
 const strip = {
   isConnected: true,
+  closest: () => null,
   classList,
   style,
   children,

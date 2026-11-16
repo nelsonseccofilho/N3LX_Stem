@@ -767,4 +767,3 @@ def test_manual_lookup_requires_both_names(client, payload):
     job = _done_job()
     response = client.post(f"/api/jobs/{job.id}/lyrics/lookup", json=payload)
     assert response.status_code == 422
-

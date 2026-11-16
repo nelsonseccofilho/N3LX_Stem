@@ -19,7 +19,15 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app.core.config import JOB_ID_RE, JOBS_DIR, ffmpeg_executable
 from app.core.registry import get as registry_get
-from app.pipeline.karaoke_timing import MAX_BYTES, KaraokeTimingError, aligned_worker_resources, english_alignment_ready, generate_timing, store_timing
+from app.pipeline.karaoke_timing import (
+    MAX_BYTES,
+    KaraokeTimingError,
+    aligned_worker_resources,
+    english_alignment_ready,
+    generate_timing,
+    portuguese_alignment_cache,
+    store_timing,
+)
 from app.pipeline.lyrics_retime import cancel_run, claim_run, current_run
 from app.pipeline.runner import _pipeline_lock
 
@@ -69,6 +77,8 @@ def _configuration(model_name: str | None = None, language: str = "pt") -> tuple
     # Do not advertise EN as available if only the legacy PT-only worker exists.
     try:
         _, worker = aligned_worker_resources()
+        if language == "pt" and worker.parent.name == "src" and portuguese_alignment_cache() is None:
+            raise HTTPException(status_code=503, detail="Portuguese alignment model not cached")
         if language == "en" and worker.parent.name != "src":
             raise KaraokeTimingError("English WhisperX alignment worker unavailable")
         if language == "en" and not english_alignment_ready():
@@ -208,7 +218,7 @@ def karaoke_status(job_id: str) -> dict:
             except HTTPException as exc:
                 language_issues[language] = (
                     "model_cache_missing"
-                    if language == "en" and "alignment model not cached" in str(exc.detail)
+                    if "alignment model not cached" in str(exc.detail)
                     else "unavailable"
                 )
     models = language_models["pt"]

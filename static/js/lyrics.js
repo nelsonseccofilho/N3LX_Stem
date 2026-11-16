@@ -1920,7 +1920,7 @@ function onSyncKey(e) {
   }
 }
 
-function versionList(matches, all) {
+function versionList(matches, all, onChoose = keep, comparisonDuration = 0) {
   const list = el("ul", "lyrics-version-list");
   for (const match of matches) {
     const item = el("li");
@@ -1932,10 +1932,13 @@ function versionList(matches, all) {
         match.artist,
         match.album,
         match.duration ? fmtLength(match.duration) : "",
+        comparisonDuration > 0 && match.duration > 0
+          ? t("lyrics.searchDurationDelta", { seconds: Math.round(Math.abs(match.duration - comparisonDuration)) })
+          : "",
         t(match.synced ? "lyrics.synced" : "lyrics.plain"),
       ].filter(Boolean).join(" · ")),
     );
-    pick.addEventListener("click", () => keep(match, all.filter((m) => m.id !== match.id)));
+    pick.addEventListener("click", () => void onChoose(match, all.filter((m) => (m.lrclib_id ?? m.id) !== (match.lrclib_id ?? match.id))));
     item.append(pick);
     list.append(item);
   }
@@ -2014,23 +2017,46 @@ function toggleManualLyricsSearch() {
   document.getElementById("lyricsSearchArtist").value = names.artist;
   document.getElementById("lyricsSearchTitle").value = names.title;
   document.getElementById("lyricsSearchStatus").textContent = "";
+  const results = document.getElementById("lyricsSearchResults");
+  if (results) { results.hidden = true; results.replaceChildren(); }
   (names.artist ? document.getElementById("lyricsSearchTitle")
     : document.getElementById("lyricsSearchArtist")).focus();
 }
 
-/** Display options; preserve the current lyrics until the user selects one. */
+/** Keep choices in the modal. A search never mutates the current lyric. */
 function showManualLookupChoices(matches) {
-  document.getElementById("lyricsManualLookupChoices")?.remove();
-  if (shownEntry) {
-    const section = el("section", "lyrics-manual-choices");
-    section.id = "lyricsManualLookupChoices";
-    section.append(el("p", "lyrics-status", t("lyrics.searchChoose")), versionList(matches, matches));
-    versionsEl.append(section);
-  } else {
-    clearLyrics();
-    setStatus(t("lyrics.searchChoose"), "muted");
-    versionsEl.append(versionList(matches, matches));
-  }
+  const results = document.getElementById("lyricsSearchResults");
+  if (!results) return;
+  const duration = Number(getCurrentTrackInfo()?.duration || 0);
+  const choices = versionList(matches, matches, async (match, others) => {
+    const trackId = getCurrentTrackInfo()?.id;
+    if (!trackId) return;
+    try {
+      await keep(match, others);
+      if (getCurrentTrackInfo()?.id !== trackId) return;
+      if (shownEntry?.lrclib_id !== match.lrclib_id) {
+        const status = document.getElementById("lyricsSearchStatus");
+        if (status) {
+          status.textContent = t("lyrics.searchSelectionFailed");
+          status.setAttribute?.("data-state", "error");
+        }
+        return;
+      }
+      document.getElementById("karaokeSettings")?.close();
+    } catch (error) {
+      console.warn("manual lyrics selection failed", error);
+      const status = document.getElementById("lyricsSearchStatus");
+      if (status) {
+        status.textContent = t("lyrics.searchSelectionFailed");
+        status.setAttribute?.("data-state", "error");
+      }
+    }
+  }, duration);
+  results.replaceChildren(
+    el("strong", "karaoke-lookup-results-title", t("lyrics.searchResultCount", { count: matches.length })),
+    choices,
+  );
+  results.hidden = false;
 }
 
 async function submitManualLyricsSearch(event) {
@@ -2043,13 +2069,17 @@ async function submitManualLyricsSearch(event) {
   const submit = document.getElementById("lyricsSearchSubmitBtn");
   if (!artist || !title) {
     status.textContent = t("lyrics.nothingKnown");
+    status.setAttribute?.("data-state", "error");
     return;
   }
+  const results = document.getElementById("lyricsSearchResults");
+  if (results) { results.hidden = true; results.replaceChildren(); }
   searchController?.abort();
   const controller = new AbortController();
   searchController = controller;
   submit.disabled = true;
   status.textContent = t("lyrics.searchBusy");
+  status.setAttribute?.("data-state", "loading");
   try {
     const response = await fetch("/api/jobs/" + encodeURIComponent(info.id) + "/lyrics/lookup", {
       method: "POST",
@@ -2063,16 +2093,17 @@ async function submitManualLyricsSearch(event) {
     const matches = fromServerLyrics(data)?.others || [];
     if (!matches.length) {
       status.textContent = t("lyrics.searchNoResults");
+      status.setAttribute?.("data-state", "error");
       return;
     }
     showManualLookupChoices(matches);
-    document.getElementById("lyricsSearchForm").hidden = true;
-    document.getElementById("lyricsOpenSearchBtn")?.setAttribute("aria-expanded", "false");
-    document.getElementById("karaokeSettings")?.close();
+    status.textContent = t("lyrics.searchChoose");
+    status.setAttribute?.("data-state", "success");
   } catch (error) {
     if (!controller.signal.aborted) {
       console.warn("manual LRCLIB lookup failed", error);
       status.textContent = t("lyrics.searchFailed");
+      status.setAttribute?.("data-state", "error");
     }
   } finally {
     if (searchController === controller) searchController = null;

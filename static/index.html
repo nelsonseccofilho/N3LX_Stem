@@ -584,18 +584,12 @@
         <aside class="sidebar" id="catalogPanel">
           <!-- Rail -->
           <nav class="sidebar-rail" aria-label="Library navigation" data-i18n-aria-label="nav.libraryNav">
-            <button class="rail-btn rail-collapse" id="sidebarCollapseBtn" type="button" title="Toggle library" aria-label="Toggle library" aria-expanded="true" data-i18n-title="nav.toggleLibrary" data-i18n-aria-label="nav.toggleLibrary">
+            <button class="rail-btn rail-collapse" aria-hidden="true" tabindex="-1" id="sidebarCollapseBtn" type="button" title="Toggle library" aria-label="Toggle library" aria-expanded="true" data-i18n-title="nav.toggleLibrary" data-i18n-aria-label="nav.toggleLibrary">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
                 <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
               </svg>
             </button>
-            <button class="rail-btn rail-favorites" type="button" title="Favorites" aria-label="Favorites" aria-pressed="false" data-i18n-title="nav.favorites" data-i18n-aria-label="nav.favorites">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
-                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-              </svg>
-              <span data-i18n="nav.favorites">Favorites</span>
-            </button>
-            <button class="rail-btn rail-queue hidden" type="button" title="Import queue" aria-label="Import queue" aria-pressed="false" data-i18n-title="nav.importQueue" data-i18n-aria-label="nav.importQueue">
+            <button class="rail-btn rail-queue hidden" type="button" aria-controls="sidebarBody" aria-expanded="false" title="Import queue" aria-label="Import queue" aria-pressed="false" data-i18n-title="nav.importQueue" data-i18n-aria-label="nav.importQueue">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
                 <path d="M4 6h10 M4 12h10 M4 18h6"/>
                 <path d="M16 15l3 3 3-3 M19 18V9"/>
@@ -603,33 +597,30 @@
               <span data-i18n="nav.queue">Queue</span>
               <span class="rail-badge hidden" id="queueBadge" aria-hidden="true"></span>
             </button>
-            <button class="rail-btn rail-library active" id="appMenuBtn" type="button" title="Library" aria-label="Library" aria-pressed="true" data-i18n-title="nav.library" data-i18n-aria-label="nav.library">
+            <button class="rail-btn rail-library active" id="appMenuBtn" type="button" aria-controls="sidebarBody" aria-expanded="false" title="Library" aria-label="Library" aria-pressed="true" data-i18n-title="nav.library" data-i18n-aria-label="nav.library">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
                 <path d="M4 4h16v16H4z M4 9h16"/>
               </svg>
               <span data-i18n="nav.library">Library</span>
             </button>
-            <button class="rail-btn rail-setlist" type="button" title="Setlist" aria-label="Setlist" aria-pressed="false">
+            <button class="rail-btn rail-favorites" type="button" aria-controls="sidebarBody" aria-expanded="false" title="Favorites" aria-label="Favorites" aria-pressed="false" data-i18n-title="nav.favorites" data-i18n-aria-label="nav.favorites">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+              </svg>
+              <span data-i18n="nav.favorites">Favorites</span>
+            </button>
+            <button class="rail-btn rail-setlist" type="button" aria-controls="sidebarBody" aria-expanded="false" title="Setlist" aria-label="Setlist" aria-pressed="false">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 5h13M3 10h13M3 15h7M16 13l5 4-5 4z"/></svg>
               <span>Setlist</span>
             </button>
-            <!-- Lyrics for the open track (#699): a view of the sidebar, like
-                 Favorites and Trash, drawn by lyrics.js. -->
-            <button class="rail-btn rail-lyrics" type="button" title="Lyrics" aria-label="Lyrics" aria-pressed="false" data-i18n-title="nav.lyrics" data-i18n-aria-label="nav.lyrics">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M4 6h11 M4 11h11 M4 16h6"/>
-                <path d="M18 5v10.5"/><circle cx="15.8" cy="16" r="2.2"/><path d="M18 5l3 1.2"/>
-              </svg>
-              <span data-i18n="nav.lyrics">Lyrics</span>
-            </button>
-            <button class="rail-btn rail-trash" type="button" title="Trash" aria-label="Trash" aria-pressed="false">
+            <button class="rail-btn rail-trash" type="button" aria-controls="sidebarBody" aria-expanded="false" title="Trash" aria-label="Trash" aria-pressed="false">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
                 <path d="M3 6h18 M8 6V4h8v2 M19 6l-1 14H6L5 6"/>
               </svg>
               <span data-i18n="nav.trash">Trash</span>
               <span class="rail-badge hidden" id="trashBadge" aria-hidden="true"></span>
             </button>
-            <!-- Help mode: the screen explains itself while this is pressed. -->
+            <div style="flex:1"></div>
             <button class="rail-btn rail-guide" type="button" id="helpModeBtn" aria-pressed="false"
                     title="Explain the screen" aria-label="Explain the screen"
                     data-i18n-title="help.button" data-i18n-aria-label="help.button">
@@ -638,7 +629,6 @@
               </svg>
               <span data-i18n="help.railLabel">Guide</span>
             </button>
-            <div style="flex:1"></div>
             <!-- Notifications (#636). In the rail rather than at the end
                  of the top bar: that row is the import and split controls, so
                  a bell parked on it read as part of that job. Everything else
@@ -655,6 +645,8 @@
               <div class="daw-notif-panel" role="menu" aria-label="Notifications" data-i18n-aria-label="notif.title">
                 <div class="daw-notif-header">
                   <span class="uplabel" data-i18n="notif.title">Notifications</span>
+                  <button class="daw-notif-clear daw-notif-markread" id="notifMarkAllRead"
+                    type="button" data-i18n="notif.markAllRead">Mark read</button>
                   <button class="daw-notif-clear" id="notifClearAll" type="button" data-i18n="notif.clearAll">Clear all</button>
                   <button class="daw-notif-close" type="button" aria-label="Close notifications" data-i18n-aria-label="notif.close">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
@@ -710,7 +702,7 @@
       </section>
 
           <!-- Sidebar body -->
-          <div class="sidebar-body">
+          <div class="sidebar-body" id="sidebarBody">
             <!-- Search -->
             <div class="daw-search" id="catalogToggle" role="button" tabindex="0" aria-label="Search library" data-i18n-aria-label="search.ariaLabel">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -769,8 +761,23 @@
                   <button id="lyricsSettingsClose" class="lyrics-align-btn" type="button" data-i18n="karaoke.close">Fechar</button>
                 </div>
                 <div class="karaoke-settings-content">
-                  <button id="lyricsGenerateKaraokeBtn" class="lyrics-align-btn lyrics-generate-btn" type="button" data-i18n="karaokeTiming.generate">Gerar karaokê</button>
-                  <button id="lyricsCancelKaraokeBtn" class="lyrics-align-btn" type="button" data-i18n="karaoke.cancel" hidden>Cancelar</button>
+                  <div class="karaoke-source-actions">
+                    <button id="lyricsGenerateKaraokeBtn" class="lyrics-align-btn lyrics-generate-btn" type="button" data-i18n="karaokeTiming.generateAi">Gerar karaokê com IA</button>
+                    <button id="lyricsOpenSearchBtn" class="lyrics-align-btn" type="button" aria-controls="lyricsSearchForm" aria-expanded="false" data-i18n="lyrics.manualSearch">Buscar letra</button>
+                    <button id="lyricsCancelKaraokeBtn" class="lyrics-align-btn" type="button" data-i18n="karaoke.cancel" hidden>Cancelar</button>
+                  </div>
+                  <form id="lyricsSearchForm" class="karaoke-lookup-form" hidden>
+                    <p class="lyrics-note" data-i18n="lyrics.searchHint">Busca opcional no LRCLIB. Confira artista e música antes de pesquisar.</p>
+                    <div class="karaoke-lookup-fields">
+                      <label for="lyricsSearchArtist" data-i18n="lyrics.searchArtist">Artista</label>
+                      <input id="lyricsSearchArtist" name="artist" type="text" maxlength="300" required autocomplete="off" placeholder="Artista" data-i18n-placeholder="lyrics.searchArtist">
+                      <label for="lyricsSearchTitle" data-i18n="lyrics.searchSong">Música</label>
+                      <input id="lyricsSearchTitle" name="title" type="text" maxlength="300" required autocomplete="off" placeholder="Música" data-i18n-placeholder="lyrics.searchSong">
+                    </div>
+                    <button id="lyricsSearchSubmitBtn" class="lyrics-align-btn" type="submit" data-i18n="lyrics.searchSubmit">Buscar no LRCLIB</button>
+                    <p id="lyricsSearchStatus" class="karaoke-lookup-status" role="status" aria-live="polite"></p>
+                    <section id="lyricsSearchResults" class="karaoke-lookup-results" hidden></section>
+                  </form>
               <div class="lyrics-generator-language">
                 <label for="lyricsKaraokeLanguage" data-i18n="karaokeTiming.language">Idioma da música</label>
                 <select id="lyricsKaraokeLanguage" aria-describedby="lyricsLanguageHelp">
@@ -818,6 +825,21 @@
           <div id="karaokeLyricsHost"></div>
         </section>
         <div id="lanes" class="daw-main" role="tabpanel" aria-labelledby="studioWaveformsTab">
+
+          <!-- C27.6B.4: estado vazio da visualizacao inicial -->
+          <section id="studioEmptyState"
+                   class="studio-empty-state"
+                   role="status"
+                   aria-labelledby="studioEmptyTitle">
+            <div class="studio-empty-symbol" aria-hidden="true">♫</div>
+            <h2 id="studioEmptyTitle" data-i18n="studio.emptyTitle">
+              Nenhuma música selecionada
+            </h2>
+            <p data-i18n="studio.emptyDescription">
+              Para começar, importe uma faixa ou selecione uma faixa em sua coleção de música.
+            </p>
+          </section>
+
 
           <!-- Job progress -->
           <div id="error" class="error hidden" role="alert"></div>

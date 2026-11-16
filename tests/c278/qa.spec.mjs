@@ -1,0 +1,129 @@
+// Run only against the disposable seed.py library on 8160. No model generation.
+import { test, expect } from '@playwright/test';
+import { mkdir, writeFile } from 'node:fs/promises';
+const ID='e2e0cafebabe';
+const out=process.env.C278_EVIDENCE || 'test-results/c278-evidence';
+const choices=[
+  {source:'lrclib',lrclib_id:101,track:'QA Song',artist:'QA Band',album:'Studio',duration:2,
+    synced:'[00:00.20] Test first line\n[00:01.20] Test second line',plain:'Test first line\nTest second line'},
+  {source:'lrclib',lrclib_id:102,track:'QA Song Live',artist:'QA Band',album:'Live',duration:200,
+    synced:'',plain:'Alternate test words\nMore alternate words'},
+];
+
+test('1920x1080 Studio and Karaoke controlled QA', async ({page,request},testInfo)=>{
+  const fixture=await request.get(`/api/jobs/${ID}`);
+  expect(fixture.ok()).toBeTruthy();
+  expect((await fixture.json()).title).toBe('E2E Fixture Track (again)');
+  await mkdir(out,{recursive:true});
+  const errors=[],badResponses=[],generationRequests=[];
+  page.on('pageerror',e=>errors.push(String(e)));
+  page.on('response',r=>{if(r.status()>=400) badResponses.push({status:r.status(),url:r.url()});});
+  await page.route(/\/karaoke\/generate|\/lyrics\/retime|\/guitar-detail$/,r=>{
+    if(r.request().method()==='POST') {generationRequests.push(r.request().url()); return r.abort();}
+    return r.continue();
+  });
+  let lookupMode='results';
+  await page.route(`**/api/jobs/${ID}/lyrics/lookup`,async route=>{
+    await new Promise(resolve=>setTimeout(resolve,350));
+    if(lookupMode==='error') return route.fulfill({status:502,json:{detail:'synthetic offline'}});
+    return route.fulfill({status:lookupMode==='empty'?404:200,json:{others:lookupMode==='empty'?[]:choices}});
+  });
+  await page.goto('/');
+  await expect(page.locator('#studioEmptyState')).toBeVisible();
+  const metrics=await page.evaluate(()=>({innerWidth,innerHeight,clientWidth:document.documentElement.clientWidth,dpr:devicePixelRatio,scrollWidth:document.documentElement.scrollWidth}));
+  expect(metrics).toEqual({innerWidth:1920,innerHeight:1080,clientWidth:1920,dpr:1,scrollWidth:1920});
+  await page.screenshot({path:out+'/01-studio-empty.png'});
+  await page.locator(`.cat-item[data-id="${ID}"]`).dblclick();
+  await expect(page.locator('#footer-time-total')).toHaveText('00:02');
+  await expect(page.locator('#studioEmptyState')).toBeHidden();
+  await expect(page.locator('#summary-bpm')).toHaveText('120');
+  await page.locator('#t-play').click();
+  await expect(page.locator('#t-play')).toHaveClass(/playing/);
+  await expect(page.locator('#footer-time-elapsed')).not.toHaveText('00:00');
+  await page.locator('#t-stop').click();
+  await expect(page.locator('#footer-time-elapsed')).toHaveText('00:00');
+  const mute=page.locator('.mixer-column .mute:visible:enabled').first();
+  await mute.click(); await expect(mute).toHaveAttribute('aria-pressed','true');
+  await mute.click(); await expect(mute).toHaveAttribute('aria-pressed','false');
+  const solo=page.locator('.mixer-column .solo:visible:enabled').first();
+  await solo.click(); await expect(solo).toHaveAttribute('aria-pressed','true');
+  await solo.click(); await expect(solo).toHaveAttribute('aria-pressed','false');
+  const geometry=await page.evaluate(()=>{
+    const rects=s=>[...document.querySelectorAll(s)].filter(e=>e.getBoundingClientRect().height>0).map(e=>{const r=e.getBoundingClientRect();return {top:r.top,height:r.height};});
+    return {mix:rects('.mixer-column .lane-header:not(.hidden)'),wave:rects('.stem-waveform-row:not(.hidden)'),scrollWidth:document.documentElement.scrollWidth};
+  });
+  expect(geometry.scrollWidth).toBe(1920);
+  expect(geometry.mix.length).toBeGreaterThan(0);
+  expect(geometry.mix.length).toBe(geometry.wave.length);
+  geometry.mix.forEach((r,i)=>expect(Math.abs(r.top-geometry.wave[i].top)).toBeLessThanOrEqual(1));
+  await page.screenshot({path:out+'/02-studio-loaded.png'});
+  await page.locator('#studioKaraokeTab').click();
+  await page.screenshot({path:out+'/03-karaoke.png'});
+  await page.locator('#lyricsSettingsOpen').click();
+  await expect(page.locator('#karaokePanel-generate')).toBeVisible();
+  await page.screenshot({path:out+'/04-generate-tab.png'});
+  await page.locator('#karaokeTab-sync').click();
+  await expect(page.locator('#karaokePanel-sync')).toBeVisible();
+  await page.locator('#karaokeTab-search').click();
+  await page.locator('#lyricsSearchArtist').fill('QA Band');
+  await page.locator('#lyricsSearchTitle').fill('QA Song');
+  await page.locator('#lyricsSearchSubmitBtn').click();
+  await expect(page.locator('#lyricsSearchStatus')).toHaveAttribute('data-state','loading');
+  await expect(page.locator('#lyricsSearchResults .lyrics-version')).toHaveCount(2);
+  await page.locator('#lyricsSearchResults .lyrics-version').first().click();
+  await expect(page.locator('.karaoke-lookup-preview')).toContainText('Test first line');
+  await page.getByRole('button',{name:'Voltar aos resultados',exact:true}).click();
+  await page.locator('#lyricsSearchResults .lyrics-version').nth(1).click();
+  await expect(page.locator('.karaoke-lookup-preview')).toContainText('Alternate test words');
+  await page.screenshot({path:out+'/05-lyrics-preview.png'});
+  await page.getByRole('button',{name:'Salvar esta letra',exact:true}).click();
+  await expect(page.locator('#karaokeSettings')).toBeHidden();
+  await expect(page.locator('#lyricsBody')).toContainText('Alternate test words');
+  await page.locator('#lyricsSettingsOpen').click();
+  await page.locator('#karaokeTab-search').click();
+  await page.locator('#lyricsSearchSubmitBtn').click();
+  await page.locator('#lyricsSearchResults .lyrics-version').first().click();
+  await page.getByRole('button',{name:'Cancelar seleção',exact:true}).click();
+  await expect(page.locator('#lyricsSearchStatus')).toContainText('cancelada');
+  await page.locator('#lyricsSettingsClose').click();
+  await expect(page.locator('#lyricsBody')).toContainText('Alternate test words');
+  await page.reload();
+  await page.locator(`.cat-item[data-id="${ID}"]`).dblclick();
+  await page.locator('#studioKaraokeTab').click();
+  await expect(page.locator('#lyricsBody')).toContainText('Alternate test words');
+  await page.locator('#lyricsSettingsOpen').click();
+  await page.locator('#karaokeTab-search').click();
+  await page.locator('#lyricsSearchArtist').fill('QA Band');
+  await page.locator('#lyricsSearchTitle').fill('QA Song');
+  lookupMode='empty'; await page.locator('#lyricsSearchSubmitBtn').click();
+  await expect(page.locator('#lyricsSearchStatus')).toHaveAttribute('data-state','empty');
+  lookupMode='error'; await page.locator('#lyricsSearchSubmitBtn').click();
+  await expect(page.locator('#lyricsSearchStatus')).toHaveAttribute('data-state','error');
+  await page.screenshot({path:out+'/06-lookup-error.png'});
+  await page.locator('#karaokeTab-sync').click();
+  await page.locator('.lyrics-sync-toggle').click();
+  await expect(page.locator('#lyricsSync')).toBeVisible();
+  await page.locator('.lyrics-line').first().click();
+  const range=page.locator('.lyrics-phrase-time');
+  await range.nth(0).fill('00:00.100'); await range.nth(1).fill('00:00.900');
+  await page.getByRole('button',{name:'Salvar tempos',exact:true}).click();
+  await page.screenshot({path:out+'/07-manual-sync.png'});
+  await page.locator('#lyricsSync .lyrics-align-done').click();
+  await expect(page.locator('#lyricsSync')).toBeHidden();
+  const storedLyrics=async()=>((await (await request.get('/api/ui-store')).json()).values[`stemdeck:lyrics:${ID}`]);
+  await expect.poll(async()=>(await storedLyrics())?.entry.userSynced).toContain('[00:00.100] Alternate test words<00:00.900>');
+  await page.reload();
+  await page.locator(`.cat-item[data-id="${ID}"]`).dblclick();
+  await page.locator('#studioKaraokeTab').click();
+  await page.locator('#lyricsSettingsOpen').click();
+  await page.locator('#karaokeTab-sync').click();
+  await page.locator('.lyrics-sync-toggle').click();
+  await page.locator('.lyrics-line').first().click();
+  await expect(page.locator('.lyrics-phrase-time').nth(0)).toHaveValue('00:00.100');
+  await expect(page.locator('.lyrics-phrase-time').nth(1)).toHaveValue('00:00.900');
+  await page.screenshot({path:out+'/08-manual-sync-reloaded.png'});
+  expect(errors).toEqual([]); expect(generationRequests).toEqual([]);
+  const observations=JSON.stringify({metrics,geometry,errors,badResponses,generationRequests,persistedTiming:(await storedLyrics()).entry.userSynced},null,2);
+  await writeFile(out+'/observations.json',observations);
+  await testInfo.attach('observations',{body:observations,contentType:'application/json'});
+});

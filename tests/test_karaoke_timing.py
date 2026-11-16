@@ -5,7 +5,10 @@ from pathlib import Path
 import pytest
 
 from app.pipeline.karaoke_timing import (
-    KaraokeTimingError, enhanced_lrc, normalize_timing, store_timing,
+    KaraokeTimingError,
+    enhanced_lrc,
+    normalize_timing,
+    store_timing,
 )
 
 
@@ -160,6 +163,8 @@ def test_both_languages_use_the_same_vulkan_whisperx_worker(
         captured.append(argv)
         assert kwargs["env"]["HF_HUB_OFFLINE"] == "1"
         assert kwargs["env"]["TRANSFORMERS_OFFLINE"] == "1"
+        if language == "pt":
+            assert kwargs["env"]["HF_HUB_CACHE"] == str(tmp_path / "hf-cache")
         output = Path(argv[argv.index("--output-dir") + 1])
         output.joinpath("fixture.integrado.json").write_text(json.dumps({
             "language": language,
@@ -180,6 +185,7 @@ def test_both_languages_use_the_same_vulkan_whisperx_worker(
     monkeypatch.setattr(k, "aligned_worker_resources", lambda: (
         tmp_path / "python.exe", tmp_path / "src" / "transcrever_gpu.py"))
     monkeypatch.setattr(k, "english_alignment_ready", lambda: True)
+    monkeypatch.setattr(k, "portuguese_alignment_cache", lambda: tmp_path / "hf-cache")
     monkeypatch.setattr(k.subprocess, "Popen", worker_run)
     phases = []
     timing = k.generate_timing(
@@ -231,6 +237,7 @@ def test_english_fails_before_worker_when_model_missing(monkeypatch, tmp_path: P
 
 def test_api_exposes_pt_while_english_checkpoint_is_missing(monkeypatch, tmp_path: Path):
     from fastapi import HTTPException
+
     from app.api import karaoke as api
 
     model = tmp_path / "ggml-large-v3.bin"
@@ -241,6 +248,7 @@ def test_api_exposes_pt_while_english_checkpoint_is_missing(monkeypatch, tmp_pat
     monkeypatch.setattr(api, "aligned_worker_resources", lambda: (
         tmp_path / "python.exe", tmp_path / "src/transcrever_gpu.py"))
     monkeypatch.setattr(api, "english_alignment_ready", lambda: False)
+    monkeypatch.setattr(api, "portuguese_alignment_cache", lambda: tmp_path / "hf-cache")
     monkeypatch.setattr(api, "ffmpeg_executable", lambda: "ffmpeg")
     assert api._configuration("large-v3", "pt")[1] == model
     with pytest.raises(HTTPException) as error:

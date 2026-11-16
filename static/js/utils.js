@@ -31,6 +31,22 @@ export async function storeSet(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); await sharedSet(key, value); } catch (e) { console.warn("[store] localStorage set failed", e); }
 }
 
+/**
+ * Strict save for user-authored content.
+ * Browser: local journal plus acknowledged shared store.
+ * Desktop: await the native persistent-store command.
+ */
+export async function storeSetConfirmed(key, value) {
+  if (window.__TAURI__?.core?.invoke) {
+    await window.__TAURI__.core.invoke("store_set", {
+      key, value
+    });
+    return;
+  }
+  localStorage.setItem(key, JSON.stringify(value));
+  await sharedSet(key, value);
+}
+
 // Debounced variant — coalesces rapid writes (e.g. mixer slider moves) into
 // a single store write ~300ms after the last call. Each call snapshots the
 // value so no mutation races occur.

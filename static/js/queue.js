@@ -46,7 +46,17 @@ export function runningLabel(job) {
     const names = { prepare:"Preparar áudio", analyze:"Analisar música", separate:"Separar instrumentos", vocals:"Separar vozes", drums:"Detalhar bateria", reconstruct:"Preservar resíduos", finalize:"Finalizar pistas" };
     const pt = getLanguage().startsWith("pt");
     const english = { prepare:"Prepare audio", analyze:"Analyze song", separate:"Separate instruments", vocals:"Separate vocals", drums:"Detail drums", reconstruct:"Preserve residues", finalize:"Finalize tracks" };
-    return `${pt ? "Etapa" : "Step"} ${p.step_number}/${p.total_steps} · ${(pt ? names : english)[p.step] || p.step}${p.fraction == null ? "" : ` · ${Math.floor(p.fraction * 100)}%`}`;
+    const backendStage = p.step === "finalize" && typeof job.stage === "string"
+      ? job.stage.trim() : "";
+    const phase = pt ? backendStage
+      .replace(/^Mixing tracks/, "Mixando pistas")
+      .replace(/^Analyzing song structure/, "Analisando estrutura musical")
+      .replace(/^Transcribing lyrics/, "Transcrevendo letra")
+      .replace(/^Timing lyrics to the vocals/, "Sincronizando letra com os vocais")
+      .replace(/^Downloading the lyrics model/, "Baixando modelo de transcrição")
+      : backendStage;
+    const base = `${pt ? "Etapa" : "Step"} ${p.step_number}/${p.total_steps} · ${(pt ? names : english)[p.step] || p.step}${p.fraction == null ? "" : ` · ${Math.floor(p.fraction * 100)}%`}`;
+    return phase && phase !== "Done" ? `${base} · ${phase}` : base;
   }
   const stage = (job?.stage || t("job.working")).replace(/\.\.\.$/, "");
   if (job?.progress_indeterminate || /\d\s*%/.test(stage)) return stage;

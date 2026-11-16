@@ -43,21 +43,9 @@ $python = Join-Path $RuntimeRoot '.venv\Scripts\python.exe'
 $logDir = Join-Path $DataDir 'logs'
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 $url = "http://127.0.0.1:$Port"
-$health = $null
-try { $health = Invoke-RestMethod "$url/api/health" -TimeoutSec 2 } catch {}
-if ($health -and $env:STEMDECK_INSTANCE_TOKEN -and $health.instance -ne $env:STEMDECK_INSTANCE_TOKEN) { throw "Outro servidor ocupa a porta $Port. Feche a outra instancia ou escolha outra porta." }
-if (-not $health) {
-    $connection = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
-    if ($connection) { throw "Porta $Port ocupada. Use -Port para escolher outra." }
-    $proc = Start-Process -FilePath $python -WorkingDirectory $repo -WindowStyle Hidden -PassThru -ArgumentList @('-m','uvicorn','app.main:app','--host','127.0.0.1','--port',"$Port",'--timeout-graceful-shutdown','5') -RedirectStandardOutput (Join-Path $logDir 'server.stdout.log') -RedirectStandardError (Join-Path $logDir 'server.stderr.log')
-    Set-Content -LiteralPath (Join-Path $logDir 'server.pid') -Value $proc.Id
-    for ($attempt=0; $attempt -lt 60; $attempt++) {
-        Start-Sleep -Seconds 1
-        try { $health = Invoke-RestMethod "$url/api/health" -TimeoutSec 2; break } catch {}
-        if ($proc.HasExited) { throw "N3LX_Stem encerrou. Consulte data\logs\server.stderr.log." }
-    }
-    if (-not $health) { throw 'Inicializacao excedeu o tempo. Consulte data\logs.' }
-}
+& $python (Join-Path $PSScriptRoot 'backend_control.py') start --port $Port --runtime $RuntimeRoot --data $DataDir
+if ($LASTEXITCODE -ne 0) { throw 'Inicializacao controlada recusada. Consulte a mensagem acima.' }
+$health = Invoke-RestMethod "$url/api/health" -TimeoutSec 5
 if ($health.name -ne "StemDeck" -or $health.status -ne "ok") { throw "Outro aplicativo esta usando $url." }
 $settings = Invoke-RestMethod "$url/api/settings" -TimeoutSec 60
 if ($settings.demucs_devices_available -notcontains 'directml') { throw 'A RX6600M nao passou no teste DirectML. Consulte data\logs.' }

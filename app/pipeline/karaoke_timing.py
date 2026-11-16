@@ -18,10 +18,12 @@ import subprocess
 import tempfile
 import time
 import uuid
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from collections.abc import Callable
 from typing import Any
+
+from app.pipeline.karaoke_diagnostics import record_worker_failure
 
 MAX_WORDS = 30_000
 MAX_BYTES = 8 * 1024 * 1024
@@ -336,6 +338,38 @@ def english_alignment_ready() -> bool:
     return checkpoint.is_file() and checkpoint.stat().st_size > 16 * 1024 * 1024
 
 
+def portuguese_alignment_cache() -> Path | None:
+    """Find existing PT weights without letting portable XDG hide the profile cache.
+
+    Explicit Hugging Face/Transformers settings remain authoritative. Only the
+    app's implicit XDG default may fall back to the already installed model.
+    """
+    explicit = next((os.environ[key].strip() for key in (
+        "TRANSFORMERS_CACHE", "HF_HUB_CACHE", "HUGGINGFACE_HUB_CACHE")
+        if os.environ.get(key, "").strip()), None)
+    hf_home = os.environ.get("HF_HOME", "").strip()
+    profile = Path.home() / ".cache" / "huggingface" / "hub"
+    effective = (Path(explicit) if explicit else Path(hf_home) / "hub" if hf_home
+                 else Path(os.environ.get("XDG_CACHE_HOME") or (Path.home() / ".cache")) / "huggingface" / "hub")
+    candidates = [effective] if explicit or hf_home else [effective, profile]
+    for cache in candidates:
+        cache = cache.expanduser()
+        repo = cache / "models--jonatasgrosman--wav2vec2-large-xlsr-53-portuguese"
+        try:
+            revision = (repo / "refs" / "main").read_text(encoding="utf-8").strip()
+            if not re.fullmatch(r"[a-f0-9]{40,64}", revision):
+                continue
+            snapshot = repo / "snapshots" / revision
+            if (all((snapshot / name).is_file() and (snapshot / name).stat().st_size > 0
+                    for name in ("config.json", "preprocessor_config.json", "vocab.json"))
+                    and any((snapshot / name).is_file() and (snapshot / name).stat().st_size > 16 * 1024 * 1024
+                            for name in ("pytorch_model.bin", "model.safetensors"))):
+                return cache
+        except OSError:
+            continue
+    return None
+
+
 def aligned_worker_resources() -> tuple[Path, Path]:
     """Locate the existing NELX worker; no downloads or implicit GPU fallback.
 
@@ -402,6 +436,9 @@ def generate_timing(
     if language not in {"pt", "en"}:
         raise KaraokeTimingError("unsupported karaoke language")
     python, worker = aligned_worker_resources()
+    pt_cache = portuguese_alignment_cache() if language == "pt" and worker.parent.name == "src" else None
+    if language == "pt" and worker.parent.name == "src" and pt_cache is None:
+        raise KaraokeTimingError("PT alignment model unavailable in offline cache")
     if language == "en" and not english_alignment_ready():
         raise KaraokeTimingError("English WhisperX acoustic checkpoint not available in torch cache")
     # Legacy experimental DirectML alignment was built only for PT. The modern
@@ -424,6 +461,8 @@ def generate_timing(
             # Legacy DirectML worker accepts these two extra options.
             command += ["--no-preload-align", "--output-profile", "quality"]
         env = os.environ.copy()
+        if pt_cache is not None:
+            env["HF_HUB_CACHE"] = str(pt_cache)
         env.update({"HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1",
                     "HF_HUB_DISABLE_TELEMETRY": "1", "PYTHONIOENCODING": "utf-8",
                     "PYTHONDONTWRITEBYTECODE": "1", "PYTHONUNBUFFERED": "1"})
@@ -462,6 +501,14 @@ def generate_timing(
                 issue = "alignment worker ran out of memory"
             else:
                 issue = f"WhisperGPU/WhisperX worker exited with code {code}"
+            # C27.4D: persist only classified metadata. Never keep raw worker
+            # stdout, which may contain transcribed lyrics or local paths.
+            report_id = record_worker_failure(
+                logfile=logfile, audio=audio, language=language, phase=phase,
+                exit_code=code, alignment_backend="cpu" if modern else "directml",
+            )
+            if report_id:
+                issue += f" [diagnostic: {report_id}]"
             raise KaraokeTimingError(issue)
         results = list(output.glob("*.integrado.json"))
         reports = list(output.glob("*.qualidade.json"))

@@ -1,7 +1,7 @@
 import { getCurrentTrackInfo, setCatalogView } from "./catalog.js";
 import { setLyricsPresentation } from "./lyrics.js";
 import { transport, setPlayheadTime } from "./transport.js";
-import { t, onLanguageChange } from "./i18n.js";
+import { t, getLanguage, onLanguageChange } from "./i18n.js";
 import { getSectionsSnapshot, sectionDisplayName } from "./sections.js";
 
 // A single visual envelope across the entire recording, derived from every
@@ -35,7 +35,10 @@ export function initKaraoke() {
   const settings = document.getElementById("karaokeSettings"), settingsOpen = document.getElementById("lyricsSettingsOpen");
   const cinemaOpen = document.getElementById("karaokeCinemaOpen"), cinemaExit = document.getElementById("karaokeCinemaExit");
   let cinemaReturnFocus = null;
-  settingsOpen?.addEventListener("click", () => { if (!settings.open) settings.showModal(); });
+  settingsOpen?.addEventListener("click", () => {
+    if (!getCurrentTrackInfo()) return;
+    if (!settings.open) settings.showModal();
+  });
   document.getElementById("lyricsSettingsClose")?.addEventListener("click", () => settings.close());
   settings?.addEventListener("close", () => { if (settingsOpen?.isConnected) settingsOpen.focus(); });
   new MutationObserver(() => { if (panel.classList.contains("is-karaoke-processing") && settings.open) settings.close(); })
@@ -64,6 +67,78 @@ export function initKaraoke() {
   let controller = null, waveState = "", sidebarView = "library", lastSecond = -1;
   const sectionHost = document.getElementById("karaokeSections");
   let visibleSections = [], activeSection = -1;
+
+  // C27.6B.3 — Empty state, without changing library selection.
+  const empty = document.createElement("section");
+  empty.id = "karaokeEmptyState";
+  empty.className = "karaoke-empty-state";
+  empty.setAttribute("role", "status");
+
+  const emptyIcon = document.createElement("div");
+  emptyIcon.className = "karaoke-empty-symbol";
+  emptyIcon.textContent = "♫";
+  emptyIcon.setAttribute("aria-hidden", "true");
+
+  const emptyTitle = document.createElement("h2");
+  const emptyDescription = document.createElement("p");
+
+  const emptyAction = document.createElement("button");
+  emptyAction.type = "button";
+  emptyAction.className = "lyrics-align-btn lyrics-generate-btn";
+
+  emptyAction.addEventListener("click", () => {
+    setCatalogView("library");
+    waveTab.click();
+  });
+
+  empty.append(
+    emptyIcon,
+    emptyTitle,
+    emptyDescription,
+    emptyAction
+  );
+
+  stage.prepend(empty);
+
+  function translateEmptyState() {
+    const english = String(getLanguage())
+      .toLowerCase()
+      .startsWith("en");
+
+    emptyTitle.textContent = english
+      ? "No song selected"
+      : "Nenhuma música selecionada";
+
+    emptyDescription.textContent = english
+      ? "Choose a song from your library or import a track to get started."
+      : "Para começar, importe uma faixa ou selecione uma faixa em sua coleção de música.";
+
+    emptyAction.textContent = english
+      ? "Open library"
+      : "Abrir biblioteca";
+  }
+
+  function updateEmptyState(info = getCurrentTrackInfo()) {
+    const isEmpty = !info?.id;
+
+    empty.hidden = !isEmpty;
+
+    stage.classList.toggle(
+      "karaoke-no-track",
+      isEmpty
+    );
+
+    if (settingsOpen) settingsOpen.disabled = isEmpty;
+    if (cinemaOpen) cinemaOpen.disabled = isEmpty;
+
+    if (isEmpty && settings?.open) {
+      settings.close();
+    }
+  }
+
+  translateEmptyState();
+  updateEmptyState();
+
   const fmt = (s) => `${Math.floor(Math.max(0, s) / 60)}:${String(Math.floor(Math.max(0, s) % 60)).padStart(2, "0")}`;
   const message = () => { document.getElementById("karaokeWaveStatus").textContent = waveState ? t(waveState) : ""; };
   function renderSections() {
@@ -125,6 +200,7 @@ export function initKaraoke() {
     const token = ++request;
     controller?.abort(); controller = new AbortController();
     trackId = info?.id ?? null; duration = info?.duration || 0; peaks = []; lastSecond = -1;
+    updateEmptyState(info);
     renderSections();
     canvas.setAttribute("aria-valuemax", String(duration));
     canvas.setAttribute("aria-disabled", String(!duration));
@@ -208,5 +284,9 @@ export function initKaraoke() {
   new MutationObserver(availability).observe(app, { attributes: true, attributeFilter: ["class"] });
   availability();
   new ResizeObserver(() => { if (active) draw(transport()?.getCurrentTime?.() || 0); }).observe(canvas);
-  onLanguageChange(() => { message(); if (active) renderSections(); });
+  onLanguageChange(() => {
+    message();
+    translateEmptyState();
+    if (active) renderSections();
+  });
 }

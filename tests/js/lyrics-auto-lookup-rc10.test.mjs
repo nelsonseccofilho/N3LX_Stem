@@ -121,7 +121,7 @@ test("a previous empty answer also never triggers auto-search", async () => {
 
 const submitSource = extract(
   "async function submitManualLyricsSearch(event)",
-  "\n/**\n * The lyrics the server found",
+  "\nasync function serverLyrics(trackId)",
 );
 
 test("explicit search requires a button/form submission and never saves a match", async () => {

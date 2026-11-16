@@ -1021,6 +1021,81 @@ def _alias_stamped(match: dict[str, Any], query: LyricsQuery) -> dict[str, Any]:
     return match
 
 
+
+# Manual comparison deliberately has a wider search than the import-time
+# automatic match. "Ao Vivo" and "Acústico" distinguish recordings, not songs.
+# Never apply this relaxed rule to the automatic importer or saved-lyrics guard.
+_MANUAL_EDITION_SUFFIX = re.compile(
+    r"(?:\s*[-–—:]\s*|\s+|\s*[\[(]\s*)"
+    r"(?:ao\s+vivo|live|ac[uú]stic[oa]|acoustic|"
+    r"remaster(?:ed)?(?:\s+\d{4})?|studio(?:\s+version)?)"
+    r"\s*[\])]*\s*$",
+    re.IGNORECASE,
+)
+
+
+def _manual_song_title(title: str) -> str:
+    """Only remove recognizable trailing recording labels, not song words."""
+    title = str(title or "").strip()
+    for _ in range(2):
+        shortened = _MANUAL_EDITION_SUFFIX.sub("", title).strip()
+        if not shortened or shortened == title:
+            break
+        title = shortened
+    return title
+
+
+def lookup_manual_lyrics(
+    query: LyricsQuery,
+    *,
+    fetch_json: FetchJson | None = None,
+    cancelled: Callable[[], bool] = lambda: False,
+    budget: float | None = None,
+) -> list[dict[str, Any]]:
+    """User-requested LRCLIB candidates; never choose or save on their behalf.
+
+    A live recording can be registered under the unqualified song title and
+    vice versa. Search both forms and retain only the *same song and artist*,
+    deduplicating LRCLIB IDs. Duration is a ranking hint, not a hard filter.
+    """
+    if not query.artist.strip() or not query.track.strip():
+        return []
+    fetch_json = fetch_json or _fetch_json
+    deadline = time.monotonic() + (LYRICS_LOOKUP_BUDGET_SEC if budget is None else budget)
+    base = _manual_song_title(query.track)
+    titles = list(dict.fromkeys((query.track, base, f"{base} Ao Vivo")))
+    found: dict[int, dict[str, Any]] = {}
+
+    for title in titles:
+        if cancelled() or time.monotonic() > deadline:
+            break
+        rows = fetch_json("search", {"artist_name": query.artist, "track_name": title})
+        for match in rank_matches(rows, query.duration):
+            identifier = match["lrclib_id"]
+            if (
+                identifier not in found
+                and same_artist(match["artist"], [query.artist])
+                and same_song(_manual_song_title(match["track"]), base)
+            ):
+                found[identifier] = match
+
+    # Fuzzy search occasionally omits a known recording by artist/title.
+    # Only use broader search after the narrow queries found nothing; the
+    # same strict artist + base-song filter still applies to every candidate.
+    if not found and not cancelled() and time.monotonic() <= deadline:
+        rows = fetch_json("search", {"q": f"{query.artist} {base}"})
+        for match in rank_matches(rows, query.duration):
+            identifier = match["lrclib_id"]
+            if (
+                identifier not in found
+                and same_artist(match["artist"], [query.artist])
+                and same_song(_manual_song_title(match["track"]), base)
+            ):
+                found[identifier] = match
+
+    return _rank(list(found.values()), query.duration)[:LYRICS_OTHERS_MAX]
+
+
 def find_lyrics(
     query: LyricsQuery | None,
     *,

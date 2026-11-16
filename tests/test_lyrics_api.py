@@ -767,3 +767,83 @@ def test_manual_lookup_requires_both_names(client, payload):
     job = _done_job()
     response = client.post(f"/api/jobs/{job.id}/lyrics/lookup", json=payload)
     assert response.status_code == 422
+def test_manual_lookup_compares_live_and_acoustic_without_touching_saved_lyrics(client):
+    job = _done_job(has_lyrics=True, audio_tags=TAGS)
+    _lyrics_file(job).write_text(json.dumps(LYRICS), encoding="utf-8")
+    before = _lyrics_file(job).read_bytes()
+    rows = [
+        {
+            "id": 91,
+            "trackName": "Não Sei Viver Sem Ter Você (Ao Vivo)",
+            "artistName": "CPM 22",
+            "albumName": "Ao Vivo",
+            "duration": 234,
+            "instrumental": False,
+            "syncedLyrics": "[00:22.00]Não há mais desculpas",
+            "plainLyrics": "Não há mais desculpas",
+        },
+        {
+            "id": 92,
+            "trackName": "Não Sei Viver Sem Ter Você",
+            "artistName": "CPM 22",
+            "albumName": "Acústico",
+            "duration": 245,
+            "instrumental": False,
+            "syncedLyrics": "",
+            "plainLyrics": "Não há mais desculpas",
+        },
+        {
+            "id": 93,
+            "trackName": "Não Sei Viver Sem Ter Você",
+            "artistName": "Outra banda",
+            "albumName": "Outro",
+            "duration": 234,
+            "instrumental": False,
+            "syncedLyrics": "",
+            "plainLyrics": "Outra letra",
+        },
+        {
+            "id": 94,
+            "trackName": "Não Sei Viver Sem Ter Você Depois",
+            "artistName": "CPM 22",
+            "albumName": "Outro",
+            "duration": 234,
+            "instrumental": False,
+            "syncedLyrics": "",
+            "plainLyrics": "Outra letra",
+        },
+    ]
+    lrclib = Lrclib(rows)
+    with patch.object(ll, "_fetch_json", lrclib):
+        response = client.post(
+            f"/api/jobs/{job.id}/lyrics/lookup",
+            json={"artist": "CPM 22", "title": "Não Sei Viver Sem Ter Você Ao Vivo"},
+        )
+    assert response.status_code == 200
+    choices = response.json()["others"]
+    assert {v["lrclib_id"] for v in choices} == {91, 92}
+    assert len(choices) == 2  # duplicate search results are deduplicated
+    assert _lyrics_file(job).read_bytes() == before
+    assert lrclib.asked.count("search") >= 2
+
+
+def test_manual_lookup_plain_title_can_show_live_recordings(client):
+    job = _done_job()
+    rows = [{
+        "id": 91,
+        "trackName": "Não Sei Viver Sem Ter Você Ao Vivo",
+        "artistName": "CPM 22",
+        "albumName": "Ao Vivo",
+        "duration": 234,
+        "instrumental": False,
+        "syncedLyrics": "[00:22.00]Não há mais desculpas",
+        "plainLyrics": "Não há mais desculpas",
+    }]
+    with patch.object(ll, "_fetch_json", Lrclib(rows)):
+        response = client.post(
+            f"/api/jobs/{job.id}/lyrics/lookup",
+            json={"artist": "CPM 22", "title": "Não Sei Viver Sem Ter Você"},
+        )
+    assert response.status_code == 200
+    assert [v["lrclib_id"] for v in response.json()["others"]] == [91]
+    assert not _lyrics_file(job).exists()

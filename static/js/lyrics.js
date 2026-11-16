@@ -2093,7 +2093,7 @@ async function submitManualLyricsSearch(event) {
     const matches = fromServerLyrics(data)?.others || [];
     if (!matches.length) {
       status.textContent = t("lyrics.searchNoResults");
-      status.setAttribute?.("data-state", "error");
+      status.setAttribute?.("data-state", "empty");
       return;
     }
     showManualLookupChoices(matches);

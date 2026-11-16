@@ -813,7 +813,17 @@ def test_manual_lookup_compares_live_and_acoustic_without_touching_saved_lyrics(
             "plainLyrics": "Outra letra",
         },
     ]
-    lrclib = Lrclib(rows)
+    # Reproduce the real failure: LRCLIB does not find the "Ao Vivo" query,
+    # but does have two versions under the composition's plain title.
+    class OnlyBaseSearch:
+        def __init__(self):
+            self.asked = []
+
+        def __call__(self, endpoint, params):
+            self.asked.append((endpoint, params))
+            return rows if params.get("track_name") == "Não Sei Viver Sem Ter Você" else []
+
+    lrclib = OnlyBaseSearch()
     with patch.object(ll, "_fetch_json", lrclib):
         response = client.post(
             f"/api/jobs/{job.id}/lyrics/lookup",
@@ -824,7 +834,10 @@ def test_manual_lookup_compares_live_and_acoustic_without_touching_saved_lyrics(
     assert {v["lrclib_id"] for v in choices} == {91, 92}
     assert len(choices) == 2  # duplicate search results are deduplicated
     assert _lyrics_file(job).read_bytes() == before
-    assert lrclib.asked.count("search") >= 2
+    assert [params["track_name"] for _, params in lrclib.asked if "track_name" in params] == [
+        "Não Sei Viver Sem Ter Você Ao Vivo",
+        "Não Sei Viver Sem Ter Você",
+    ]
 
 
 def test_manual_lookup_plain_title_can_show_live_recordings(client):

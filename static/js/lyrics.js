@@ -2034,7 +2034,7 @@ function showManualLookupChoices(matches) {
     try {
       await keep(match, others);
       if (getCurrentTrackInfo()?.id !== trackId) return;
-      if (shownEntry?.lrclib_id !== match.lrclib_id) {
+      if (!shownEntry || (shownEntry.lrclib_id ?? shownEntry.id) !== (match.lrclib_id ?? match.id)) {
         const status = document.getElementById("lyricsSearchStatus");
         if (status) {
           status.textContent = t("lyrics.searchSelectionFailed");

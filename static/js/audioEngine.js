@@ -24,6 +24,7 @@ import {
 } from "./pitchBus.js";
 import { createPlaybackContext } from "./audioContext.js";
 import { createTickLoop } from "./tickLoop.js";
+import { clampStereoPan } from "./stereoPan.js";
 import { loadStretchWorklet, pipelineLatencySeconds as stretchLatency } from "./tempoStage.js";
 
 export function createAudioEngine(stems, { onTime, onEnded, context } = {}) {
@@ -152,12 +153,24 @@ export function createAudioEngine(stems, { onTime, onEnded, context } = {}) {
           const visualOnly = s.visualOnly === true;
           const pitchable = s.name !== "drums" && s.pitched !== false;
           const gain = ctx.createGain();
+          const panner = !visualOnly && typeof ctx.createStereoPanner === "function"
+            ? ctx.createStereoPanner() : null;
           const analyser = ctx.createAnalyser();
           analyser.fftSize = 1024;
-          if (!visualOnly) gain.connect(analyser);
+          // PAN belongs to each source before the shared pitch/tempo buses;
+          // this also preserves independent PAN for lanes sharing a pitch bus.
+          if (!visualOnly) {
+            if (panner) {
+              gain.connect(panner);
+              panner.connect(analyser);
+            } else {
+              gain.connect(analyser); // older Web Audio contexts: center-only
+            }
+          }
           const track = {
             buffer,
             gain,
+            panner,
             analyser,
             source: null,
             name: s.name,
@@ -351,6 +364,17 @@ export function createAudioEngine(stems, { onTime, onEnded, context } = {}) {
     }
   }
 
+  function setStemPan(name, value) {
+    const pan = clampStereoPan(value);
+    let applied = false;
+    for (const track of tracks.values()) {
+      if (track.visualOnly || track.controlName !== name || !track.panner) continue;
+      track.panner.pan.setTargetAtTime(pan, ctx.currentTime, 0.01);
+      applied = true;
+    }
+    return applied;
+  }
+
   // Ducking either side of a bus change. Both buses are delayed by the same
   // amount, so a dip scheduled at the source lands at the output as one short
   // dip rather than as a click from splicing two different keys together.
@@ -512,6 +536,8 @@ export function createAudioEngine(stems, { onTime, onEnded, context } = {}) {
       }
     },
     setGain,
+    setStemPan,
+    supportsStereoPan: () => typeof ctx.createStereoPanner === "function",
     setMasterGain,
     getAnalysers: (name) => [...tracks.values()]
       .filter((track) => !track.visualOnly && track.controlName === name)

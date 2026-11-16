@@ -15,6 +15,8 @@
 //
 // Graph: per-stem AudioBufferSourceNode -> GainNode -> masterGain -> SoundTouchNode -> destination
 
+import { clampStereoPan } from "./stereoPan.js";
+
 const CHUNK_SEC = 5;      // seconds of audio per chunk
 const LOOKAHEAD_SEC = 12; // schedule next chunk this far ahead of playhead
 // Extra headroom folded into a count-in's lead so every count click lands
@@ -288,13 +290,22 @@ export function createChunkedAudioEngine(stems, { onTime, onEnded, context } = {
     if (!s?.url || s.visualOnly) continue;
     const pitchable = s.name !== "drums" && s.pitched !== false;
     const gain = ctx.createGain();
+    const panner = typeof ctx.createStereoPanner === "function"
+      ? ctx.createStereoPanner() : null;
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 1024;
-    gain.connect(analyser);
+    // Keep stereo placement on each lane, before the shared pitch/tempo bus.
+    if (panner) {
+      gain.connect(panner);
+      panner.connect(analyser);
+    } else {
+      gain.connect(analyser); // legacy contexts remain centered
+    }
     const stem = {
       url: s.url,
       header: null,
       gain,
+      panner,
       analyser,
       activeNodes: [],
       name: s.name,
@@ -837,6 +848,17 @@ export function createChunkedAudioEngine(stems, { onTime, onEnded, context } = {
         }
       }
     },
+    setStemPan(name, value) {
+      const pan = clampStereoPan(value);
+      let applied = false;
+      for (const stem of stemMap.values()) {
+        if (stem.controlName !== name || !stem.panner) continue;
+        stem.panner.pan.setTargetAtTime(pan, ctx.currentTime, 0.01);
+        applied = true;
+      }
+      return applied;
+    },
+    supportsStereoPan: () => typeof ctx.createStereoPanner === "function",
     setMasterGain(v) {
       master.gain.setTargetAtTime(Math.max(0, v), ctx.currentTime, 0.01);
     },

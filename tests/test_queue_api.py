@@ -111,6 +111,7 @@ def test_payload_is_compact(client):
         "progress",
         "progress_indeterminate",
         "processing",
+        "separation_profile",
         "stage",
         "title",
         "thumbnail",

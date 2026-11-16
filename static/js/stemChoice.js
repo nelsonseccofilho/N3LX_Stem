@@ -31,7 +31,7 @@ import { STEM_NAMES, defaultSeparationProfile } from "./constants.js";
 export function refreshStemChoiceVisuals() {
   const complete = defaultSeparationProfile === "complete";
   const badge = document.getElementById("separationProfileBadge");
-  if (badge) { badge.textContent = complete ? "Completo · até 15 pistas" : "Básico · 6 grupos"; badge.hidden = false; }
+  if (badge) { badge.textContent = complete ? "Completo · até 18 pistas" : "Básico · 6 grupos"; badge.hidden = false; }
   const allBtn = document.getElementById("stemAllBtn");
   if (allBtn) allBtn.disabled = complete;
   for (const btn of document.querySelectorAll(".stem-choice[data-stem]")) {
@@ -75,7 +75,7 @@ export function refreshStemChoiceVisuals() {
     btn.disabled = complete;
     btn.setAttribute(
       "aria-pressed",
-      String(hasVocals && btn.dataset.mode === (complete ? "split" : vocalSplitMode)),
+      String(hasVocals && btn.dataset.mode === (complete ? "combined" : vocalSplitMode)),
     );
   }
 }

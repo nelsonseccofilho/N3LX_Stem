@@ -17,7 +17,7 @@ def test_steps_count_completed_work_without_inventing_a_percent():
     begin_step(job, "prepare")
     begin_step(job, "analyze")
     value = snapshot(job)
-    assert value["step_number"] == 2 and value["total_steps"] == 7
+    assert value["step_number"] == 2 and value["total_steps"] == 6
     assert value["fraction"] is None and value["completed_steps"] == 1
     assert job.to_queue_state()["processing"]["step"] == "analyze"
     assert job.progress_indeterminate
@@ -28,9 +28,9 @@ def test_steps_count_completed_work_without_inventing_a_percent():
 
 def test_warning_cancel_and_finished_states_remain_truthful():
     job = Job(id="abcdef123456", separation_profile="complete", status="separating")
-    begin_step(job, "vocals")
-    warn_step(job)
     begin_step(job, "drums")
+    warn_step(job)
+    begin_step(job, "reconstruct")
     _set(job, status="cancelled")
     value = snapshot(job)
     assert value["steps"][3]["state"] == "warning"
@@ -99,3 +99,54 @@ def test_streamed_child_progress_and_timeout_are_observable():
     assert result.returncode == 0 and snapshot(job)["fraction"] == 0.5
     with pytest.raises(subprocess.TimeoutExpired):
         run_progress_worker(job, [sys.executable, "-c", "import time; time.sleep(10)"], 0.05)
+
+
+def test_old_extraction_keeps_seven_steps_and_new_pipeline_exposes_guitar_device():
+    # Old persisted jobs remain readable using the historic seven-step plan.
+    old = Job(
+        id="abcdef123456", status="done", separation_profile="complete",
+        processing={"step": "finalize", "started_at": 1, "step_started_at": 2},
+    )
+    old_state = snapshot(old)
+    assert old_state is not None
+    assert old_state["total_steps"] == 7
+    assert "guitars" not in [s["id"] for s in old_state["steps"]]
+
+    # New jobs no longer launch an automatic guitar or vocal pass.
+    job = Job(id="abcdef123456", status="separating", separation_profile="complete")
+    begin_step(job, "prepare")
+    begin_step(job, "drums")
+    state = snapshot(job)
+    assert state is not None
+    assert state["step"] == "drums"
+    assert [s["id"] for s in state["steps"]] == [
+        "prepare", "analyze", "separate", "drums", "reconstruct", "finalize",
+    ]
+    assert state["fraction"] is None
+
+
+def test_saved_eight_step_plan_keeps_its_original_order():
+    from app.core.processing_progress import PREVIOUS_COMPLETE_STEPS
+
+    job = Job(
+        id="abcdef123456", status="done", separation_profile="complete",
+        processing={
+            "step": "finalize", "plan": list(PREVIOUS_COMPLETE_STEPS),
+            "started_at": 1, "step_started_at": 2,
+        },
+    )
+    restored = Job.from_record(job.to_record())
+    historical = snapshot(restored)
+    assert historical is not None
+    assert [s["id"] for s in historical["steps"]] == list(PREVIOUS_COMPLETE_STEPS)
+    assert historical["completed_steps"] == 8
+
+    # A *new processing attempt* starts with today's six-step plan; the saved
+    # historical record above was verified before the reset.
+    begin_step(restored, "prepare")
+    restarted = snapshot(restored)
+    assert restarted is not None
+    assert [s["id"] for s in restarted["steps"]] == [
+        "prepare", "analyze", "separate", "drums", "reconstruct", "finalize",
+    ]
+    assert restarted["total_steps"] == 6

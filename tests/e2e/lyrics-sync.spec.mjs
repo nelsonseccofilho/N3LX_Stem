@@ -131,7 +131,7 @@ async function setUp(page, { server = version(), saved = null, retime = [], reti
           sessionStorage.setItem("e2e-seeded-lyrics", "1");
         }
       },
-      [`stemdeck.lyrics.${JOB_ID}`, saved],
+      [`stemdeck:lyrics:${JOB_ID}`, saved],
     );
   }
   await page.setViewportSize({ width: 1600, height: 900 });
@@ -169,7 +169,7 @@ const seek = (page, seconds) =>
 const playhead = (page) =>
   page.evaluate(async () => (await import("/js/transport.js")).transport()?.getCurrentTime?.() ?? 0);
 const stored = (page) =>
-  page.evaluate((id) => JSON.parse(localStorage.getItem(`stemdeck.lyrics.${id}`) || "null"), JOB_ID);
+  page.evaluate((id) => JSON.parse(localStorage.getItem(`stemdeck:lyrics:${id}`) || "null"), JOB_ID);
 
 /** Press `key` as a tap, returning the playhead just before and just after. */
 async function tapAt(page, key) {

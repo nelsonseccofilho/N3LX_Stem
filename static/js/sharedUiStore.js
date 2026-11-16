@@ -4,9 +4,34 @@ const allowed = (key) => keys.has(key) || /^stemdeck:(mix|lyrics):[a-zA-Z0-9_-]{
 let loading;
 let values;
 
+// Keep failed/unacknowledged writes across reloads. A temporary startup
+// timeout must never make an older server snapshot replace local edits.
+const pendingKey = "stemdeck.pending-ui-writes.v1";
+let writeChain = Promise.resolve();
+const latestTokens = new Map();
+function pendingWrites() {
+  try { return JSON.parse(localStorage.getItem(pendingKey) || "{}"); }
+  catch { return {}; }
+}
+function putPending(pending) { localStorage.setItem(pendingKey, JSON.stringify(pending)); }
+function send(key, entry) {
+  const task = writeChain.catch(() => {}).then(async () => {
+    const latest = latestTokens.get(key) || pendingWrites()[key]?.token;
+    if (latest && latest !== entry.token) return;
+    latestTokens.set(key, entry.token);
+    const response = await fetch("/api/ui-store", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({values:{[key]:entry.value}}), signal:AbortSignal.timeout(10000) });
+    if (!response.ok) throw new Error("Could not save local preferences");
+    const pending = pendingWrites();
+    if (pending[key]?.token === entry.token) { delete pending[key]; putPending(pending); }
+  });
+  writeChain = task;
+  return task;
+}
+
 async function load() {
   if (loading) return loading;
   loading = (async () => {
+    let completed = false;
     try {
       const response = await fetch("/api/ui-store", { signal: AbortSignal.timeout(5000) });
       if (!response.ok) return null;
@@ -28,8 +53,15 @@ async function load() {
         }
         if (migration) { url.searchParams.delete("migrate-ui"); history.replaceState(null, "", url); }
       }
+      for (const [key, entry] of Object.entries(pendingWrites())) {
+        if (!allowed(key) || !entry || !Object.hasOwn(entry, "value")) continue;
+        values[key] = structuredClone(entry.value);
+        try { await send(key, entry); } catch (error) { console.warn("[preferences] pending write retained", error); }
+      }
+      completed = true;
       return values;
     } catch (error) { console.warn("[preferences] local fallback", error); return null; }
+    finally { if (!completed) loading = null; }
   })();
   return loading;
 }
@@ -37,11 +69,19 @@ async function load() {
 export async function sharedGet(key) {
   if (!allowed(key)) return undefined;
   const store = await load();
+  const pending = pendingWrites()[key];
+  if (pending && Object.hasOwn(pending, "value")) return structuredClone(pending.value);
   return store && Object.hasOwn(store, key) ? structuredClone(store[key]) : undefined;
 }
 export async function sharedSet(key, value) {
-  if (!allowed(key) || !(await load())) return;
-  values[key] = structuredClone(value);
-  const response = await fetch("/api/ui-store", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({values:{[key]:value}}) });
-  if (!response.ok) throw new Error("Could not save local preferences");
+  if (!allowed(key)) return;
+  const entry = { value: structuredClone(value), token: `${Date.now()}-${Math.random()}` };
+  latestTokens.set(key, entry.token);
+  const pending = pendingWrites(); pending[key] = entry; putPending(pending);
+  await load();
+  values ||= {};
+  if (latestTokens.get(key) === entry.token) values[key] = structuredClone(value);
+  // Write even if the initial GET failed; the durable journal is removed only
+  // after acknowledgement of this exact version, never an older one.
+  await send(key, entry);
 }

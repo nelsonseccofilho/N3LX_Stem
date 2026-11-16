@@ -212,6 +212,17 @@ def _validate_stem_path(job_id: str, name: str):
     path = (JOBS_DIR / job_id / "stems" / f"{name}.wav").resolve()
     if not path.is_file() or not path.is_relative_to(JOBS_DIR.resolve()):
         raise HTTPException(status_code=404, detail="stem not found")
+    # A partially published recovery pair is never downloadable. The complete
+    # studio.json is the atomic commit record for both refined outputs.
+    if name in ("drum_recovery", "residual_drums_refined"):
+        refined = {"drum_recovery", "residual_drums_refined"}
+        layout = read_layout(JOBS_DIR / job_id) or {}
+        published = set(layout.get("active_names", []))
+        if not refined <= published or not all(
+            (JOBS_DIR / job_id / "stems" / f"{lane}.wav").is_file()
+            for lane in refined
+        ):
+            raise HTTPException(status_code=404, detail="refined drum lanes not published")
     return path
 
 
@@ -467,7 +478,7 @@ def effective_pitch(name: str, semitones: int) -> int:
     refuses this too, so honouring a drums pitch here would export something the
     studio will not play.
     """
-    if name in ("drums", "residual_drums", "residual_mix") or name in DRUM_STEMS:
+    if name in ("drums", "residual_drums", "residual_mix", "drum_recovery", "residual_drums_refined") or name in DRUM_STEMS:
         return 0
     return max(PITCH_MIN, min(PITCH_MAX, int(semitones)))
 
@@ -533,6 +544,21 @@ def _parse_lane_gains(stems: str, gains: str) -> tuple[list[str], list[float]]:
         raise HTTPException(
             status_code=422, detail="drums cannot be combined with its detailed lanes"
         )
+    if "guitar" in names and {
+        "guitar_lead",
+        "guitar_acoustic",
+        "guitar_rhythm",
+        "residual_guitar",
+    } & set(names):
+        raise HTTPException(
+            status_code=422, detail="guitar cannot be combined with its estimated lanes"
+        )
+    requested = set(names)
+    refined = {"drum_recovery", "residual_drums_refined"}
+    if "drums" in requested and requested & refined:
+        raise HTTPException(status_code=422, detail="drums cannot be combined with refined drum lanes")
+    if "residual_drums" in requested and requested & refined:
+        raise HTTPException(status_code=422, detail="original drum residual overlaps refined lanes")
     if "reaper_master" in names and len(names) > 1:
         raise HTTPException(status_code=422, detail="master reference must play on its own")
     return names, parsed_gains
@@ -578,6 +604,11 @@ def _expand_render_lanes(
     percussion = (read_layout(JOBS_DIR / job_id) or {}).get("percussion_names", [])
     if set(DRUM_STEMS) <= selected:
         selected.add("drums")
+    detailed_guitar = "residual_guitar" in selected and bool(
+        {"guitar_lead", "guitar_acoustic", "guitar_rhythm"} & selected
+    )
+    if detailed_guitar:
+        selected.add("guitar")
     for name, gain, pitch in zip(names, gains, pitches, strict=True):
         if name in percussion:
             pitch = 0
@@ -587,11 +618,13 @@ def _expand_render_lanes(
         # components when transposed, so the same URL was valid or not
         # depending on the pitch attached to it.
         path = _validate_stem_path(job_id, name)
-        if name != "original" or pitch == 0:
+        if name != "original" or (pitch == 0 and not detailed_guitar):
             lanes.append(_RenderLane(path, gain, pitch))
             continue
 
         components = [n for n in STEM_NAMES if n not in selected]
+        if not components:
+            continue
         # Deliberately not `path`: that name holds the validated "original.wav"
         # this lane falls back to, and reusing it here left the fallback
         # pointing at whichever component was tried last.
@@ -1493,11 +1526,46 @@ async def get_all_stems_zip(
                 detail="vocals cannot be combined with lead_vocals/backing_vocals (same signal)",
             )
         wanted = [name for name in all_names if name in requested]
+        if (
+            "guitar" in requested
+            and {"guitar_lead", "guitar_acoustic", "guitar_rhythm", "residual_guitar"} & requested
+        ):
+            raise HTTPException(
+                status_code=422, detail="guitar cannot be combined with its estimated lanes"
+            )
     else:
         wanted = list(all_names)
         layout = read_layout(JOBS_DIR / job_id) or {}
         if layout.get("profile") == "complete" and layout.get("active_names"):
             wanted = layout["active_names"]
+
+    # Default ZIPs for old/standard jobs retain their historical behavior.
+    # Only explicitly selected lanes or an active complete layout need pair checks.
+    layout_for_zip = read_layout(JOBS_DIR / job_id) or {}
+    if stems:
+        selected_for_zip = set(wanted)
+    elif layout_for_zip.get("profile") == "complete":
+        selected_for_zip = set(layout_for_zip.get("active_names", []))
+    else:
+        selected_for_zip = set()
+    refined = {"drum_recovery", "residual_drums_refined"}
+    # Old jobs and basic jobs with no complete-layout commit must not expose
+    # orphaned new files through the default "all" archive.
+    if not stems and not (
+        layout_for_zip.get("profile") == "complete"
+        and layout_for_zip.get("active_names")
+    ):
+        wanted = [name for name in wanted if name not in refined]
+    if selected_for_zip & refined:
+        published = set(layout_for_zip.get("active_names", []))
+        if not refined <= published or not all(
+            (JOBS_DIR / job_id / "stems" / f"{n}.wav").is_file() for n in refined
+        ):
+            raise HTTPException(status_code=404, detail="refined drum lanes not published")
+    if "residual_drums" in selected_for_zip and selected_for_zip & refined:
+        raise HTTPException(status_code=422, detail="old and refined drum residual overlap")
+    if "drums" in selected_for_zip and selected_for_zip & (set(DRUM_STEMS) | refined):
+        raise HTTPException(status_code=422, detail="drums overlap detailed drum lanes")
 
     jobs_root = JOBS_DIR.resolve()
     stems_dir = (JOBS_DIR / job_id / "stems").resolve()

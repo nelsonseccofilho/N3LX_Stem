@@ -45,6 +45,9 @@ export function buildPlaybackStems(rawStems, visibleStems, baseStemNames) {
   }
 
   if (DRUM_STEMS.every((n) => dedicatedNames.has(n))) dedicatedNames.add("drums");
+  if (dedicatedNames.has("residual_guitar") && [...dedicatedNames].some(name => name.startsWith("guitar_"))) {
+    dedicatedNames.add("guitar");
+  }
 
   const complementNames = baseStemNames.filter((name) => !dedicatedNames.has(name));
   if (complementNames.length === 0) return result;

@@ -120,20 +120,21 @@ async function lyricsShown(page) {
 }
 
 const stored = (page) =>
-  page.evaluate((id) => JSON.parse(localStorage.getItem(`stemdeck.lyrics.${id}`) || "null"), JOB_ID);
+  page.evaluate((id) => JSON.parse(localStorage.getItem(`stemdeck:lyrics:${id}`) || "null"), JOB_ID);
 
 test.describe("lyrics tab", () => {
-  test("the rail button swaps the library list for the lyrics panel, which has no search box", async ({ page }) => {
+  test("the lyrics rail opens karaoke while retaining library navigation", async ({ page }) => {
     await stubLrclib(page);
     await seedLibrary(page);
     await open(page);
     await showLyricsTab(page);
     await expect(page.locator("#lyricsPanel")).toBeVisible();
-    await expect(page.locator("#catalogList")).toBeHidden();
+    await expect(page.locator("#catalogList")).toBeVisible();
     await expect(page.locator(".rail-lyrics")).toHaveAttribute("aria-pressed", "true");
     await expect(page.locator("#lyricsPanel input, #lyricsPanel form")).toHaveCount(0);
 
     await page.locator(".rail-library").click();
+    await page.getByRole("tab", { name: "Waveforms", exact: true }).click();
     await expect(page.locator("#lyricsPanel")).toBeHidden();
     await expect(page.locator("#catalogList")).toBeVisible();
   });
@@ -447,7 +448,7 @@ test.describe("lyrics kept before a lookup was held to the track", () => {
     // Kept by an older tab from a fuzzy search: NIHIL "Barro" once got
     // Renato Vianna's "Joao de Barro".
     await page.addInitScript((id) => {
-      localStorage.setItem(`stemdeck.lyrics.${id}`, JSON.stringify({
+      localStorage.setItem(`stemdeck:lyrics:${id}`, JSON.stringify({
         entry: { v: 1, source: "lrclib", id: 9, track: "Another Song", artist: "Someone Else", album: "", duration: 6, instrumental: false, synced: "[00:00.50]Not this song", plain: "" },
         others: [],
       }));

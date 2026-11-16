@@ -14,7 +14,13 @@ DETAIL_LABELS = dict(
 DETAIL_LABELS.update(
     residual_mix="Resíduo da separação",
     residual_drums="Resíduo da bateria",
+    drum_recovery="Recuperação seletiva da bateria",
+    residual_drums_refined="Resíduo restante da bateria",
     residual_vocals="Resíduo vocal",
+    guitar_lead="Guitarra solo estimada",
+    guitar_acoustic="Violão estimado",
+    guitar_rhythm="Guitarra base estimada",
+    residual_guitar="Outras guitarras / sobras",
 )
 STUDIO_NAMES = (*DETAIL_LABELS, *(f"studio_{n:02}" for n in range(1, 33)), "reaper_master")
 STUDIO_LABELS = {

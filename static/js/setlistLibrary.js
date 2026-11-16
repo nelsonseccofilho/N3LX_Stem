@@ -1,9 +1,12 @@
+import { clampStereoPan } from "./stereoPan.js";
+
 const validId = value => typeof value === "string" && /^[a-zA-Z0-9_-]{1,80}$/.test(value);
 export function copyMix(mix) {
   return Object.fromEntries(Object.entries(mix || {}).filter(([name]) => validId(name)).map(([name, value]) => [name, {
     volume: Number.isFinite(value?.volume) ? Math.max(0, Math.min(2, value.volume)) : 1,
     muted: value?.muted === true, soloed: value?.soloed === true,
     pitch: Number.isFinite(value?.pitch) ? Math.max(-6, Math.min(6, Math.round(value.pitch))) : 0,
+    pan: clampStereoPan(value?.pan),
   }]));
 }
 export function newPlaylist(id, name, source = null) {
@@ -22,4 +25,13 @@ export function normalizeSetlists(saved, makeId) {
 }
 export function applyMixToPlaylist(playlist, mix) {
   for (const entry of playlist.entries) entry.mix = copyMix(mix);
+}
+
+// Removing a playlist never touches library songs or another playlist's mixes.
+export function removePlaylist(library, id, makeId) {
+  if (!library.playlists.some(playlist => playlist.id === id)) return false;
+  library.playlists = library.playlists.filter(playlist => playlist.id !== id);
+  if (!library.playlists.length) library.playlists.push(newPlaylist(makeId(), "Playlist 1"));
+  if (library.selectedId === id) library.selectedId = library.playlists[0].id;
+  return true;
 }

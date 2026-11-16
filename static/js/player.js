@@ -22,7 +22,7 @@ import {
   setLoopEnabled, setLoopStart, setLoopEnd, setMasterVolume,
   waveScroll, selectedStems,
   footerTitle, footerMeta, footerThumb,
-  setFooterWaveDrawFn, setOverviewRerenderFn, autoSectionsResetFn,
+  setFooterWaveDrawFn, setOverviewRerenderFn,
   metronome, setMetronome, metronomeEnabled, metronomeVolume, metronomeBeatsPerBar,
   metronomeCountInBars, metronomeGrouping,
   exportClickEl, exportClickWrap, exportCountInEl, exportCountInWrap,
@@ -39,7 +39,7 @@ import { initBeatGrid, destroyBeatGrid } from "./beatgrid.js";
 import { setBeatGridAvailable, syncBeatGridButtons } from "./beatgridUi.js";
 import {
   loadMixIntoState, resetMixerState, refreshMixerVisuals,
-  setLaneControlsEnabled, ensureMixerStateDefaults, applyMix,
+  setLaneControlsEnabled, setLanePanAvailability, ensureMixerStateDefaults, applyMix,
   renderRealMiniWave, renderRealMiniWaveFromPeaks, renderMixerRow,
   applyAllLanePitches, setLaneKeysAvailable,
 } from "./mixer.js";
@@ -54,6 +54,7 @@ import { stopVuLoop } from "./audio.js";
 import { destroySections } from "./sections.js";
 import { t, plural, onLanguageChange } from "./i18n.js";
 import { paintNowPlayingArt } from "./formatIcon.js";
+import { clearProcessingStudio, isProcessingStudio } from "./processingStudio.js";
 
 // Playback-engine selection. All engines play decoded AudioBuffers off a single
 // AudioContext clock (no N streaming <audio> elements — that was the source of
@@ -826,6 +827,9 @@ function hideNowPlayingArtist() {
 }
 
 export function destroyPlayer() {
+  clearProcessingStudio();
+  visualRenderToken += 1;
+  setCurrentJobId(null);
   document.querySelector(".app")?.classList.remove("is-import");
   document.querySelector(".app")?.classList.remove("engine-waveforms");
   document.querySelector(".app")?.classList.add("no-track");
@@ -992,6 +996,7 @@ export function renderEmptyShell() {
 // is loaded needs an explicit re-render. Guarded on "no-track" so this never
 // clobbers a real, already-loaded track's mixer with the empty shell.
 onLanguageChange(() => {
+  if (isProcessingStudio()) return;
   if (document.querySelector(".app")?.classList.contains("no-track")) renderEmptyShell();
   else renderAvailableLanes(_availableLaneState.stems, _availableLaneState.layout);
 });
@@ -1132,6 +1137,7 @@ function _applyLaneHeight(count) {
 }
 
 export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, title = "", peaksPromise = null, hasVideo = false, videoStatus = null, studioLayout = null, mixContext = null) {
+  clearProcessingStudio();
   document.dispatchEvent(new CustomEvent("playbackloading", { detail: { jobId } }));
   applyStudioLayout(studioLayout);
   mixerEl.replaceChildren();
@@ -1172,16 +1178,13 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
   const mixReady = loadMixIntoState(jobId, stems.map((s) => s.name), mixContext)
     .then(() => { if (currentJobId === jobId) refreshMixerVisuals(); })
     .catch((e) => { console.warn("[player] mix state load failed:", e); });
+  setLanePanAvailability(false); // until the playback engine loads
   setLaneControlsEnabled(true);
   setLoopEnabled(false);
   setLoopStart(0);
   setLoopEnd(0);
   loopBtn.classList.remove("active");
   loopRegionEl.classList.add("hidden");
-  // Loading a song is the end of whatever the structure toggle was asked to do
-  // for the last one. It costs minutes of CPU per import, so it goes back to
-  // off rather than quietly staying on for the next track.
-  autoSectionsResetFn?.();
   // After the loop is cleared, never before: resetWaveZoom redraws the loop
   // region, so running it first would paint the previous track's loop against
   // this track's duration for a frame. A new track also starts fitted -- the
@@ -1409,6 +1412,7 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
   };
 
   mt.once("canplay", () => {
+    if (token !== visualRenderToken || multitrack !== mt || currentJobId !== jobId) return;
     setWaveformLoading(false);
     const ctx = mt.audioContext;
     console.debug(
@@ -1601,6 +1605,7 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
           resolvePlaybackSuccess(jobId);
           eng.setLoop(loopEnabled, loopStart, loopEnd);
           updatePitchAvailability(eng.supportsPitchShift?.() === true);
+          setLanePanAvailability(eng.supportsStereoPan?.() === true);
           applyMix(); // push per-stem gains (incl. >1.0 boost) into the engine
           // Lane keys ride on the same engine, so they are restored from the
           // per-track store in the same breath as the gains.

@@ -383,6 +383,9 @@ class Job:
             in {
                 "Separating lead and backing vocals...",
                 "Separating six drum pieces (CPU)...",
+                "Separating six drum pieces (AMD GPU)...",
+                "Preparing six drum pieces...",
+                "Refining guitars (AMD GPU)...",
                 "Preserving reconstruction residues...",
             }
         )
@@ -444,6 +447,7 @@ class Job:
         from app.core.processing_progress import snapshot
 
         return {
+            "separation_profile": self.separation_profile,
             "processing": snapshot(self),
             "job_id": self.id,
             "status": self.status,

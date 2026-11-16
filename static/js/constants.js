@@ -22,7 +22,7 @@ export function setDefaultSeparationProfile(profile) {
 let importedPercussion = [];
 export const DRUM_STEMS = ["drum_kick", "drum_snare", "drum_toms", "drum_hh", "drum_ride", "drum_crash"];
 export function applyStudioLayout(layout) { importedLabels = layout?.labels || {}; importedActiveNames = layout?.profile === "complete" ? (layout.active_names || []) : []; importedPercussion = layout?.percussion_names || []; }
-export function isPercussion(name) { return name === "drums" || name === "residual_drums" || name === "residual_mix" || DRUM_STEMS.includes(name) || importedPercussion.includes(name); }
+export function isPercussion(name) { if (name === "residual_mix") return false; return name === "drums" || name === "residual_drums" || name === "residual_mix" || name === "drum_recovery" || name === "residual_drums_refined" || DRUM_STEMS.includes(name) || importedPercussion.includes(name); }
 export async function syncStemNamesFromAPI() {
   try {
     const res = await fetch("/api/config");
@@ -50,12 +50,12 @@ export async function syncStemNamesFromAPI() {
 export const STEM_GROUPS = [
   { id: "voices", names: ["vocals", "lead_vocals", "backing_vocals"] },
   { id: "vocalResidual", names: ["residual_vocals"] },
-  { id: "strings", names: ["bass", "guitar"] },
+  { id: "strings", names: ["bass", "guitar", "guitar_rhythm", "guitar_lead", "guitar_acoustic", "residual_guitar"] },
   { id: "keys", names: ["piano"] },
   { id: "other", names: ["other"] },
   { id: "separationResidual", names: ["residual_mix"] },
   { id: "drums", names: ["drums", ...DRUM_STEMS] },
-  { id: "drumResidual", names: ["residual_drums"] },
+  { id: "drumResidual", names: ["residual_drums", "drum_recovery", "residual_drums_refined"] },
 ];
 
 export function stemLaneGroups(names) {
@@ -115,6 +115,10 @@ export const STEM_COLORS = {
   drums: "#e89048",
   bass: "#e8b848",
   guitar: "#88d878",
+  guitar_rhythm: "#88d878",
+  guitar_lead: "#aedb69",
+  guitar_acoustic: "#c6b87b",
+  residual_guitar: "#88a8c8",
   piano: "#b88fe8",
   other: "#88a8c8",
   original: "#a8b0bd",

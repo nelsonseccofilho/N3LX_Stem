@@ -81,6 +81,8 @@ check(
 const clearBtn = {
   hidden: true,
   dataset: {},
+  attributes: {},
+  setAttribute(name, value) { this.attributes[name] = value; },
   classList: {
     toggle(_name, force) {
       clearBtn.hidden = force;

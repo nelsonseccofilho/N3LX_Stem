@@ -2,9 +2,10 @@ import { initSetlist, renderSetlistPanel } from "./setlist.js";
 import { setDefaultSeparationProfile, defaultSeparationProfile } from "./constants.js";
 // catalog.js — library panel: folders, tracks, collapse, drag-and-drop
 import { STEM_NAMES } from "./constants.js";
-import { wireUpAudio, updateFooterTrack } from "./player.js";
+import { wireUpAudio, updateFooterTrack, destroyPlayer, renderEmptyShell } from "./player.js";
+import { PROCESSING_STATUSES, showProcessingStudio, updateProcessingStudio, isProcessingStudio } from "./processingStudio.js";
 import { initSections } from "./sections.js";
-import { audioEngine, bpmChip, foregroundJobId, keyChip, multitrack, saveSelectedStems, selectedStems, titleEl } from "./state.js";
+import { audioEngine, bpmChip, foregroundJobId, keyChip, multitrack, saveSelectedStems, selectedStems, titleEl, setCurrentJobId } from "./state.js";
 import { refreshStemChoiceVisuals } from "./stemChoice.js";
 import { trackFormat, formatIconSvg, paintNowPlayingArt } from "./formatIcon.js";
 import { formatKey } from "./keyLabel.js";
@@ -60,7 +61,6 @@ const TRASH_HOLD_MS = 1000;
 const TRASH_ID = "trash";
 // The default landing folder for unorganized tracks — protected from deletion.
 const UNSORTED_ID = "f-unsorted";
-const PROCESSING_STATUSES = new Set(["queued", "downloading", "analyzing", "separating", "processing"]);
 
 // One trash can for every "throw this away" button: the library rows and the
 // queue rows (#748), so the queue's cancel reads as the same action.
@@ -131,6 +131,18 @@ function normalizeSource(value) {
 
 function normalizeSearch(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+// Keep pending metadata for queue ownership and folder placement, but only
+// completed extractions belong in the library. Missing files from an earlier
+// extraction remain visible so the existing restore flow still works.
+function isLibraryTrack(track) {
+  return !!track && (track.status === "done" || track.status === "unavailable"
+    || (!track.status && !!track.audioStems?.length));
+}
+
+function libraryFolderItems(folder) {
+  return folder.items.filter((id) => isLibraryTrack(tracks[id]));
 }
 
 function trackMatchesSearch(track) {
@@ -243,7 +255,7 @@ async function loadState() {
 
 function saveState() {
   ensureTrash();
-  storeSet(STORAGE_KEY, { v: STORAGE_VERSION, folders, tracks }).catch((e) =>
+  return storeSet(STORAGE_KEY, { v: STORAGE_VERSION, folders, tracks }).catch((e) =>
     console.warn("[catalog] failed to save state:", e)
   );
 }
@@ -849,7 +861,7 @@ function moveTrackToTrash(trackId) {
   render();
 }
 
-function setCatalogView(view) {
+export function setCatalogView(view) {
   catalogView = ["trash", "favorites", "queue", "lyrics", "setlist"].includes(view) ? view : "library";
   // Switching to Trash, Favourites, Queue or Lyrics is a request to look at
   // the sidebar, so a collapsed one comes back. Through the shared helper, or
@@ -857,6 +869,7 @@ function setCatalogView(view) {
   // shut.
   if (catalogView !== "library") setSidebarCollapsed(false);
   if (catalogView !== "trash") clearTrashSelection();
+  if (catalogView === "queue") selectQueuedTrack();
   render();
   // The lyrics panel (lyrics.js) draws itself; this is how it learns it is on
   // screen, without catalog.js importing it.
@@ -892,11 +905,20 @@ function reimportUnavailableTrack(trackId, track) {
   showError(i18nT("track.audioUnavailableError"));
 }
 
+export async function reloadCurrentTrack(trackId, mixContext = null) {
+  if (trackId !== _currentTrackId) return false;
+  return loadTrackIntoStudio(trackId, { source: mixContext ? "setlist-edit" : "guitar-detail", mixContext });
+}
+
 async function loadTrackIntoStudio(trackId, { source = "library", signal = null, mixContext = null } = {}) {
   if (signal?.aborted) return false;
-  document.dispatchEvent(new CustomEvent("trackwillopen", { detail: { jobId: trackId, source } }));
   let track = tracks[trackId];
   if (!track) return;
+  if (PROCESSING_STATUSES.has(track.status)) {
+    if (!source.startsWith("setlist")) activateProcessingTrack(trackId);
+    return false;
+  }
+  document.dispatchEvent(new CustomEvent("trackwillopen", { detail: { jobId: trackId, source } }));
   if (track.status === "unavailable") {
     if (source.startsWith("setlist")) return false;
     reimportUnavailableTrack(trackId, track);
@@ -949,7 +971,10 @@ async function loadTrackIntoStudio(trackId, { source = "library", signal = null,
   // A reprocessing track may still carry the previous extraction's stems
   // (hadStoredAudio), but it isn't ready — loading it would replace the live
   // job-progress overlay with stale audio. Leave the progress UI in place.
-  if (PROCESSING_STATUSES.has(track.status)) return;
+  if (PROCESSING_STATUSES.has(track.status)) {
+    if (!source.startsWith("setlist")) activateProcessingTrack(trackId);
+    return false;
+  }
   if (!track.audioStems?.length) return;
   if (track.status !== "done" && !hadStoredAudio) return;
   applyStoredStemSelection(track);
@@ -1069,7 +1094,7 @@ export function addPlaylistToLibrary(playlistTitle, jobs) {
     folders.unshift(folder);
   }
 
-  for (const job of jobs) {
+  for (const [index, job] of jobs.entries()) {
     if (!folder.items.includes(job.job_id)) folder.items.push(job.job_id);
     addTrackToLibrary({
       id: job.job_id,
@@ -1087,6 +1112,7 @@ export function addPlaylistToLibrary(playlistTitle, jobs) {
       peakDb: null,
       sourceUrl: job.source_url,
     });
+    armAutoOpen(job.job_id, { activate: index === 0 });
   }
   folder.collapsed = false;
   saveState();
@@ -1301,16 +1327,57 @@ function endDrag(itemEl) {
 function dropOnFolder(folderId, trackId) {
   const id = trackId ?? dragId;
   if (!id) return;
+  const target = folders.find(f => f.id === folderId && f.id !== TRASH_ID);
+  if (!target) return;
   // Remove from current folder
   for (const f of folders) {
     const idx = f.items.indexOf(id);
     if (idx !== -1) { f.items.splice(idx, 1); break; }
   }
   // Add to target folder
-  const target = folders.find((f) => f.id === folderId);
   if (target && !target.items.includes(id)) target.items.push(id);
   saveState();
   render();
+}
+
+export function getSongOrganization() {
+  const id = _currentTrackId, track = tracks[id];
+  const ready = Boolean(track?.status === "done" && track.audioStems?.length && !getTrashFolder()?.items.includes(id));
+  return { id, title: track?.title || "", ready,
+    collections: folders.filter(folder => folder.id !== TRASH_ID).map(folder => ({ id: folder.id, name: folder.name, selected: folder.items.includes(id) })) };
+}
+
+export async function organizeSong(id, collectionId, name = null) {
+  const track = tracks[id];
+  if (track?.status !== "done" || !track.audioStems?.length || getTrashFolder()?.items.includes(id)) throw new Error(i18nT("setlist.unavailable"));
+  if (name !== null) {
+    name = name.trim();
+    if (!name) throw new Error(i18nT("folderEditor.emptyError"));
+    if (name.length > MAX_FOLDER_NAME_LEN) throw new Error(i18nT("folderEditor.tooLong", { max: MAX_FOLDER_NAME_LEN }));
+    if (!isValidFolderName(name)) throw new Error(i18nT("folderEditor.charsError"));
+    const folder = makeFolder({ id: `f-${crypto.randomUUID()}`, name });
+    folders.push(folder); collectionId = folder.id;
+  }
+  const folder = folders.find(f => f.id === collectionId && f.id !== TRASH_ID);
+  if (!folder) throw new Error(i18nT("song.collectionMissing"));
+  dropOnFolder(folder.id, id);
+  await saveState();
+  return folder.name;
+}
+
+function reorderFolderTrack(folderId, trackId, delta) {
+  const folder = folders.find(f => f.id === folderId && f.id !== TRASH_ID);
+  if (!folder || ![-1, 1].includes(delta)) return;
+  const visible = libraryFolderItems(folder);
+  const index = visible.indexOf(trackId), otherId = visible[index + delta];
+  if (index < 0 || !otherId) return;
+  // Swap visible songs in place: pending imports keep their folder and slot.
+  const from = folder.items.indexOf(trackId), to = folder.items.indexOf(otherId);
+  [folder.items[from], folder.items[to]] = [folder.items[to], folder.items[from]];
+  saveState(); render();
+  const row = [...document.querySelectorAll(".cat-item")].find(el => el.dataset.id === trackId);
+  const focus = row?.querySelector(delta < 0 ? ".cat-up:not(:disabled)" : ".cat-down:not(:disabled)") || row?.querySelector(".cat-order:not(:disabled)");
+  focus?.focus();
 }
 
 function paintFavButton(btn, on) {
@@ -1368,7 +1435,7 @@ function wireTrackDragAndLoad(el, trackId) {
   });
   el.addEventListener("dragend", () => endDrag(el));
   el.addEventListener("click", (e) => {
-    if (e.target.closest(".cat-del, .cat-fav")) return;
+    if (e.target.closest("button")) return;
     loadTrackIntoStudio(trackId);
   });
 }
@@ -1605,14 +1672,14 @@ function wireLibraryDeleteKeys() {
 /** The open track's tags, deduplicated, or none when it is in the Trash. */
 function openTrackTags() {
   const track = tracks[_currentTrackId];
-  if (!track || getTrashFolder()?.items.includes(_currentTrackId)) return [];
+  if (!isLibraryTrack(track) || getTrashFolder()?.items.includes(_currentTrackId)) return [];
   return [...new Set(track.tags ?? [])];
 }
 
 function getAllTags(trashIds) {
   const counts = {};
   for (const [id, track] of Object.entries(tracks)) {
-    if (trashIds.has(id)) continue;
+    if (trashIds.has(id) || !isLibraryTrack(track)) continue;
     for (const tag of track.tags ?? []) {
       counts[tag] = (counts[tag] || 0) + 1;
     }
@@ -1693,7 +1760,7 @@ function trackSublineHtml(track, { inTrash = false } = {}) {
 
 function renderRecentItem(trackId) {
   const track = tracks[trackId];
-  if (!track) return null;
+  if (!isLibraryTrack(track)) return null;
   const el = document.createElement("div");
   const isUnavailable = track.status === "unavailable";
   el.className = `cat-item${trackId === _currentTrackId ? " active" : ""}${isUnavailable ? " unavailable" : ""}${track.favorite ? " is-fav" : ""}`;
@@ -1789,26 +1856,37 @@ async function extractStoppedTrack(trackId) {
   }
 }
 
-function renderTrackItem(trackId, { inTrash = false } = {}) {
+function renderTrackItem(trackId, { inTrash = false, folderId = null } = {}) {
   const track = tracks[trackId];
-  if (!track) return null;
+  if (!track || (!inTrash && !isLibraryTrack(track))) return null;
 
   const el = document.createElement("div");
   const isUnavailable = track.status === "unavailable";
   el.className = `cat-item${trackId === _currentTrackId ? " active" : ""}${isUnavailable ? " unavailable" : ""}${!inTrash && track.favorite ? " is-fav" : ""}${!inTrash && track.status === "stopped" ? " is-stopped" : ""}${inTrash ? " in-trash" : ""}${inTrash && _trashSelection.has(trackId) ? " selected" : ""}`;
   el.dataset.id = trackId;
+  const folder = folders.find(f => f.id === folderId);
+  const ordered = folder && !inTrash ? libraryFolderItems(folder) : [];
+  const position = ordered.indexOf(trackId);
+  const compact = position >= 0;
+  el.classList.toggle("cat-compact", compact);
+  if (compact) el.title = `${track.title || ""}${isUnavailable ? ` · ${i18nT(canReimportTrack(track) ? "track.unavailableReimport" : "track.unavailableReupload")}` : ""}`;
 
   el.innerHTML = `
-    <div class="cat-thumb">${thumbHtml(track)}</div>
+    ${compact ? `<span class="cat-number">${position + 1}.</span>` : `<div class="cat-thumb">${thumbHtml(track)}</div>`}
     <div class="cat-meta">
       <div class="cat-title">${esc(displayTitle(track.title))}</div>
-      <div class="cat-sub">${trackSublineHtml(track, { inTrash })}</div>${inTrash ? `<div class="cat-sub trash-hint">${esc(i18nT("trash.holdToRestore"))}</div>` : ""}
+      <div class="cat-sub">${compact ? `${isUnavailable ? '<span aria-hidden="true">⚠</span> ' : ""}${esc(fmtTime(track.duration || 0))}` : trackSublineHtml(track, { inTrash })}</div>${inTrash ? `<div class="cat-sub trash-hint">${esc(i18nT("trash.holdToRestore"))}</div>` : ""}
     </div>
     <div class="cat-status${PROCESSING_STATUSES.has(track.status) ? " processing" : isUnavailable ? " unavailable" : ""}"></div>
-    ${inTrash ? `<div class="trash-hold" aria-hidden="true"></div>` : `<div class="cat-actions">${track.status === "stopped" ? extractButtonHtml(track) : ""}${favButtonHtml(track)}<button class="cat-del" type="button" title="${esc(i18nT("track.moveToTrash"))}">
+    ${inTrash ? `<div class="trash-hold" aria-hidden="true"></div>` : `<div class="cat-actions">${compact ? `<button class="cat-order cat-up" type="button" aria-label="${esc(i18nT("setlist.up"))} · ${esc(track.title)}" title="${esc(i18nT("setlist.up"))}" ${position === 0 ? "disabled" : ""}>↑</button><button class="cat-order cat-down" type="button" aria-label="${esc(i18nT("setlist.down"))} · ${esc(track.title)}" title="${esc(i18nT("setlist.down"))}" ${position === ordered.length - 1 ? "disabled" : ""}>↓</button>` : ""}${track.status === "stopped" ? extractButtonHtml(track) : ""}${favButtonHtml(track)}<button class="cat-del" type="button" title="${esc(i18nT("track.moveToTrash"))}">
       ${TRASH_ICON_SVG}
     </button></div>`}
   `;
+  for (const [selector, delta] of [[".cat-up", -1], [".cat-down", 1]]) {
+    el.querySelector(selector)?.addEventListener("click", event => {
+      event.stopPropagation(); reorderFolderTrack(folderId, trackId, delta);
+    });
+  }
   el.querySelector(".cat-del")?.setAttribute("aria-label", i18nT("track.moveTitleToTrash", { title: track.title ?? i18nT("track.unknown") }));
 
   el.querySelector(".cat-del")?.addEventListener("click", (e) => {
@@ -1866,8 +1944,9 @@ function renderFolder(folder) {
     <svg class="f-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
     ${folderIcon}
     <span class="f-name">${esc(folder.name)}</span>
-    <span class="f-count">${folder.items.length}</span>
+    <span class="f-count">${isTrash ? folder.items.length : libraryFolderItems(folder).length}</span>
     ${isSystem ? "" : `
+      <button class="f-edit" type="button" aria-label="${esc(i18nT("folderEditor.title"))}" title="${esc(i18nT("folderEditor.title"))}"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m16 3 5 5L8 21H3v-5Z"/><path d="m14 5 5 5"/></svg></button>
       <button class="f-subfolder" type="button" aria-label="${esc(i18nT("folder.newSubfolder"))}" title="${esc(i18nT("folder.newSubfolder"))}">
         <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
           <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
@@ -1883,7 +1962,7 @@ function renderFolder(folder) {
   const body = document.createElement("div");
   body.className = "folder-body";
 
-  const visibleItems = folder.items.filter((id) => trackMatchesSearch(tracks[id]));
+  const visibleItems = (isTrash ? folder.items : libraryFolderItems(folder)).filter((id) => trackMatchesSearch(tracks[id]));
   const childFolders = folders.filter((f) => f.parentId === folder.id);
 
   if (catalogSearchQuery && visibleItems.length === 0 && childFolders.length === 0) {
@@ -1894,7 +1973,7 @@ function renderFolder(folder) {
     body.innerHTML = '<span class="folder-empty">Empty folder</span>';
   } else {
     for (const id of visibleItems) {
-      const item = renderTrackItem(id);
+      const item = renderTrackItem(id, { inTrash: isTrash, folderId: folder.id });
       if (item) body.appendChild(item);
     }
     for (const child of childFolders) {
@@ -1909,7 +1988,7 @@ function renderFolder(folder) {
 
   // Toggle folder collapse on single click.
   head.addEventListener("click", (e) => {
-    if (e.target.closest(".f-del, .f-subfolder, .f-grip")) return;
+    if (e.target.closest("button, .f-grip")) return;
     if (e.detail !== 1) return;
     window.clearTimeout(folderClickTimer);
     folderClickTimer = window.setTimeout(() => {
@@ -1921,13 +2000,16 @@ function renderFolder(folder) {
 
   if (!isTrash) {
     head.addEventListener("dblclick", (e) => {
-      if (e.target.closest(".f-del, .f-subfolder, .f-grip")) return;
+      if (e.target.closest("button, .f-grip")) return;
       window.clearTimeout(folderClickTimer);
       e.stopPropagation();
       openFolderEditor(folder.id);
     });
   }
 
+  head.querySelector(".f-edit")?.addEventListener("click", (e) => {
+    e.stopPropagation(); openFolderEditor(folder.id);
+  });
   head.querySelector(".f-del")?.addEventListener("click", (e) => {
     e.stopPropagation();
     deleteFolder(folder.id);
@@ -2019,7 +2101,7 @@ function renderStrip(strip, nonTrash) {
   if (!strip) return;
   const folderTrackIds = new Set(folders.flatMap((folder) => folder.items));
   for (const [trackId, track] of Object.entries(tracks)) {
-    if (folderTrackIds.has(trackId)) continue;
+    if (folderTrackIds.has(trackId) || !isLibraryTrack(track)) continue;
     strip.appendChild(makeStripItem({
       className: trackId === _currentTrackId ? "active" : "",
       id: trackId,
@@ -2033,7 +2115,7 @@ function renderStrip(strip, nonTrash) {
     strip.appendChild(makeStripItem({
       className: "folder-thumb",
       id: folder.id,
-      title: `${folder.name} (${folder.items.length})`,
+      title: `${folder.name} (${libraryFolderItems(folder).length})`,
       html: folderThumbHtml(false),
       color: folderColor,
     }));
@@ -2125,7 +2207,7 @@ function render() {
   // ── Favorites view ──
   if (isFavoritesView) {
     const favIds = Object.entries(tracks)
-      .filter(([id, t]) => !trashIds.has(id) && t.favorite && trackMatchesSearch(t))
+      .filter(([id, t]) => !trashIds.has(id) && isLibraryTrack(t) && t.favorite && trackMatchesSearch(t))
       .sort(([, a], [, b]) => (b.createdAt ?? 0) - (a.createdAt ?? 0))
       .map(([id]) => id);
     if (!favIds.length) {
@@ -2143,10 +2225,8 @@ function render() {
   // ── Library view — Stem Collections · Tags ──
   //
   // There was a Recent section above the folders: the three newest tracks,
-  // every one of which is also in its folder, where a new import already lands
-  // at the top. It showed the same track twice for no gain, and with two
-  // imports of one song, four times in one panel (#656). Tracks still being
-  // processed show that in their own row, which is the useful part of it.
+  // every one of which is also in its folder (#656). Pending extractions now
+  // live in the Queue; folders and favourites show completed results only.
 
   // Stem Collections section
   const collectionsSection = makeSectionEl(i18nT("library.stemCollections"));
@@ -2270,12 +2350,48 @@ function decorateRow(el, rowState) {
   if (fill) fill.style.width = `${Math.round(rowState.progress * 100)}%`;
 }
 
-/** Remember that this import was started with the studio as it is now. Imports
- *  never take the studio while they run (#747); this is what lets the first one
- *  to finish open itself, but only while the studio is still empty and the user
- *  has not opened anything since. */
-export function armAutoOpen(jobId) {
+/** Select an accepted extraction without mounting any of its previous audio.
+ *  A later library selection invalidates this load token, so completion never
+ *  interrupts another song, including one that is still loading. */
+function selectQueuedTrack(jobId = null) {
+  const entries = queueEntries(getQueueSnapshot());
+  // Opening Queue is a studio selection as well as sidebar navigation. Keep
+  // its selected pending song when possible, otherwise show the running job.
+  const entry = jobId ? entries.find(({ job }) => job.job_id === jobId)
+    : entries.find(({ job }) => job.job_id === _currentTrackId) || entries[0];
+  if (!entry) return;
+  const job = entry.job;
+  // Another window/client may have queued this job. Adopt its metadata before
+  // selecting it; a queue row must not silently do nothing for an unknown id.
+  if (!tracks[job.job_id]) {
+    addTrackToLibrary({ ...stateMetadataToTrack(job, { id: job.job_id }),
+      id: job.job_id, status: job.status || (entry.running ? "processing" : "queued") });
+  }
+  if (!isProcessingStudio(job.job_id)) activateProcessingTrack(job.job_id);
+}
+
+function activateProcessingTrack(jobId) {
+  const track = tracks[jobId];
+  if (!track || !PROCESSING_STATUSES.has(track.status)) return;
+  document.dispatchEvent(new CustomEvent("trackwillopen", { detail: { jobId, source: "processing" } }));
+  detachForegroundJob();
+  ++_loadTrackToken;
+  destroyPlayer();
+  renderEmptyShell();
+  setCurrentJobId(jobId);
+  setCurrentTrack(jobId);
+  setResplitTarget(null);
+  applyTrackInfoToPanel({ ...track, audioStems: [], studioLayout: null });
+  const snap = getQueueSnapshot();
+  const live = snap.running?.job_id === jobId ? snap.running : snap.queued?.find((job) => job.job_id === jobId);
+  showProcessingStudio({ job_id: jobId, title: track.title, status: track.status, ...live });
   _autoOpenTokens.set(jobId, _loadTrackToken);
+}
+
+export function armAutoOpen(jobId, { activate = false } = {}) {
+  if (activate) activateProcessingTrack(jobId);
+  _autoOpenTokens.set(jobId, _loadTrackToken);
+  if (activate) setCatalogView("queue");
 }
 
 /** True when the studio shows no track and no load is under way. Either engine
@@ -2286,7 +2402,12 @@ export function armAutoOpen(jobId) {
 function shouldAutoOpen(jobId) {
   const armedAt = _autoOpenTokens.get(jobId);
   _autoOpenTokens.delete(jobId);
-  return armedAt === _loadTrackToken && !audioEngine && !multitrack && !foregroundJobId;
+  return armedAt === _loadTrackToken && (!_currentTrackId || _currentTrackId === jobId)
+    && !audioEngine && !multitrack && !foregroundJobId;
+}
+
+function closeSettledQueue() {
+  if (catalogView === "queue" && queueEntries(getQueueSnapshot()).length === 0) setCatalogView("library");
 }
 
 /** A background import has finished (or failed, or was cancelled). It has no
@@ -2300,11 +2421,17 @@ async function completeSettledJob(jobId) {
     const res = await fetch(`/api/jobs/${jobId}`, { cache: "no-store" });
     if (!res.ok) {
       // 404 means the job is gone from the backend entirely.
-      if (res.status === 404) updateTrackStatus(jobId, "unavailable");
+      if (res.status === 404) {
+        updateTrackStatus(jobId, isLibraryTrack(existing) ? "unavailable" : "error");
+        updateProcessingStudio({ job_id: jobId, status: "error", error: i18nT("job.noLongerExists") });
+        _autoOpenTokens.delete(jobId);
+        closeSettledQueue();
+      }
       return;
     }
     const state = await res.json();
     if (state.status === "cancelled") {
+      updateProcessingStudio(state);
       _autoOpenTokens.delete(jobId);
       // Nothing was produced; drop the placeholder row rather than leaving a
       // track that can never be loaded.
@@ -2312,6 +2439,7 @@ async function completeSettledJob(jobId) {
       removeTrackFromFolders(jobId);
       saveState();
       render();
+      closeSettledQueue();
       return;
     }
     // A background job that failed used to say nothing at all: no banner (that
@@ -2338,6 +2466,7 @@ async function completeSettledJob(jobId) {
     // is the only place a background import's on-demand vocal split (#275)
     // can be triggered -- runVocalSplitIfWanted no-ops if it wasn't requested.
     const finalState = state.status === "done" ? await runVocalSplitIfWanted(state) : state;
+    if (finalState.status !== "done") updateProcessingStudio(finalState);
     const track = stateMetadataToTrack(finalState, { ...existing, id: jobId });
     track.id = jobId;
     // A server that sends "work" looked for it while the job ran, so the track
@@ -2348,6 +2477,9 @@ async function completeSettledJob(jobId) {
     // and through the library's own loader so it behaves like a click on the row.
     if (finalState.status === "done" && shouldAutoOpen(jobId)) loadTrackIntoStudio(jobId);
     else _autoOpenTokens.delete(jobId);
+    // Wait until final metadata has landed before leaving an empty queue, so
+    // there is no flash of a library that still lacks the completed result.
+    closeSettledQueue();
   } catch (e) {
     console.warn("[catalog] could not finish background job", jobId, e);
   }
@@ -2359,6 +2491,15 @@ function queueEntries(snap) {
   const entries = [];
   if (snap.running) entries.push({ job: snap.running, running: true });
   for (const job of snap.queued ?? []) entries.push({ job, running: false });
+  // POST may return before the next shared queue frame. Show accepted jobs
+  // immediately, and retain them while their final state is being fetched.
+  const seen = new Set(entries.map(({ job }) => job.job_id));
+  const trashed = new Set(getTrashFolder()?.items || []);
+  for (const jobId of _autoOpenTokens.keys()) {
+    const track = tracks[jobId];
+    if (seen.has(jobId) || trashed.has(jobId) || !PROCESSING_STATUSES.has(track?.status)) continue;
+    entries.push({ job: { job_id: jobId, title: track.title, status: track.status }, running: false });
+  }
   return entries;
 }
 
@@ -2378,7 +2519,7 @@ function queueRowHtml({ job, running }, place, { paused = false } = {}) {
          </svg>
        </span>`;
   return `
-    <div class="cat-item queue-row ${running ? "queue-running" : "queue-waiting"}" data-id="${esc(job.job_id)}"${running ? "" : ' draggable="true"'}>
+    <div class="cat-item queue-row ${running ? "queue-running" : "queue-waiting"}${job.job_id === _currentTrackId ? " active" : ""}" data-id="${esc(job.job_id)}"${running ? "" : ' draggable="true"'}>
       ${handle}
       <div class="cat-thumb">${thumb}</div>
       <div class="cat-meta">
@@ -2423,6 +2564,10 @@ function dropAnchorId(listEl, draggedId, clientY) {
 }
 
 function wireQueueRow(el, listEl) {
+  el.addEventListener("click", (e) => {
+    if (e.target.closest(".queue-cancel, .queue-top, .queue-grip")) return;
+    selectQueuedTrack(el.dataset.id);
+  });
   el.querySelector(".queue-cancel")?.addEventListener("click", async (e) => {
     e.stopPropagation();
     const btn = e.currentTarget;
@@ -2567,7 +2712,7 @@ function updateQueueBadge(snap = getQueueSnapshot()) {
   const btn = document.querySelector(".rail-queue");
   const badge = document.getElementById("queueBadge");
   if (!btn) return;
-  const count = queueCount(snap);
+  const count = queueEntries(snap).length;
   btn.classList.toggle("hidden", count === 0 && catalogView !== "queue");
   if (badge) {
     badge.textContent = count > 99 ? "99+" : String(count);
@@ -2576,12 +2721,15 @@ function updateQueueBadge(snap = getQueueSnapshot()) {
 }
 
 function onQueueFrame(snap) {
+  const selected = snap.running?.job_id === _currentTrackId ? snap.running
+    : snap.queued?.find((job) => job.job_id === _currentTrackId);
+  if (selected) updateProcessingStudio(selected);
   updateQueueBadge(snap);
   if (catalogView !== "queue") {
     applyQueueDecorations(snap);
     return;
   }
-  if (queueCount(snap) === 0) {
+  if (queueEntries(snap).length === 0) {
     // Nothing left to manage. Fall back to the library rather than leaving the
     // user in a view that can only ever be empty from here. Deliberately not
     // done inside updateQueueBadge, which render() calls -- that would recurse.
@@ -4586,11 +4734,11 @@ function openLibraryEditor() {
           <div class="settings-row">
             <div class="settings-row-text">
               <div class="settings-row-title">Modo de separação</div>
-              <div class="settings-row-desc">Completo: até 15 pistas, com bateria em seis peças, voz principal, backing vocals e resíduos. A bateria detalhada usa CPU e demora mais. Guitarras ficam agrupadas; efeitos do REAPER não são aplicados.</div>
+              <div class="settings-row-desc">Completo: separa os instrumentos e refina vozes, bateria e guitarras automaticamente, com até 18 pistas e resíduos. Na AMD configurada, bateria e guitarras usam a GPU. As partes de guitarra são estimativas. Se um refinamento falhar, o grupo original é preservado; a bateria pode ser refeita em CPU com aviso.</div>
             </div>
             <select class="settings-select settings-select-wide set-separation-profile" aria-label="Modo de separação">
               <option value="standard">Básico · 6 grupos</option>
-              <option value="complete">Completo · até 15 pistas</option>
+              <option value="complete">Completo · até 18 pistas</option>
             </select>
           </div>
         </div>

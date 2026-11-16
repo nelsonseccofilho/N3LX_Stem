@@ -91,7 +91,7 @@ async function setUp(page, { server = SERVER, saved = null } = {}) {
   if (saved) {
     await page.addInitScript(
       ([key, value]) => window.localStorage.setItem(key, JSON.stringify(value)),
-      [`stemdeck.lyrics.${JOB_ID}`, saved],
+      [`stemdeck:lyrics:${JOB_ID}`, saved],
     );
   }
   await page.goto("/", { waitUntil: "domcontentloaded" });
@@ -103,7 +103,7 @@ async function setUp(page, { server = SERVER, saved = null } = {}) {
 }
 
 const stored = (page) =>
-  page.evaluate((id) => JSON.parse(localStorage.getItem(`stemdeck.lyrics.${id}`) || "null"), JOB_ID);
+  page.evaluate((id) => JSON.parse(localStorage.getItem(`stemdeck:lyrics:${id}`) || "null"), JOB_ID);
 
 test.describe("lyrics from the server", () => {
   test("are shown with nothing asked of LRCLIB, and not saved as the user's choice", async ({ page }) => {

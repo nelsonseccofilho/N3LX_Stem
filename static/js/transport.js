@@ -180,13 +180,17 @@ export function updatePlayheadMarker(currentSec) {
 // string is the same, which re-lays out the whole footer control strip sixty
 // times a second to show a number that moves once a second (#633).
 export function updateFooterTimes(currentSec) {
-  if (!totalDuration) return;
-  const elapsed = fmtTime(currentSec);
-  const total = fmtTime(totalDuration);
+  const duration = Math.max(0, totalDuration || 0);
+  const elapsed = fmtTime(duration ? currentSec : 0);
+  const total = fmtTime(duration);
   if (footerTimeElapsed && footerTimeElapsed.textContent !== elapsed) footerTimeElapsed.textContent = elapsed;
   if (footerTimeTotal && footerTimeTotal.textContent !== total) footerTimeTotal.textContent = total;
-  const pct = Math.max(0, Math.min(100, (currentSec / totalDuration) * 100));
+  const pct = duration ? Math.max(0, Math.min(100, (currentSec / duration) * 100)) : 0;
   if (npScrubFill) npScrubFill.style.width = `${pct}%`;
+  const seek = npScrubFill?.parentElement;
+  seek?.setAttribute("aria-valuenow", pct.toFixed(1));
+  seek?.setAttribute("aria-valuetext", `${elapsed} / ${total}`);
+  seek?.setAttribute("aria-disabled", String(!duration));
   footerWaveDrawFn?.(pct / 100);
 }
 
@@ -789,6 +793,12 @@ export function syncRulerScroll() {
   // The lyrics lane (lyricsLane.js), the same kind of strip again.
   const lyricsTrack = document.getElementById("daw-lyrics-track");
   if (lyricsTrack) lyricsTrack.style.transform = shift;
+  // One measured audio-content width for every time-based header. This also
+  // excludes the waveform's vertical scrollbar and follows mixer resizing.
+  const width = multitrackContainer?.clientWidth;
+  for (const track of [rulerTime, sectionsTrack, lyricsTrack]) {
+    if (track && width > 0) track.style.width = `${width}px`;
+  }
 }
 
 export function applyWaveZoom() {
@@ -1615,7 +1625,8 @@ function _placeAbove(btn, panel) {
   const r = btn.getBoundingClientRect();
   const left = Math.max(8, Math.min(Math.round(r.left), window.innerWidth - panel.offsetWidth - 8));
   panel.style.left = `${left}px`;
-  panel.style.top = `${Math.max(8, Math.round(r.top - panel.offsetHeight - 8))}px`;
+  const below = btn.closest("#nowPlayingPanel") && r.bottom + panel.offsetHeight + 8 <= window.innerHeight - 8;
+  panel.style.top = `${below ? Math.round(r.bottom + 8) : Math.max(8, Math.round(r.top - panel.offsetHeight - 8))}px`;
 }
 
 /**
@@ -1650,7 +1661,9 @@ function _wirePopover(btn, panel, { shownClass = "open", onOpen } = {}) {
     // panel as the click away that shuts it -- and, for a trigger sitting
     // inside another panel, stops that outer one closing underneath it.
     e.stopPropagation();
-    if (isOpen()) close();
+    const wasOpen = isOpen();
+    document.dispatchEvent(new Event("songpanelclose"));
+    if (wasOpen) close();
     else open();
   });
 
@@ -1658,6 +1671,7 @@ function _wirePopover(btn, panel, { shownClass = "open", onOpen } = {}) {
   panel.addEventListener("click", (e) => e.stopPropagation());
 
   document.addEventListener("click", close);
+  document.addEventListener("songpanelclose", close);
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && isOpen()) {
       close();

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createSetlistPlayer } from "../../static/js/setlistPlayer.js";
-import { normalizeSetlists, newPlaylist, applyMixToPlaylist } from "../../static/js/setlistLibrary.js";
+import { normalizeSetlists, newPlaylist, applyMixToPlaylist, removePlaylist, copyMix } from "../../static/js/setlistLibrary.js";
+import { clampStereoPan, panLabel } from "../../static/js/stereoPan.js";
 const calls = [];
 const player = createSetlistPlayer({ open: async id => calls.push(`open:${id}`), play: async () => { calls.push("play"); return true; }, stop: () => calls.push("stop") });
 player.setItems(["one", "two"]);
@@ -36,6 +37,16 @@ const restored = normalizeSetlists({selectedId:"p2",playlists:[original,copy]},(
 assert.equal(restored.selectedId,"p2"); assert.equal(restored.playlists[0].entries[0].mix.bass.muted,true);
 const empty = normalizeSetlists({playlists:[{id:"bad/path"},{id:"ok",entries:{invalid:true}}]},()=>"new");
 assert.equal(empty.playlists.length,1); assert.deepEqual(empty.playlists[0].entries,[]);
+const deletion = normalizeSetlists({selectedId:"p2",playlists:[original,copy]},()=>"new");
+const untouched = structuredClone(deletion.playlists[0]);
+assert(removePlaylist(deletion,"p2",()=>"replacement"));
+assert.equal(deletion.selectedId,"p1");
+assert.deepEqual(deletion.playlists[0],untouched);
+assert.equal(removePlaylist(deletion,"missing",()=>"replacement"),false);
+assert(removePlaylist(deletion,"p1",()=>"replacement"));
+assert.equal(deletion.selectedId,"replacement");
+assert.deepEqual(deletion.playlists[0].entries,[]);
+assert.equal(original.entries[0].mix.bass.muted,true);
 console.log("Setlist sequencing, pause, cancellation, failure, duplicate end events and isolated playlist mixes: passed");
 
 let resolveOldPlay;
@@ -52,3 +63,26 @@ assert(await player.start(0)); player.fail("audio lost");
 assert.equal(player.state().status,"error"); await player.ended("one"); assert.equal(player.state().index,0);
 assert.deepEqual(normalizeSetlists({playlists:[{id:"p",entries:[null,{id:"valid",mix:{}}]}]},()=>"new").playlists[0].entries.map(e=>e.id),["valid"]);
 console.log("Runtime playback errors stop the sequence and damaged entries recover safely: passed");
+
+assert.equal(copyMix({guitar:{volume:1,pan:-.72}}).guitar.pan, -.72,
+  "PAN must survive playlist copy");
+assert.equal(copyMix({guitar:{volume:1}}).guitar.pan, 0,
+  "old playlists must default to center");
+assert.equal(copyMix({guitar:{pan:5}}).guitar.pan, 1,
+  "invalid out-of-range PAN must be capped");
+assert.equal(copyMix({guitar:{pan:"oops"}}).guitar.pan, 0,
+  "untrusted strings may not become PAN");
+assert.equal(clampStereoPan(NaN), 0);
+assert.equal(panLabel(-.5), "L50");
+assert.equal(panLabel(0), "C");
+assert.equal(panLabel(.6), "R60");
+const stereoMix = newPlaylist("stereo", "Stereo");
+stereoMix.entries = [{id:"one",mix:{guitar:{pan:-.8}}}, {id:"two",mix:{guitar:{pan:.5}}}];
+const stereoCopy = newPlaylist("stereo-copy","Stereo Copy",stereoMix);
+assert.equal(stereoCopy.entries[0].mix.guitar.pan,-.8);
+stereoCopy.entries[0].mix.guitar.pan = .25;
+assert.equal(stereoMix.entries[0].mix.guitar.pan,-.8,
+  "duplicating a playlist must not alias mix state");
+applyMixToPlaylist(stereoCopy, {guitar:{pan:.4}});
+assert(stereoCopy.entries.every(entry=>entry.mix.guitar.pan === .4));
+console.log("PASS: stereo PAN persists independently across library and playlist mixes");

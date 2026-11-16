@@ -99,7 +99,7 @@ async function setUp(page, { server = version(), saved = null, detect = { confid
           sessionStorage.setItem("e2e-seeded-lyrics", "1");
         }
       },
-      [`stemdeck.lyrics.${JOB_ID}`, saved],
+      [`stemdeck:lyrics:${JOB_ID}`, saved],
     );
   }
   await openLyrics(page);
@@ -132,7 +132,7 @@ const seek = (page, seconds) =>
   page.evaluate(async (s) => (await import("/js/transport.js")).setPlayheadTime(s), seconds);
 
 const stored = (page) =>
-  page.evaluate((id) => JSON.parse(localStorage.getItem(`stemdeck.lyrics.${id}`) || "null"), JOB_ID);
+  page.evaluate((id) => JSON.parse(localStorage.getItem(`stemdeck:lyrics:${id}`) || "null"), JOB_ID);
 
 test.describe("aligning lyrics to the track", () => {
   test("Start lyrics here moves the first sung line to the playhead, and a line click follows", async ({ page }) => {

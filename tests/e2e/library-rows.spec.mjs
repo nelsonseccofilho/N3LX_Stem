@@ -90,22 +90,22 @@ test.describe("library rows", () => {
   });
 
   // The library asks the server where every "processing" row stands on load
-  // (#748), and the seeded job is done there. These rows test the label of a
-  // job that really is still running, so the server has to say so too.
+  // (#748), and the seeded job is done there. To verify that a pending result
+  // remains hidden, the server has to say that it is still running too.
   async function serverSaysSeparating(page) {
     await page.route(`**/api/jobs/${JOB_ID}`, (route) =>
       route.fulfill({ json: { job_id: JOB_ID, status: "separating", progress: 0.4 } }),
     );
   }
 
-  test("a track still being processed says so", async ({ page }) => {
+  test("a track still being processed stays out of the library", async ({ page }) => {
     await serverSaysSeparating(page);
     await seedCatalogState(
       page,
       withTracks({ ...fixtureTrack(JOB_ID, "Busy"), status: "separating" }),
     );
     await open(page);
-    expect(await rowText(page, JOB_ID)).toBe("Processing");
+    await expect(page.locator(`.cat-item[data-id="${JOB_ID}"]`)).toHaveCount(0);
   });
 
   test("a row left processing by a closed app takes the server's answer", async ({ page }) => {
@@ -120,27 +120,25 @@ test.describe("library rows", () => {
     await expect.poll(() => rowText(page, JOB_ID)).not.toBe("Processing");
   });
 
-  test("a failed import says so", async ({ page }) => {
+  test("a failed import is not presented as an extracted library track", async ({ page }) => {
     await seedCatalogState(
       page,
       withTracks({ ...fixtureTrack(JOB_ID, "Broken"), status: "error" }),
     );
     await open(page);
-    expect(await rowText(page, JOB_ID)).toBe("Import failed");
+    await expect(page.locator(`.cat-item[data-id="${JOB_ID}"]`)).toHaveCount(0);
   });
 
-  test("the line follows the language rather than keeping the one it was saved in", async ({ page }) => {
-    await serverSaysSeparating(page);
+  test("an old stored processing label is absent from a completed track", async ({ page }) => {
     await page.addInitScript(() =>
       localStorage.setItem("stemdeck.language", JSON.stringify("de")),
     );
     await seedCatalogState(
       page,
-      withTracks({ ...fixtureTrack(JOB_ID, "Beschriftet"), channel: "Extracted", status: "separating" }),
+      withTracks({ ...fixtureTrack(JOB_ID, "Beschriftet"), channel: "Processing", duration:357 }),
     );
     await open(page);
-    // German, and nothing left over from the English it was stored in.
-    expect(await rowText(page, JOB_ID)).toBe("Wird verarbeitet");
+    expect(await rowText(page, JOB_ID)).toBe("05:57");
   });
 
   test("each track is listed once", async ({ page }) => {

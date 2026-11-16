@@ -485,6 +485,8 @@ function _disarmClear() {
   const btn = document.getElementById("sectionsClearBtn");
   if (!btn) return;
   delete btn.dataset.armed;
+  btn.title = t("sections.clearAria");
+  btn.setAttribute("aria-label", t("sections.clearAria"));
   const label = btn.querySelector(".sections-clear-label");
   if (label) label.textContent = t("sections.clear");
 }
@@ -500,6 +502,8 @@ function _wireClearButton() {
       return;
     }
     btn.dataset.armed = "1";
+    btn.title = t("sections.clearConfirm");
+    btn.setAttribute("aria-label", t("sections.clearConfirm"));
     const label = btn.querySelector(".sections-clear-label");
     if (label) label.textContent = t("sections.clearConfirm");
     clearTimeout(_clearArmTimer);

@@ -1,5 +1,5 @@
 import { createSetlistPlayer } from "./setlistPlayer.js";
-import { normalizeSetlists, newPlaylist, copyMix, applyMixToPlaylist } from "./setlistLibrary.js";
+import { normalizeSetlists, newPlaylist, copyMix, applyMixToPlaylist, removePlaylist } from "./setlistLibrary.js";
 import { storeGet, storeSet, flushStoreWrites, fmtTime } from "./utils.js";
 import { stopTransport, startPreparedPlayback, getMetronomePrefs, setMetronomePreferenceScope } from "./transport.js";
 import { t, onLanguageChange } from "./i18n.js";
@@ -7,6 +7,8 @@ import { t, onLanguageChange } from "./i18n.js";
 const KEY = "stemdeck:setlist";
 let controller, options, database, controlled = 0, editing = null, baseMetro = null;
 let persistence = Promise.resolve(), saveTimer = null;
+let renameId = null, renameDraft = "", deleteId = null;
+const collapsed = new Set();
 const model = () => controller?.state() || { ids: [], index: -1, status: "idle", busy: false };
 const current = () => database?.playlists.find(p => p.id === database.selectedId);
 const trackMap = () => new Map((options?.tracks() || []).map(track => [track.id, track]));
@@ -104,13 +106,19 @@ function repaint() {
   }));
 }
 function replaceEntries(entries) {
+  if (model().busy) return;
+  const removedEditing = editing?.playlistId === current().id && !entries.some(entry => entry.id === editing.jobId);
+  const previousJob = removedEditing ? editing.jobId : null;
+  if (removedEditing) leaveScope();
   current().entries = entries;
   controller.setItems(entries.map(e => e.id)); queueSave();
+  if (previousJob) options.open(previousJob);
 }
 async function changePlaylist(id) {
   if (model().busy) return;
   const wasEditing = editing?.jobId;
   leaveScope(); database.selectedId = id;
+  collapsed.delete(id); renameId = deleteId = null;
   controller.setItems(current().entries.map(e => e.id)); queueSave();
   if (wasEditing) await options.open(wasEditing);
 }
@@ -151,32 +159,121 @@ export async function initSetlist(config) {
     }
     controller.transport(event.detail.action);
   });
-  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flushSetlist(); });
+  // Flush edits still waiting for their debounce. Merely hiding an unchanged
+  // window must not overwrite a playlist saved by another window/session.
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden" && saveTimer) flushSetlist(); });
   onLanguageChange(repaint);
+}
+
+export function getSetlistChoices() {
+  return (database?.playlists || []).map(playlist => ({ id: playlist.id, name: playlist.name,
+    disabled: model().busy && database.selectedId === playlist.id }));
+}
+
+export async function addSongToSetlist(id, playlistId, name = null) {
+  if (!database || !trackMap().has(id)) throw new Error(t("setlist.unavailable"));
+  await flushStoreWrites();
+  const source = editing?.jobId === id ? database.playlists.find(p => p.id === editing.playlistId)?.entries.find(e => e.id === id)?.mix : null;
+  const mix = copyMix(source || await storeGet(`stemdeck:mix:${id}`, {}));
+  let playlist = database.playlists.find(p => p.id === playlistId);
+  if (name !== null) {
+    if (!name.trim()) throw new Error(t("folderEditor.emptyError"));
+    playlist = newPlaylist(makeId(), name.trim().slice(0, 80));
+    database.playlists.push(playlist);
+  }
+  if (!playlist || (model().busy && playlist.id === database.selectedId)) throw new Error(t("song.playlistBusy"));
+  const exists = playlist.entries.some(entry => entry.id === id);
+  if (!exists) {
+    playlist.entries.push({ id, mix });
+    if (playlist.id === database.selectedId) controller.setItems(playlist.entries.map(entry => entry.id));
+    await flushSetlist(); repaint();
+  }
+  return { name: playlist.name, exists };
 }
 export function renderSetlistPanel(root) {
   root.replaceChildren();
   if (!database) return;
   const s = model(), tracks = trackMap(), playlist = current();
   const panel = element("section", "setlist-panel");
-  panel.append(element("h2", "setlist-title", "Setlist"));
-  const selector = element("select", "setlist-select"); selector.setAttribute("aria-label", t("setlist.choose")); selector.disabled = s.busy;
-  for (const p of database.playlists) { const opt = element("option", "", p.name); opt.value = p.id; selector.append(opt); }
-  selector.value = playlist.id; selector.addEventListener("change", () => changePlaylist(selector.value)); panel.append(selector);
-  const manage = element("div", "setlist-actions");
+  const manage = element("div", "setlist-actions setlist-toolbar");
+  manage.append(element("h2", "setlist-title", "Setlist"));
   manage.append(button(t("setlist.new"), t("setlist.new"), async () => {
     const next = newPlaylist(makeId(), `Playlist ${database.playlists.length + 1}`); database.playlists.push(next); await changePlaylist(next.id);
+    beginRename(next);
   }, s.busy));
   manage.append(button(t("setlist.duplicate"), t("setlist.duplicate"), async () => {
     const next = newPlaylist(makeId(), `${playlist.name} (${t("setlist.copy")})`, playlist); database.playlists.push(next); await changePlaylist(next.id);
   }, s.busy)); panel.append(manage);
-  const name = element("input", "setlist-name"); name.type = "text"; name.maxLength = 80; name.value = playlist.name;
-  name.setAttribute("aria-label", t("setlist.name")); name.disabled = s.busy;
-  name.addEventListener("input", () => { playlist.name = name.value.trim() || playlist.name; queueSave(); });
-  name.addEventListener("change", () => { playlist.name = name.value.trim() || playlist.name; queueSave(); repaint(); }); panel.append(name);
-  panel.append(element("p", "setlist-note", t("setlist.description")));
-  panel.append(element("p", "setlist-note", t("setlist.originalControls")));
   const status = element("p", "setlist-status", statusText(s, tracks)); status.setAttribute("role", "status"); panel.append(status);
+  manage.querySelector(".setlist-title").title = t("setlist.originalControls");
+  for (const p of database.playlists) {
+    const expanded = p.id === playlist.id && !collapsed.has(p.id);
+    const group = element("section", `setlist-folder${expanded ? " expanded" : ""}`); group.dataset.playlistId = p.id;
+    const head = element("div", "setlist-folder-head");
+    const toggle = button("", p.name, () => {
+      if (p.id !== database.selectedId) changePlaylist(p.id);
+      else { expanded ? collapsed.add(p.id) : collapsed.delete(p.id); repaint(); }
+    }, s.busy && p.id !== playlist.id);
+    toggle.classList.add("setlist-folder-toggle"); toggle.setAttribute("aria-expanded", String(expanded));
+    if (p.id === playlist.id) toggle.setAttribute("aria-current", "true");
+    toggle.append(element("span", "setlist-chevron", expanded ? "⌄" : "›"), folderIcon(), element("span", "setlist-folder-name", p.name), element("span", "setlist-folder-count", String(p.entries.length)));
+    head.append(toggle, iconButton("edit", `${t("setlist.rename")} · ${p.name}`, () => beginRename(p), s.busy), iconButton("trash", `${t("setlist.delete")} · ${p.name}`, () => { deleteId = p.id; renameId = null; repaint(); }, s.busy));
+    group.append(head);
+    if (renameId === p.id) group.append(renameForm(p));
+    if (deleteId === p.id) {
+      const confirmation = element("div", "setlist-confirm");
+      confirmation.append(element("p", "setlist-note", t("setlist.deletePrompt", { name: p.name })));
+      confirmation.append(button(t("folderEditor.cancel"), t("folderEditor.cancel"), () => { deleteId = null; repaint(); }));
+      confirmation.append(button(t("setlist.delete"), t("setlist.delete"), async () => {
+        if (model().busy) return;
+        const active = database.selectedId === p.id;
+        removePlaylist(database, p.id, makeId); deleteId = null;
+        if (active) await changePlaylist(database.selectedId);
+        else { queueSave(); repaint(); }
+      }, s.busy)); group.append(confirmation);
+    }
+    if (expanded) renderPlaylistContents(group, p, s, tracks);
+    panel.append(group);
+  }
+  root.append(panel);
+}
+
+const ICON_PATHS = {
+  edit: '<path d="m16 3 5 5L8 21H3v-5Z"/><path d="m14 5 5 5"/>',
+  trash: '<path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/>',
+  folder: '<path d="M3 7V5h6l2 2h10v13H3Z"/>',
+};
+function folderIcon() {
+  const icon = element("span", "setlist-folder-icon");
+  icon.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">${ICON_PATHS.folder}</svg>`;
+  return icon;
+}
+function iconButton(icon, label, click, disabled) {
+  const el = button("", label, click, disabled); el.classList.add("setlist-icon-button");
+  el.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">${ICON_PATHS[icon]}</svg>`;
+  return el;
+}
+function beginRename(playlist) {
+  renameId = playlist.id; renameDraft = playlist.name; deleteId = null; repaint();
+  const input = document.querySelector(".setlist-name"); input?.focus(); input?.select();
+}
+function renameForm(playlist) {
+  const form = element("form", "setlist-rename");
+  const name = element("input", "setlist-name"); name.type = "text"; name.maxLength = 80; name.required = true; name.value = renameDraft;
+  name.setAttribute("aria-label", t("setlist.name"));
+  name.addEventListener("input", () => { renameDraft = name.value; });
+  name.addEventListener("keydown", event => {
+    if (event.key === "Escape") { event.preventDefault(); renameId = null; repaint(); }
+  });
+  const save = button("✓", t("folderEditor.save"), () => {}); save.type = "submit";
+  form.addEventListener("submit", event => {
+    event.preventDefault(); if (model().busy || !name.value.trim()) return;
+    playlist.name = name.value.trim().slice(0, 80); renameId = null; queueSave(); repaint();
+  });
+  form.append(name, save, button("×", t("folderEditor.cancel"), () => { renameId = null; repaint(); }));
+  return form;
+}
+function renderPlaylistContents(panel, playlist, s, tracks) {
   const list = element("ol", "setlist-items");
   for (const [index, entry] of playlist.entries.entries()) {
     const track = tracks.get(entry.id), title = track?.title || entry.id;
@@ -184,9 +281,14 @@ export function renderSetlistPanel(root) {
     const open = button(title, `${t("setlist.openSong")} · ${title}`, () => adjust(playlist, entry), !track || s.status === "loading");
     open.classList.add("setlist-track-open");
     row.classList.toggle("selected", editing?.playlistId === playlist.id && editing?.jobId === entry.id);
-    row.append(open, element("span", "setlist-duration", track ? fmtTime(track.duration || 0) : t("setlist.unavailable")));
+    row.append(element("span", "setlist-number", `${index + 1}.`), open, element("span", "setlist-duration", track ? fmtTime(track.duration || 0) : "—"));
+    if (!track) row.title = t("setlist.unavailable");
     const actions = element("div", "setlist-row-actions");
-    const move = delta => { const next = [...playlist.entries]; [next[index], next[index + delta]] = [next[index + delta], next[index]]; replaceEntries(next); };
+    const move = delta => {
+      const next = [...playlist.entries]; [next[index], next[index + delta]] = [next[index + delta], next[index]]; replaceEntries(next);
+      const moved = [...document.querySelectorAll(".setlist-item")].find(el => el.dataset.id === entry.id);
+      (moved?.querySelector(`.setlist-row-actions button:nth-child(${delta < 0 ? 1 : 2}):not(:disabled)`) || moved?.querySelector(".setlist-row-actions button:not(:disabled)"))?.focus();
+    };
     actions.append(button("↑", `${t("setlist.up")} · ${title}`, () => move(-1), s.busy || index === 0));
     actions.append(button("↓", `${t("setlist.down")} · ${title}`, () => move(1), s.busy || index === s.ids.length - 1));
     actions.append(button("×", `${t("setlist.remove")} · ${title}`, () => replaceEntries(playlist.entries.filter(e => e.id !== entry.id)), s.busy));
@@ -194,7 +296,7 @@ export function renderSetlistPanel(root) {
   }
   panel.append(list);
   const editingEntry = editing?.playlistId === playlist.id ? playlist.entries.find(e => e.id === editing.jobId) : null;
-  panel.append(button(t("setlist.applyAll"), t("setlist.applyAll"), () => {
+  if (editingEntry && playlist.entries.length > 1) panel.append(button(t("setlist.applyAll"), t("setlist.applyAll"), () => {
     applyMixToPlaylist(playlist, editingEntry.mix); queueSave(); repaint();
   }, s.busy || !editingEntry || playlist.entries.length < 2));
   const details = element("details", "setlist-picker"); details.open = s.ids.length === 0;
@@ -206,10 +308,11 @@ export function renderSetlistPanel(root) {
   }
   if (!candidates.length) details.append(element("p", "setlist-note", t("setlist.noCandidates")));
   details.append(button(t("setlist.addSelected"), t("setlist.addSelected"), async () => {
+    const playlistId = playlist.id;
     await flushStoreWrites();
     const selected = [...details.querySelectorAll("input:checked")].map(input => input.value);
     const entries = await Promise.all(selected.map(async id => ({ id, mix: copyMix(await storeGet(`stemdeck:mix:${id}`, {})) })));
-    if (entries.length) replaceEntries([...playlist.entries, ...entries]);
+    if (entries.length && current().id === playlistId && !model().busy) replaceEntries([...playlist.entries, ...entries]);
   }, s.busy || !candidates.length));
-  panel.append(details, element("p", "setlist-note", t("setlist.editHint"))); root.append(panel);
+  panel.append(details);
 }

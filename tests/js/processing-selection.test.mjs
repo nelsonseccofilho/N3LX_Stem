@@ -31,6 +31,9 @@ const context = vm.createContext({
   wireUpAudio(id) { calls.push(`audio:${id}`); context.audioEngine = {}; context.processingActiveId = null; },
   initSections() {}, isReimportableSource: () => false,
   runVocalSplitIfWanted: async state => state,
+  notifyActivity({ key }) {
+    calls.push(`activity:${key}`);
+  },
   fetch: async url => ({ ok: true, json: async () => url.endsWith("/peaks") ? {} : snapshots.get(url.split("/").at(-1)) }),
 });
 const source = fs.readFileSync(new URL("../../static/js/catalog.js", import.meta.url), "utf8")
@@ -83,6 +86,11 @@ await catalog.loadTrackIntoStudio("next");
 assert.equal(catalog.selected(), "next");
 snapshots.set("pending", { ...snapshots.get("pending"), status: "done" });
 await catalog.completeSettledJob("pending");
+assert.equal(
+  calls.filter(call => call === "activity:import:done:pending").length,
+  1,
+  "a completed extraction emits its success notification"
+);
 assert.equal(catalog.selected(), "next");
 assert(!calls.includes("audio:pending"), "completion must not interrupt another ready song");
 assert.equal(catalog.view(), "library", "the empty queue opens the library after final metadata arrives");

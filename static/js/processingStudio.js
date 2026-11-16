@@ -15,16 +15,37 @@ function render() {
   const pt = getLanguage().startsWith("pt");
   const pending = PROCESSING_STATUSES.has(selected.status);
   const waiting = selected.status === "queued";
+  const done = selected.status === "done";
+
   panel.querySelector("h2").textContent = pending
-    ? (waiting ? (pt ? "Música na fila de extração" : "Song queued for extraction") : (pt ? "Preparando suas pistas…" : "Preparing your tracks…"))
-    : (pt ? "Extração interrompida" : "Extraction stopped");
-  panel.querySelector(".studio-processing-song").textContent = selected.title || (pt ? "Nova música" : "New song");
+    ? (waiting
+      ? (pt ? "Música na fila de extração" : "Song queued for extraction")
+      : (pt ? "Preparando suas pistas…" : "Preparing your tracks…"))
+    : done
+      ? (pt ? "Extração concluída" : "Extraction complete")
+      : (pt ? "Extração interrompida" : "Extraction stopped");
+
+  panel.querySelector(".studio-processing-song").textContent =
+    selected.title || (pt ? "Nova música" : "New song");
+
   panel.querySelector(".studio-processing-detail").textContent = pending
-    ? (waiting ? (pt ? "Aguardando a vez de processar." : "Waiting to be processed.") : runningLabel(selected))
-    : (pt ? "Não foi possível concluir a extração. Consulte o diagnóstico nas Configurações." : "Extraction could not finish. Check diagnostics in Settings.");
-  panel.querySelector(".studio-processing-hint").textContent = pt
-    ? "Você pode selecionar e ouvir outra música pronta na biblioteca enquanto isso."
-    : "You can select and play another finished song from your library in the meantime.";
+    ? (waiting
+      ? (pt ? "Aguardando a vez de processar." : "Waiting to be processed.")
+      : runningLabel(selected))
+    : done
+      ? (pt ? "Pistas prontas na biblioteca." : "Tracks ready in your library.")
+      : (pt
+        ? "Não foi possível concluir a extração. Consulte o diagnóstico nas Configurações."
+        : "Extraction could not finish. Check diagnostics in Settings.");
+
+  panel.querySelector(".studio-processing-hint").textContent = done
+    ? (pt
+      ? "Selecione esta música na biblioteca para abrir as pistas."
+      : "Select this song in your library to open its tracks.")
+    : (pt
+      ? "Você pode selecionar e ouvir outra música pronta na biblioteca enquanto isso."
+      : "You can select and play another finished song from your library in the meantime.");
+
   const progress = panel.querySelector("progress");
   progress.hidden = !pending || waiting;
   const fraction = selected.processing ? selected.processing.fraction : selected.progress;

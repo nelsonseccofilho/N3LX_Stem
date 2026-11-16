@@ -2,6 +2,15 @@
    DAW UI  —  flat dark design
    ═══════════════════════════════════════════ */
 
+.karaoke-lookup-preview {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 32vh;
+  overflow-y: auto;
+  font: inherit;
+}
+.karaoke-lookup-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
 /* ── Reset ── */
 *, *::before, *::after { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); overflow: hidden; }
@@ -1291,7 +1300,11 @@ input, textarea { font-family: inherit; }
 /* Collapsed sidebar strip */
 .cat-collapsed-strip { display: none; }
 .daw.cat-collapsed .sidebar { width: var(--rail-w); }
-.daw.cat-collapsed .sidebar-body { opacity: 0; pointer-events: none; visibility: hidden; }
+/* The collapsed library must not retain an invisible flex item
+   that creates a horizontal scroll range inside the sidebar. */
+.daw.cat-collapsed .sidebar-body {
+  display: none;
+}
 .daw.cat-collapsed .cat-collapsed-strip { display: flex; flex-direction: column; gap: 8px; align-items: center; padding: 8px 0; overflow-y: auto; }
 
 /* ═══════════════════════════════════
@@ -6953,6 +6966,28 @@ input, textarea { font-family: inherit; }
 .karaoke-settings-content { display:flex; flex-direction:column; align-items:flex-start; gap:14px; }
 .karaoke-settings-content .lyrics-generator-language,.karaoke-settings-content .lyrics-generator-model,.karaoke-settings-content .lyrics-advanced-actions,.karaoke-settings-content .lyrics-tools { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
 .karaoke-settings-content button,.karaoke-settings-content select,.karaoke-settings-head button { min-height:34px; }
+.karaoke-source-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.karaoke-lookup-form { display:flex; flex-direction:column; gap:10px; width:min(100%,500px); padding:12px; background:var(--panel); border:1px solid var(--border); border-radius:8px; }
+.karaoke-lookup-form[hidden] { display:none; }
+.karaoke-lookup-form .lyrics-note { margin:0; }
+.karaoke-lookup-fields { display:grid; grid-template-columns:80px minmax(0,1fr); gap:8px 12px; align-items:center; }
+.karaoke-lookup-fields input { min-width:0; box-sizing:border-box; width:100%; min-height:34px; padding:6px 9px; border:1px solid var(--border-strong); border-radius:6px; color:var(--fg); background:var(--bg); font:inherit; }
+.karaoke-lookup-form button { align-self:flex-start; }
+.karaoke-lookup-status { margin:0; padding:10px 12px; border-radius:7px; border:1px solid var(--border-strong); background:var(--panel-2); color:var(--fg); font-size:12px; line-height:1.5; font-weight:600; }
+.karaoke-lookup-status:empty { display:none; }
+.karaoke-lookup-status[data-state="error"] { border-color:var(--danger); color:var(--danger); background:color-mix(in srgb,var(--danger) 9%,var(--panel)); }
+.karaoke-lookup-status[data-state="loading"] { border-color:var(--accent); color:var(--fg); }
+.karaoke-lookup-status[data-state="empty"] { border-color:var(--accent); color:var(--fg); background:color-mix(in srgb,var(--accent) 11%,var(--panel)); }
+.karaoke-lookup-status[data-state="success"] { border-color:var(--border-strong); color:var(--fg); }
+.karaoke-lookup-results[hidden] { display:none; }
+.karaoke-lookup-results { display:flex; flex-direction:column; gap:7px; padding-top:8px; border-top:1px solid var(--border-strong); width:100%; min-width:0; }
+.karaoke-lookup-results-title { color:var(--fg); font-size:13px; font-weight:700; }
+.karaoke-lookup-results .lyrics-version-list { max-height:min(260px,34vh); gap:6px; }
+.karaoke-lookup-results .lyrics-version { border:1px solid var(--border-strong); background:var(--bg-2); padding:10px; gap:4px; }
+.karaoke-lookup-results .lyrics-version:hover,.karaoke-lookup-results .lyrics-version:focus-visible { border-color:var(--accent); background:var(--panel-2); }
+.karaoke-lookup-results .lyrics-version-title { white-space:normal; font-weight:700; color:var(--fg); }
+.karaoke-lookup-results .lyrics-version-meta { white-space:normal; font-size:11px; line-height:1.45; }
+@media(max-width:480px) { .karaoke-lookup-fields { grid-template-columns:1fr; } }
 .karaoke-settings :focus-visible,.cinema-exit:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .cinema-empty { display:none; }
 #karaokeStage:fullscreen { --bg:#0b0f12; --bg-2:#10171d; --panel:#18222a; --panel-2:#212c35; --fg:#f2f5f8; --fg-2:#a8bacb; --muted:#94a5b5; --accent:#f7b73d; --wave-unplayed:#718b9c; --border:#32424d; color-scheme:dark; background:var(--bg); color:var(--fg); width:100vw; height:100vh; padding:clamp(20px,4vw,64px); gap:24px; overflow:hidden; }
@@ -7122,7 +7157,7 @@ input, textarea { font-family: inherit; }
     grid-column: 3;
     grid-row: 1;
     grid-template-columns: minmax(155px, 24%) minmax(0, 1fr);
-    grid-template-rows: 32px;
+    grid-template-rows: minmax(0, 1fr);
     gap: 6px;
     height: 40px;
     min-height: 40px;
@@ -7502,6 +7537,11 @@ input, textarea { font-family: inherit; }
   white-space: nowrap !important;
   border: 0 !important;
 }
+/* Navigation owns collapse; hide the legacy chevron control. */
+.app.daw .sidebar-rail > .rail-collapse {
+  display: none !important;
+}
+
 /* The library rail keeps badges and tooltips even though text labels are hidden. */
 .app.daw .sidebar-rail .rail-btn {
   position: relative;
@@ -7789,15 +7829,15 @@ input, textarea { font-family: inherit; }
     box-sizing: border-box;
     display: flex !important;
     width: 100%;
-    height: var(--header-row) !important;
-    min-height: var(--header-row) !important;
-    max-height: var(--header-row) !important;
-    align-self: stretch !important;
+    height: var(--header-control) !important;
+    min-height: var(--header-control) !important;
+    max-height: var(--header-control) !important;
+    align-self: center !important;
     justify-self: stretch;
     align-items: center !important;
     justify-content: center !important;
     margin: 0 !important;
-    padding: 0 8px !important;
+    padding: 2px 8px 0 !important;
     line-height: 1.2;
     text-align: center;
   }
@@ -7966,12 +8006,400 @@ input, textarea { font-family: inherit; }
     padding: 0;
   }
 }
-/* Optical alignment of the single header row.
-   The entire composer (import, track, tabs, transport and export) shares
-   one small offset; never shift individual children independently. */
-@media (min-width: 1400px) {
-  .app.daw.header-v3 .daw-topbar > .daw-composer-stack {
-    position: relative;
-    top: 3px;
+
+/* C27 notification activities */
+.daw-notif-activity.daw-notif-success {
+  border-color: rgba(65, 180, 125, 0.34);
+}
+.daw-notif-success .daw-notif-card-icon {
+  background: rgba(65, 180, 125, 0.12);
+  color: #41b47d;
+  font-weight: 700;
+}
+.daw-notif-activity[role="button"] { cursor: pointer; }
+.daw-notif-activity[role="button"]:hover {
+  background: var(--panel-2);
+}
+.daw-notif-activity:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.daw-notif-read { opacity: 0.74; }
+.daw-notif-markread { margin-left: auto; margin-right: 5px; }
+.daw-notif-header #notifClearAll { margin-left: 0; }
+.daw-notif-badge:not(.hidden) {
+  width: auto; min-width: 16px; height: 16px;
+  padding: 0 3px; border-radius: 8px;
+  line-height: 16px; text-align: center;
+  font-size: 9px; font-weight: 700;
+}
+
+/* C27.4C: prominent contextual karaoke failure alert */
+.lyrics-heading #lyricsGeneratorStatus.error {
+  box-sizing: border-box;
+  flex: 1 0 100%;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  margin: 4px 0 6px;
+  border: 1px solid var(--danger);
+  border-left: 4px solid var(--danger);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--danger) 8%, var(--panel));
+  line-height: 1.5;
+}
+
+.karaoke-alert-icon {
+  box-sizing: border-box;
+  display: inline-flex;
+  flex: 0 0 22px;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid var(--danger);
+  color: var(--danger);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.karaoke-alert-content {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.karaoke-alert-title {
+  color: var(--danger);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.karaoke-alert-description {
+  color: var(--fg);
+  font-size: 12.5px;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+/* C27.6B — Karaoke workflow tabs */
+.karaoke-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  padding: 4px;
+  margin-bottom: 16px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+
+.karaoke-tab {
+  min-width: 0;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.karaoke-tab[aria-selected="true"] {
+  background: var(--panel-2);
+  border-color: var(--border-strong);
+  color: var(--fg);
+}
+
+.karaoke-tab:hover {
+  color: var(--fg);
+}
+
+.karaoke-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.karaoke-settings-content {
+  align-items: stretch;
+}
+
+.karaoke-tab-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  width: 100%;
+  min-width: 0;
+}
+
+.karaoke-tab-panel[hidden] {
+  display: none !important;
+}
+
+.karaoke-tab-hint {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.karaoke-tab-panel .karaoke-lookup-form {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+}
+
+#karaokeSettings #lyricsOpenSearchBtn[hidden] {
+  display: none !important;
+}
+
+.karaoke-tab-footer {
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 480px) {
+  .karaoke-tab {
+    font-size: 11px;
+    padding: 8px 4px;
   }
 }
+
+/* C27.6B.2 — Unified feedback layout */
+#karaokeSettings .karaoke-lookup-status[data-state="empty"],
+#karaokeSettings .karaoke-lookup-status[data-state="error"] {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  width: 100%;
+  min-height: 72px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--fg);
+}
+
+#karaokeSettings .karaoke-lookup-status[data-state="empty"] {
+  border: 1px solid var(--accent);
+  border-left: 3px solid var(--accent);
+  background: color-mix(
+    in srgb, var(--accent) 8%, var(--panel)
+  );
+}
+
+#karaokeSettings .karaoke-lookup-status[data-state="error"] {
+  border: 1px solid var(--danger);
+  border-left: 3px solid var(--danger);
+  background: color-mix(
+    in srgb, var(--danger) 9%, var(--panel)
+  );
+}
+
+#karaokeSettings .karaoke-lookup-status[data-state="empty"]::before,
+#karaokeSettings .karaoke-lookup-status[data-state="error"]::before {
+  content: "!";
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 19px;
+  height: 19px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+#karaokeSettings .karaoke-lookup-status[data-state="empty"]::before {
+  color: var(--accent);
+}
+
+#karaokeSettings .karaoke-lookup-status[data-state="error"]::before {
+  color: var(--danger);
+}
+
+#karaokeSettings .karaoke-feedback-content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 4px;
+}
+
+#karaokeSettings .karaoke-feedback-title {
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+#karaokeSettings .karaoke-feedback-detail {
+  color: var(--fg-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+
+/* C27.6B.3 — Karaoke empty state */
+.karaoke-empty-state[hidden] {
+  display: none !important;
+}
+
+.karaoke-empty-state {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  width: 100%;
+  min-height: min(65vh, 520px);
+  padding: 40px 24px;
+  text-align: center;
+}
+
+.karaoke-empty-symbol {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  background: var(--panel);
+  color: var(--accent);
+  font-size: 32px;
+}
+
+.karaoke-empty-state h2 {
+  margin: 0;
+  color: var(--fg);
+  font-size: 20px;
+}
+
+.karaoke-empty-state p {
+  max-width: 400px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+#karaokeStage.karaoke-no-track .karaoke-overview,
+#karaokeStage.karaoke-no-track #karaokeLyricsHost {
+  display: none !important;
+}
+
+
+/* C27.6B.4 — Startup empty state */
+#lanes {
+  position: relative;
+}
+
+#studioEmptyState {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  box-sizing: border-box;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 40px 24px;
+  background: var(--bg);
+  text-align: center;
+}
+
+.app.no-track:not(.is-import):not(.is-processing-track)
+#lanes:not([hidden]) #studioEmptyState {
+  display: flex;
+}
+
+.studio-empty-symbol {
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 68px;
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  background: var(--panel);
+  color: var(--accent);
+  font-size: 34px;
+}
+
+#studioEmptyTitle {
+  margin: 4px 0 0;
+  color: var(--fg);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+#studioEmptyState p {
+  max-width: 450px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  #studioEmptyState {
+    padding: 24px 18px;
+  }
+
+  #studioEmptyTitle {
+    font-size: 18px;
+  }
+}
+
+
+/* C27.6B.5 — Clean startup empty state */
+
+/*
+ * Hide track-only controls while no song is selected.
+ * Keep the empty-state message and collection/navigation visible.
+ *
+ * The existing no-track class is controlled by the player.
+ * Removing it automatically restores the original layout.
+ */
+
+.app.no-track:not(.is-import):not(.is-processing-track)
+#lanes > :is(
+  .daw-track-header,
+  .daw-lyrics-ribbon,
+  .daw-section-ribbon,
+  .daw-wave-header,
+  .daw-content
+) {
+  display: none !important;
+}
+
+/* Zoom and track-height tools require a loaded song. */
+.app.no-track:not(.is-import):not(.is-processing-track)
+.studio-view-tools {
+  display: none !important;
+}
+
+/* Keep the empty state occupying the available workspace. */
+.app.no-track:not(.is-import):not(.is-processing-track)
+#lanes:not([hidden]) #studioEmptyState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+/* Do not hide active import or processing interfaces. */

@@ -22,6 +22,9 @@ export function refreshAnalysisKey() {
   const adjusted = transposeKey(originalKey, shift);
   const readable = formatKey(adjusted, originalScale, t);
   const shorthand = keySymbol(adjusted, originalScale);
+  const cinema = document.getElementById('cinemaKey');
+  if (cinema) cinema.textContent = !original ? 'Tom não identificado' :
+    `${original} → ${mixed ? t('key.mixed') : readable || 'Tom não identificado'}`;
   // Show the familiar musician shorthand as the primary value, and spell out
   // the mode below so F# major cannot be mistaken for F# minor.
   node.textContent = mixed && originalKey ? t("key.mixed") : shorthand || readable || "—";

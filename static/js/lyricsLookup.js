@@ -570,8 +570,9 @@ export function offsetToStart(lines, index, seconds) {
   return line ? clampOffset(seconds - line.time) : 0;
 }
 
-/** Index of the line being sung at `seconds`, or -1 before the first. */
-export function currentLineIndex(lines, seconds) {
+/** Index of the line being sung, or -1 in a timed gap. Presentation can keep
+ * the previous line highlighted without extending any word or phrase timing. */
+export function currentLineIndex(lines, seconds, { holdPrevious = false } = {}) {
   let lo = 0;
   let hi = lines.length - 1;
   let found = -1;
@@ -584,5 +585,5 @@ export function currentLineIndex(lines, seconds) {
       hi = mid - 1;
     }
   }
-  return found >= 0 && Number.isFinite(lines[found].end) && seconds >= lines[found].end ? -1 : found;
+  return !holdPrevious && found >= 0 && Number.isFinite(lines[found].end) && seconds >= lines[found].end ? -1 : found;
 }

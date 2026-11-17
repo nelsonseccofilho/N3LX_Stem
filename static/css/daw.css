@@ -6991,12 +6991,17 @@ input, textarea { font-family: inherit; }
 .karaoke-settings :focus-visible,.cinema-exit:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .cinema-empty { display:none; }
 #karaokeStage:fullscreen { --bg:#0b0f12; --bg-2:#10171d; --panel:#18222a; --panel-2:#212c35; --fg:#f2f5f8; --fg-2:#a8bacb; --muted:#94a5b5; --accent:#f7b73d; --wave-unplayed:#718b9c; --border:#32424d; color-scheme:dark; background:var(--bg); color:var(--fg); width:100vw; height:100vh; padding:clamp(20px,4vw,64px); gap:24px; overflow:hidden; }
-#karaokeStage:fullscreen .karaoke-overview { padding-right:150px; }
+#karaokeStage:fullscreen .karaoke-overview { padding-right:0; }
 #karaokeStage:fullscreen #karaokeWave { height:clamp(64px,10vh,110px); }
-#karaokeStage:fullscreen .cinema-exit { position:absolute; top:24px; right:24px; min-height:40px; padding:8px 14px; color:#fff; background:#1c2a34; border:1px solid #526675; border-radius:7px; cursor:pointer; }
+#karaokeStage:fullscreen .cinema-exit { position:absolute; bottom:16px; right:24px; z-index:2; min-height:40px; padding:8px 14px; color:#fff; background:#1c2a34; border:1px solid #526675; border-radius:7px; cursor:pointer; }
+.cinema-tools[hidden] { display:none; }
+#karaokeStage:fullscreen .cinema-tools { display:flex; flex:0 0 auto; justify-content:flex-end; color:var(--fg-2); }
+#karaokeStage:fullscreen .cinema-tools .footer-group-key { display:flex; flex-direction:row; align-items:center; gap:8px; }
+#karaokeStage:fullscreen .cinema-tools .footer-group-body { display:flex; align-items:center; gap:4px; }
 #karaokeStage:fullscreen #karaokeLyricsHost { min-height:0; }
 #karaokeStage:fullscreen .lyrics-panel { justify-content:center; }
-#karaokeStage:fullscreen .lyrics-panel > :not(#lyricsBody):not(#cinemaEmpty):not(#cinemaUntimed) { display:none!important; }
+#karaokeStage:fullscreen .lyrics-panel > :not(#lyricsBody):not(#cinemaEmpty):not(#cinemaUntimed):not(#cinemaTimingMessage) { display:none!important; }
+#cinemaTimingMessage { text-align:center; color:var(--fg-2); font-size:clamp(22px,3.2vw,54px); }
 #karaokeStage:fullscreen .lyrics-body { display:grid; grid-template-rows:repeat(3,minmax(0,1fr)); align-items:center; padding:0; overflow:hidden; }
 #karaokeStage:fullscreen .lyrics-body::after { display:none; }
 #karaokeStage:fullscreen .lyrics-line,#karaokeStage:fullscreen .lyrics-text { display:none; transition:none; }

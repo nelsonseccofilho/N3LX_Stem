@@ -33,6 +33,7 @@ import { confirmAction } from "./confirmAction.js";
 import { lyricsEditorText, editedLyrics, untimedLines } from "./lyricsEditing.js";
 import { karaokePreviewFromTiming, hasProtectedLyrics, timingForMatchingEditedLyrics } from "./karaokeTiming.js";
 import { createLyricsAutoSyncController } from "./lyricsAutoSync.js";
+import { cinemaTiming } from "./cinemaTiming.js";
 import {
   karaokeCompletionOutcome
 } from "./karaokeNotificationPolicy.js";
@@ -2628,9 +2629,31 @@ function tick() {
     // back can land a hair before it, which would mark the line above.
     const time = transport()?.getCurrentTime?.() ?? 0;
     const now = time + 0.05;
-    const index = currentLineIndex(lines, now);
+    const cinema = document.fullscreenElement === stage;
+    const presentation = cinemaTiming(lines, time);
+    const index = cinema ? (presentation.displayLine ?? -1) : currentLineIndex(lines, now, { holdPrevious: true });
     if (index !== currentIndex) moveTo(index);
-    fillWords(index, now);
+    if (cinema) {
+      lineEls.forEach((line, i) => {
+        line.classList.toggle("previous", i === presentation.previousLine && i !== index);
+        line.classList.toggle("next", i === presentation.nextLine && i !== index);
+      });
+      if (presentation.state === 'instrumental' || presentation.state === 'ended') {
+        lineEls.forEach(line => line.classList.remove('previous', 'next'));
+      }
+    }
+    let message = document.getElementById('cinemaTimingMessage');
+    if (!message && stage) {
+      message = document.createElement('p');
+      message.id = 'cinemaTimingMessage';
+      message.setAttribute('role', 'status');
+      bodyEl.before(message);
+    }
+    if (message) {
+      message.hidden = !cinema || !['instrumental', 'ended'].includes(presentation.state);
+      message.textContent = presentation.state === 'ended' ? 'Fim da letra' : 'Instrumental';
+    }
+    fillWords(index, cinema ? time : now);
     // One transform, and only when playback has moved.
     if (sync) setLanePlayhead(time);
   }
@@ -2652,7 +2675,7 @@ function moveTo(index) {
   currentIndex = index;
   lineEls[index - 1]?.classList.add("previous");
   if (sync) setLaneCurrent(index);
-  lineEls[index + 1]?.classList.add("next");
+  if (index >= 0) lineEls[index + 1]?.classList.add("next");
   const line = lineEls[index];
   if (!line) return;
   line.classList.add("current");

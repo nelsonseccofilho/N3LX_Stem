@@ -3,6 +3,7 @@ import { setLyricsPresentation } from "./lyrics.js";
 import { transport, setPlayheadTime } from "./transport.js";
 import { t, getLanguage, onLanguageChange } from "./i18n.js";
 import { getSectionsSnapshot, sectionDisplayName } from "./sections.js";
+import { refreshAnalysisKey } from './analysisKey.js';
 
 // A single visual envelope across the entire recording, derived from every
 // stem's peaks. This is an overview, not a second audio player or mix render.
@@ -35,6 +36,18 @@ export function initKaraoke() {
   const settings = document.getElementById("karaokeSettings"), settingsOpen = document.getElementById("lyricsSettingsOpen");
   const cinemaOpen = document.getElementById("karaokeCinemaOpen"), cinemaExit = document.getElementById("karaokeCinemaExit");
   let cinemaReturnFocus = null;
+  const cinemaTools = document.createElement('div');
+  cinemaTools.className = 'cinema-tools';
+  cinemaTools.hidden = true;
+  const cinemaKey = document.createElement('output');
+  cinemaKey.id = 'cinemaKey';
+  cinemaKey.setAttribute('aria-live', 'polite');
+  cinemaKey.textContent = 'Tom não identificado';
+  cinemaTools.append(cinemaKey);
+  stage.prepend(cinemaTools);
+  const pitchGroup = document.querySelector('.footer-group-key');
+  const pitchHome = document.createComment('Cinema pitch controls home');
+  pitchGroup?.before(pitchHome);
   settingsOpen?.addEventListener("click", () => {
     if (!getCurrentTrackInfo()) return;
     if (!settings.open) settings.showModal();
@@ -59,6 +72,12 @@ export function initKaraoke() {
     const on = document.fullscreenElement === stage;
     stage.classList.toggle("cinema-mode", on);
     cinemaExit.hidden = !on;
+    cinemaTools.hidden = !on;
+    refreshAnalysisKey();
+    if (pitchGroup) {
+      if (on) cinemaTools.append(pitchGroup);
+      else pitchHome.after(pitchGroup);
+    }
     if (on) cinemaExit.focus();
     else if (cinemaReturnFocus?.isConnected) { cinemaReturnFocus.focus(); cinemaReturnFocus = null; }
     window.dispatchEvent(new Event("resize"));

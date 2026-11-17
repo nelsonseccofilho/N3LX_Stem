@@ -32,7 +32,9 @@ def test_large_v3_only_and_language_readiness(tmp_path, monkeypatch):
     monkeypatch.setenv("N3LX_WHISPER_LARGE_MODEL", str(model))
     monkeypatch.setattr(api.shutil, "which", lambda _: str(cli))
     monkeypatch.setattr(api, "ffmpeg_executable", lambda: "ffmpeg")
-    monkeypatch.setattr(api, "aligned_worker_resources", lambda: (cli, model))
+    monkeypatch.setattr(api, "aligned_worker_resources", lambda: (cli, tmp_path / "src" / "worker.py"))
+    monkeypatch.setattr(api, "portuguese_alignment_cache", lambda: tmp_path)
+    monkeypatch.setattr(api, "english_alignment_ready", lambda: True)
     assert api._configuration("large-v3", "pt")[1] == model
     assert api._configuration("large-v3", "en")[1] == model
     with pytest.raises(HTTPException) as exc:

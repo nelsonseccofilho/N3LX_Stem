@@ -16,7 +16,7 @@
   </head>
   <body>
 
-    <div class="app daw" id="app">
+    <div class="app daw header-v2 header-v3" id="app">
 
       <!-- ══ TOPBAR ══ -->
       <div class="daw-topbar">
@@ -39,7 +39,11 @@
 
         <!-- Composer pill -->
         <div class="daw-composer-stack">
-        <form id="job-form" class="daw-composer">
+        <form id="job-form" class="daw-composer header-compact">
+          <input type="checkbox" id="importLayoutToggle" class="import-layout-checkbox" aria-controls="headerImportWorkspace" aria-label="Nova extração">
+          <label for="importLayoutToggle" class="import-layout-toggle" id="importLayoutLabel">Nova extração</label>
+          <button type="button" id="reextractCurrentTrack" class="reextract-action" disabled>Reextrair</button>
+          <section id="headerImportWorkspace" class="header-import-workspace" role="region" aria-labelledby="importLayoutLabel">
 
           <!-- URL zone (JS uses .url-wrap for drag events) -->
           <div class="daw-url-zone url-wrap">
@@ -169,6 +173,15 @@
               <span data-i18n="structure.toggle">Detect structure</span>
             </span>
           </button>
+
+          <!-- Process button -->
+          <button id="submit" class="daw-process-btn" type="submit">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M13 2 3 14h7l-1 8 10-12h-7z"/>
+            </svg>
+            <span data-i18n="process.extractStems">Extract stems</span>
+          </button>
+          </section>
 
           <!-- The loaded track, named where the two rows leave room for it.
                It used to fill the gutter beside the footer timeline. That
@@ -530,44 +543,12 @@
              zero is only possible because the way back is always here; a
              control on each panel would need that panel to keep a stub, and the
              stub costs most of what collapsing the smaller ones returns. -->
-        <div class="daw-panel-toggles">
-          <!-- "Collapse" labels the row and is not a control, so the rule sits
-               after it: everything to its right is a button. The label is one
-               word because the row has no width for a sentence.
 
-               There was an "All" here, one press to put every panel away. It
-               governed two panels by the end, so it saved a single press, and
-               it was another control in this bar wearing a word that already
-               means something else two rows up. The panels it governed each
-               have their own button, which is the only way back from a
-               collapsed one.
 
-               The library was never among them, and not by omission: it used to
-               be, and nothing in this row could put it back (#588). Its control
-               lives in the rail. -->
-          <span class="daw-panel-toggles-label" data-i18n="panels.collapse">Collapse</span>
-          <button class="daw-panel-toggle" type="button" data-panel="analysis" aria-pressed="true"
-                  title="Show or hide the track analysis" data-i18n-title="panels.analysisTitle" data-i18n-aria-label="panels.analysisTitle">
-            <span data-i18n="panels.analysis">Analysis</span>
-          </button>
-          <span class="daw-panel-toggles-sep" aria-hidden="true">-</span>
-          <button class="daw-panel-toggle" type="button" data-panel="sections" aria-pressed="true"
-                  title="Show or hide the sections bar" data-i18n-title="panels.sectionsTitle" data-i18n-aria-label="panels.sectionsTitle">
-            <span data-i18n="sections.title">Sections</span>
-          </button>
-        </div>
-
-          <!-- Process button -->
-          <button id="submit" class="daw-process-btn" type="submit">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M13 2 3 14h7l-1 8 10-12h-7z"/>
-            </svg>
-            <span data-i18n="process.extractStems">Extract stems</span>
-          </button>
         </form>
 
 
-        <div id="availableLanes" class="available-lanes" aria-label="Pistas disponíveis nesta faixa" hidden></div>
+
         </div><!-- /.daw-composer-stack -->
         <!-- Hidden collapsed strip (JS compatibility) -->
         <div class="hidden" id="appbarStrip" aria-hidden="true" style="display:none!important">
@@ -1237,6 +1218,33 @@
           <output id="laneHeightValue" aria-label="Track height" data-i18n-aria-label="view.height">44 px</output>
           <button id="laneHeightIn" type="button" aria-label="Increase track height" data-i18n-aria-label="view.heightIn" disabled>+</button>
         </div>
+        <div class="daw-panel-toggles">
+          <!-- "Collapse" labels the row and is not a control, so the rule sits
+               after it: everything to its right is a button. The label is one
+               word because the row has no width for a sentence.
+
+               There was an "All" here, one press to put every panel away. It
+               governed two panels by the end, so it saved a single press, and
+               it was another control in this bar wearing a word that already
+               means something else two rows up. The panels it governed each
+               have their own button, which is the only way back from a
+               collapsed one.
+
+               The library was never among them, and not by omission: it used to
+               be, and nothing in this row could put it back (#588). Its control
+               lives in the rail. -->
+          <span class="daw-panel-toggles-label" data-i18n="panels.collapse">Collapse</span>
+          <button class="daw-panel-toggle" type="button" data-panel="analysis" aria-pressed="true"
+                  title="Show or hide the track analysis" data-i18n-title="panels.analysisTitle" data-i18n-aria-label="panels.analysisTitle">
+            <span data-i18n="panels.analysis">Analysis</span>
+          </button>
+          <span class="daw-panel-toggles-sep" aria-hidden="true">-</span>
+          <button class="daw-panel-toggle" type="button" data-panel="sections" aria-pressed="true"
+                  title="Show or hide the sections bar" data-i18n-title="panels.sectionsTitle" data-i18n-aria-label="panels.sectionsTitle">
+            <span data-i18n="sections.title">Sections</span>
+          </button>
+        </div>
+        <div id="availableLanes" class="available-lanes available-lanes-in-toolbar" aria-label="Pistas disponíveis nesta faixa" hidden></div>
         <span class="view-shortcuts" data-i18n="view.hint">Ctrl + wheel: zoom · Shift + wheel: move in time</span>
       </div>
 

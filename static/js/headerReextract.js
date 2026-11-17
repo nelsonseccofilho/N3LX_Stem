@@ -3,14 +3,11 @@ import { t, onLanguageChange } from "./i18n.js";
 // Delegate submission to the existing non-destructive resplit flow.
 export function initHeaderReextract() {
   const form = document.querySelector("#job-form.header-compact");
-  const toggle = form?.querySelector(".import-layout-toggle");
+  const toggle = form?.querySelector("#importLayoutToggle");
   const submit = form?.querySelector("#submit");
-  if (!form || !toggle || !submit || form.querySelector("#reextractCurrentTrack")) return;
-  const button = document.createElement("button");
-  button.type = "button";
-  button.id = "reextractCurrentTrack";
-  button.className = "reextract-action";
-  toggle.insertAdjacentElement("afterend", button);
+  const button = form?.querySelector("#reextractCurrentTrack");
+  if (!form || !toggle || !submit || !button || button.dataset.ready) return;
+  button.dataset.ready = "true";
   const sync = () => {
     const id = submit.dataset.resplitJob || "";
     const valid = /^[a-f0-9]{12}$/i.test(id);

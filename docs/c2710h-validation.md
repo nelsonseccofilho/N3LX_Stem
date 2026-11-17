@@ -26,3 +26,18 @@ Evidence: ../c2710h-final-complete/results.json and associated screenshots.
 
 No merge/push. Header and Cinema must be reviewed as separate commits.
 Chord panel remains out of scope: existing lv-chordia data are estimated.
+
+## PR #27 integration
+
+Integrated by fast-forward: Cinema `af3c57e`, header `8f8bb19`.
+Integration branch: `integration/c27-consolidated-20261116`.
+Local main remains `7b905c0`; remote main observed at `1ca88e1`.
+Python integration selection: 28 passed, 1 skipped (not counted as PASS).
+Browser suites rerun against integration worktree assets, production API read-only.
+Header integration evidence: ../c2710h-integrated-evidence.
+The redundant diagnostics backup is removed only from tracking; the local
+copy and Git history remain available, and all its top-level definitions
+exist in the production module. No library files are part of these commits.
+Hosted CI jobs have an upstream-only repository condition in ci.yml and
+therefore skipped jobs do not certify this fork. No protection was disabled.
+Temporary inspection/staging scripts remain untracked, outside the PR.

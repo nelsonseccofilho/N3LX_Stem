@@ -24,11 +24,11 @@ O N3LX_Stem é um aplicativo Desktop-first responsivo para notebooks e monitores
 3. Dividir `daw.css` por domínios depois de identificar dono e ordem de cascata de cada seletor. Evitar uma troca global de classes. Para cada domínio, remover somente regras comprovadamente substituídas e medir tamanho, especificidade, estado de foco, tema e geometria.
 4. Projetar primeiro em 1366×786, expandir a 1440×900 e comparar com a referência 1920×1080. Usar `min-width:0`, flex/grid que encolhem, `minmax()`, limites de altura para diálogos e rolagem em painéis delimitados. Não esconder funcionalidade essencial em largura mínima. Recolhimento exige controle descobrível e acessível por teclado.
 
-### Tailwind CSS v4 e daisyUI
+### Decisão definitiva
 
-Tailwind v4 pode gerar CSS estático pelo CLI sem framework JavaScript; `@theme` permite relacionar utilitários aos tokens do produto. O piloto deve compilar uma folha **isolada**, sem Preflight global e com fontes de classes explícitas, porque o reset e a varredura geral podem alterar a interface atual. A adoção depende de ganho mensurável em manutenção e tamanho final, e de funcionamento no pacote Desktop. Não migrar automaticamente todo o CSS para utilitários. [CLI oficial](https://tailwindcss.com/docs/installation/tailwind-cli), [tokens `@theme`](https://tailwindcss.com/docs/theme), [Preflight opcional](https://tailwindcss.com/docs/preflight), [fontes explícitas](https://tailwindcss.com/docs/detecting-classes-in-source-files).
+Tailwind CSS v4 e Design System próprio N3LX_Stem, mantendo HTML e JavaScript modular existentes. Sem daisyUI, React ou shadcn/ui. Desktop-first: 1920×1080, 1440×900 e 1366×786.
 
-daisyUI 5 é compatível com Tailwind v4, mas suas classes e temas globais precisam de comparação com os tokens e controles atuais. Avaliar apenas em amostra separada de botão, campo e diálogo; manter os temas do N3LX_Stem como autoridade. Só incorporar um componente se equivalência visual, contraste, foco, teclado e CSS gerado forem satisfatórios. [Instalação oficial](https://daisyui.com/docs/install/), [configuração de temas](https://daisyui.com/docs/config/). React e shadcn/ui não têm justificativa técnica no inventário atual: módulos locais já controlam a interface, e a proposta não exige mudança de renderizador.
+A implementação ocorrerá em ciclo separado, com tokens centralizados e piloto reversível, sem Preflight global. Este ciclo não instala dependências nem migra componentes.
 
 ## Primeiro piloto reversível — ajustes do karaokê
 

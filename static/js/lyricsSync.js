@@ -59,14 +59,70 @@ export function formatStamp(seconds) {
  * stamps for a line that has them: what PUT .../lyrics/user-synced keeps, and
  * what parseLrc reads back to the same lines.
  */
+export function preciseStamp(seconds) {
+  const ms = Math.max(0, Math.round(seconds * 1000));
+  return `${String(Math.floor(ms / 60000)).padStart(2, "0")}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, "0")}.${String(ms % 1000).padStart(3, "0")}`;
+}
+
+/** Parse a manual mm:ss.mmm time without rounding away fine corrections. */
+export function parsePreciseStamp(value, duration = Infinity) {
+  const match = /^(\d{1,3}):(\d{2})(?:\.(\d{1,3}))?$/.exec(String(value ?? "").trim());
+  if (!match || Number(match[2]) >= 60) return null;
+  const seconds = Number(match[1]) * 60 + Number(match[2]) +
+    Number((match[3] || "").padEnd(3, "0")) / 1000;
+  return Number.isFinite(seconds) && seconds >= 0 && seconds <= duration ? seconds : null;
+}
+
 export function serializeLrc(lines) {
+  // Once any phrase has an explicit millisecond-precision end, all rows
+  // (including instrumental clear markers) need the same precision. Otherwise
+  // a clear at 26.501 is rounded to 26.50, hiding a phrase ending at 26.500.
+  const stamp = lines.some(line => Number.isFinite(line.end)) ? preciseStamp : formatStamp;
   return lines
     .map((line) => {
-      const head = `[${formatStamp(line.time)}]`;
-      if (line.words?.length) return head + line.words.map((w) => `<${formatStamp(w.time ?? line.time)}>${w.text}`).join("").trimEnd();
-      return line.text ? `${head} ${line.text}` : head;
+      const head = `[${stamp(line.time)}]`;
+      const text = line.words?.length
+        ? line.words.map((w) => `<${stamp(w.time ?? line.time)}>${w.text}`).join("").trimEnd()
+        : line.text ? ` ${line.text}` : "";
+      // The empty trailing enhanced-LRC timecode is a phrase boundary.
+      // No extra blank lyric line, and compatible with existing lyric storage.
+      return head + text + (Number.isFinite(line.end) && line.end > line.time
+        ? `<${preciseStamp(line.end)}>` : "");
     })
     .join("\n");
+}
+
+/** Edit one sung phrase. Existing instrumental/pause markers may need to
+ * follow its new boundary; other sung phrases and their timecodes never move.
+ * Avoid a saved range being silently cut short by the next sung phrase.
+ */
+export function editPhraseRange(lines, index, start, end, duration = Infinity) {
+  const line = lines[index];
+  if (!line || !line.text?.trim() || !Number.isFinite(start) || !Number.isFinite(end) ||
+      start < 0 || end <= start || end > duration) return null;
+  const previousSung = lines.slice(0, index).findLast(l => l.text?.trim());
+  const nextSung = lines.slice(index + 1).find(l => l.text?.trim());
+  if ((previousSung && start <= previousSung.time) ||
+      (nextSung && (start >= nextSung.time || end > nextSung.time))) return null;
+  const shift = start - line.time;
+  // Preserve the original order of syllables, adjusting their onset with the
+  // phrase, and only clip to the manually confirmed end if needed.
+  const words = line.words?.filter(w => w.text).map(w => ({
+    ...w, time: Math.min(end, Math.max(start, (w.time ?? line.time) + shift)),
+  }));
+  const out = lines.map((item, i) => i === index
+    ? { ...line, time: start, end, ...(words ? { words } : {}) }
+    : item);
+  // Empty LRC rows mark where the display clears during a pause. They must
+  // not override a corrected phrase at its new start or before its new end.
+  for (let i = index - 1; i >= 0 && !out[i].text?.trim(); i--) {
+    if (out[i].time >= start) out[i] = { ...out[i], time: Math.max(0, start - (index - i) * 0.001) };
+  }
+  for (let i = index + 1; i < out.length && !out[i].text?.trim(); i++) {
+    if (out[i].time <= end) out[i] = { ...out[i], time: end + (i - index) * 0.001 };
+    if (out[i].time >= (nextSung?.time ?? duration)) return null;
+  }
+  return out;
 }
 
 /**
@@ -92,6 +148,7 @@ function atTime(line, time) {
   return {
     ...line,
     time,
+    ...(Number.isFinite(line.end) ? { end: line.end + delta } : {}),
     ...(line.words ? { words: line.words.map((w) => ({ ...w, time: (w.time ?? line.time) + delta })) } : {}),
   };
 }
@@ -261,6 +318,20 @@ export class SyncSession {
       this.redoStack = [];
       this.touched.add(index);
     }
+    this.cursor = nextSungIndex(this.lines, index);
+    return true;
+  }
+
+  /** Confirm both boundaries of a sung phrase as one undoable edit.
+   * Unlike sequential start taps, other sung phrases remain fixed. */
+  markPhraseRange(start, end) {
+    if (this.done) return false;
+    const revised = editPhraseRange(this.lines, this.cursor, start, end, this.max);
+    if (!revised) return false;
+    const index = this.cursor;
+    this.record();
+    this.lines = revised;
+    this.touched.add(index);
     this.cursor = nextSungIndex(this.lines, index);
     return true;
   }

@@ -61,19 +61,38 @@ def test_explicit_models_are_resolved_without_silent_downgrade(tmp_path, monkeyp
     monkeypatch.delenv("N3LX_WHISPER_LARGE_MODEL", raising=False)
     monkeypatch.delenv("N3LX_WHISPER_MEDIUM_MODEL", raising=False)
     monkeypatch.setattr(k, "ffmpeg_executable", lambda: "ffmpeg")
+    # A legacy generic variable must not let a medium checkpoint masquerade
+    # as the sole supported Large v3 model.
     with pytest.raises(HTTPException) as problem:
         k._configuration("large-v3")
     assert problem.value.status_code == 503
+
     large.write_bytes(b"model")
-    assert k._configuration("large-v3")[1] == large
-    assert k._configuration("medium")[1] == medium
+    # Creating Large v3 on disk must not silently override an explicit,
+    # incorrectly configured generic model path.
     with pytest.raises(HTTPException) as problem:
-        k._configuration("../../other")
-    assert problem.value.status_code == 422
+        k._configuration("large-v3")
+    assert problem.value.status_code == 503
+
+    monkeypatch.setenv("N3LX_WHISPER_LARGE_MODEL", str(large))
+    assert k._configuration("large-v3")[1] == large
+    assert k._configuration(None)[1] == large
+
+    # Even the preferred dedicated variable must not point at medium.
+    monkeypatch.setenv("N3LX_WHISPER_LARGE_MODEL", str(medium))
+    with pytest.raises(HTTPException) as problem:
+        k._configuration("large-v3")
+    assert problem.value.status_code == 503
+
+    monkeypatch.setenv("N3LX_WHISPER_LARGE_MODEL", str(large))
+    for unsupported in ("medium", "../../other"):
+        with pytest.raises(HTTPException) as problem:
+            k._configuration(unsupported)
+        assert problem.value.status_code == 422
 
 
 @pytest.mark.parametrize("outcome", ["done", "failed", "cancelled"])
-def test_regeneration_removes_old_result_before_worker_and_never_reuses_it(prepared, monkeypatch, outcome):
+def test_regeneration_preserves_old_result_until_successful_commit(prepared, monkeypatch, outcome):
     import asyncio
     from pathlib import Path
     from starlette.requests import Request
@@ -83,7 +102,7 @@ def test_regeneration_removes_old_result_before_worker_and_never_reuses_it(prepa
     preserved = {p: p.read_bytes() for p in [work / "lyrics.json", work / "stems/vocals.wav"]}
     monkeypatch.setattr(k, "_configuration", lambda name, language="pt": ("worker", Path("ggml-large-v3.bin"), "ffmpeg"))
     def generate(*args, **kwargs):
-        assert not (work / "lyrics_timing.json").exists()
+        assert (work / "lyrics_timing.json").read_bytes() == original
         kwargs["phase_changed"]("transcribe")
         if outcome == "failed":
             raise k.KaraokeTimingError("synthetic failure")
@@ -96,19 +115,23 @@ def test_regeneration_removes_old_result_before_worker_and_never_reuses_it(prepa
         request = Request({"type": "http", "headers": []}, receive)
         response = await k.generate_karaoke(job.id, request)
         assert response.status_code == 202
-        assert not (work / "lyrics_timing.json").exists()
+        assert (work / "lyrics_timing.json").read_bytes() == original
         status = k.karaoke_status(job.id)
         assert status["state"] == "running" and status["phase"] == "queued"
-        assert status["available"] is False and status["elapsed_seconds"] >= 0
+        assert status["available"] is True and status["elapsed_seconds"] >= 0
         if outcome == "cancelled":
             assert k.cancel_karaoke(job.id)["cancel_requested"]
         await asyncio.gather(*list(k._active_tasks))
     asyncio.run(scenario())
-    assert list(work.glob("lyrics_timing.regenerated-*.json"))[0].read_bytes() == original
+    if outcome == "done":
+        assert list(work.glob("lyrics_timing.backup-*.json"))[0].read_bytes() == original
+    else:
+        assert (work / "lyrics_timing.json").read_bytes() == original
+        assert not list(work.glob("lyrics_timing.backup-*.json"))
     assert all(p.read_bytes() == value for p, value in preserved.items())
     status = k.karaoke_status(job.id)
     assert status["state"] == {"cancelled": "idle"}.get(outcome, outcome)
-    assert status["available"] is (outcome == "done")
+    assert status["available"] is True
     if outcome == "done":
         assert json.loads((work / "lyrics_timing.json").read_text())["model"] == "large-v3"
 
@@ -120,7 +143,7 @@ def test_regeneration_configuration_failure_keeps_existing_result(prepared, monk
     monkeypatch.setattr(k, "_configuration", unavailable)
     assert client.post(f"/api/jobs/{job.id}/karaoke/generate", json={"replace": True, "model": "large-v3"}).status_code == 503
     assert (work / "lyrics_timing.json").exists()
-    assert not list(work.glob("lyrics_timing.regenerated-*.json"))
+    assert not list(work.glob("lyrics_timing.backup-*.json"))
 
 
 def test_language_validation_happens_before_old_json_is_archived(prepared):
@@ -129,10 +152,10 @@ def test_language_validation_happens_before_old_json_is_archived(prepared):
         response = client.post(f"/api/jobs/{job.id}/karaoke/generate", json={"replace": True, "language": value})
         assert response.status_code == 422
         assert (work / "lyrics_timing.json").exists()
-        assert not list(work.glob("lyrics_timing.regenerated-*.json"))
+        assert not list(work.glob("lyrics_timing.backup-*.json"))
 
 
-def test_english_does_not_require_portuguese_aligner(tmp_path, monkeypatch):
+def test_english_requires_alignment_worker(tmp_path, monkeypatch):
     model = tmp_path / "ggml-large-v3.bin"
     model.write_bytes(b"test")
     monkeypatch.setenv("N3LX_WHISPER_CLI", sys.executable)
@@ -141,7 +164,8 @@ def test_english_does_not_require_portuguese_aligner(tmp_path, monkeypatch):
     def missing(): raise k.KaraokeTimingError("missing aligner")
     monkeypatch.setattr(k, "aligned_worker_resources", missing)
     monkeypatch.setattr(k, "ffmpeg_executable", lambda: "ffmpeg")
-    assert k._configuration("large-v3", "en")[1] == model
+    with pytest.raises(HTTPException) as problem: k._configuration("large-v3", "en")
+    assert problem.value.status_code == 503
     with pytest.raises(HTTPException) as problem: k._configuration("large-v3", "pt")
     assert problem.value.status_code == 503
 
@@ -170,4 +194,4 @@ def test_english_request_reaches_worker_and_preserves_previous_json(prepared, mo
     asyncio.run(scenario())
     assert selected == ["en"]
     assert json.loads((work / "lyrics_timing.json").read_text())["language"] == "en"
-    assert list(work.glob("lyrics_timing.regenerated-*.json"))[0].read_bytes() == old
+    assert list(work.glob("lyrics_timing.backup-*.json"))[0].read_bytes() == old

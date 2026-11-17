@@ -19,7 +19,15 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 
 from app.core.config import JOB_ID_RE, JOBS_DIR, ffmpeg_executable
 from app.core.registry import get as registry_get
-from app.pipeline.karaoke_timing import MAX_BYTES, KaraokeTimingError, aligned_worker_resources, generate_timing, store_timing
+from app.pipeline.karaoke_timing import (
+    MAX_BYTES,
+    KaraokeTimingError,
+    aligned_worker_resources,
+    english_alignment_ready,
+    generate_timing,
+    portuguese_alignment_cache,
+    store_timing,
+)
 from app.pipeline.lyrics_retime import cancel_run, claim_run, current_run
 from app.pipeline.runner import _pipeline_lock
 
@@ -51,24 +59,35 @@ def _vocals(job_dir: Path) -> Path:
 
 
 def _configuration(model_name: str | None = None, language: str = "pt") -> tuple[str, Path, str]:
+    if model_name not in (None, "large-v3"):
+        raise HTTPException(status_code=422, detail="only Whisper Large v3 is supported")
     cli = os.environ.get("N3LX_WHISPER_CLI", "").strip()
-    model = Path(os.environ.get("N3LX_WHISPER_MODEL", "").strip())
-    if model_name is not None:
-        if model_name not in {"large-v3", "medium"}:
-            raise HTTPException(status_code=422, detail="unsupported Whisper model")
-        model = Path(os.environ.get(
-            "N3LX_WHISPER_LARGE_MODEL" if model_name == "large-v3" else "N3LX_WHISPER_MEDIUM_MODEL",
-            str(model.parent / f"ggml-{model_name}.bin"),
-        ))
-    if not cli or not shutil.which(cli) or not model.is_file():
-        raise HTTPException(status_code=503, detail="Vulkan Whisper worker not configured")
+    model_path = (os.environ.get("N3LX_WHISPER_LARGE_MODEL")
+                  or os.environ.get("N3LX_WHISPER_MODEL")
+                  or str(Path.home() / "Git" / "_workspace" / "models" / "ggml-large-v3.bin"))
+    model = Path(model_path).expanduser()
+    # The legacy generic variable can still point to ggml-medium.bin. A
+    # request for Large v3 must never silently run another model.
+    if (not cli or not shutil.which(cli) or not model.is_file()
+            or model.name.casefold() != "ggml-large-v3.bin"):
+        raise HTTPException(status_code=503, detail="Vulkan Whisper Large v3 worker not configured")
     if language not in {"pt", "en"}:
         raise HTTPException(status_code=422, detail="unsupported karaoke language")
-    if language == "pt":
-        try:
-            aligned_worker_resources()
-        except KaraokeTimingError:
-            raise HTTPException(status_code=503, detail="WhisperGPU alignment environment not configured") from None
+    # Both supported languages require the same WhisperX alignment worker.
+    # Do not advertise EN as available if only the legacy PT-only worker exists.
+    try:
+        _, worker = aligned_worker_resources()
+        if language == "pt" and worker.parent.name == "src" and portuguese_alignment_cache() is None:
+            raise HTTPException(status_code=503, detail="Portuguese alignment model not cached")
+        if language == "en" and worker.parent.name != "src":
+            raise KaraokeTimingError("English WhisperX alignment worker unavailable")
+        if language == "en" and not english_alignment_ready():
+            raise HTTPException(
+                status_code=503,
+                detail="English alignment model not cached; prepare the WAV2VEC2_ASR_BASE_960H checkpoint",
+            )
+    except KaraokeTimingError:
+        raise HTTPException(status_code=503, detail=f"WhisperX {language.upper()} alignment worker not configured") from None
     return cli, model, ffmpeg_executable()
 
 
@@ -113,6 +132,11 @@ async def _generate(job, job_dir: Path, run, replace: bool, cli: str, model: Pat
                 raise KaraokeTimingError("vocals changed during transcription")
             _phase(run, "finalize")
             timing["model"] = model.stem.removeprefix("ggml-")
+            # Bump when the alignment contract changes; old sidecars must be
+            # explicitly regenerated rather than silently reused.
+            timing["pipeline_revision"] = 2
+            # Reuse WhisperX timings only while the underlying vocals stem matches.
+            timing["vocals"] = [after[0], after[1]]
             output = job_dir / _SIDE_CAR
             await asyncio.to_thread(store_timing, output, timing, replace=replace)
             run.state = "done"
@@ -151,8 +175,8 @@ async def generate_karaoke(job_id: str, request: Request) -> JSONResponse:
             type(body.get("replace", False)) is not bool):
         raise HTTPException(status_code=422, detail="expected optional boolean replace")
     model_name = body.get("model")
-    if model_name is not None and model_name not in ("large-v3", "medium"):
-        raise HTTPException(status_code=422, detail="unsupported Whisper model")
+    if model_name not in (None, "large-v3"):
+        raise HTTPException(status_code=422, detail="only Whisper Large v3 is supported")
     language = body.get("language", "pt")
     if not isinstance(language, str) or language not in {"pt", "en"}:
         raise HTTPException(status_code=422, detail="unsupported karaoke language")
@@ -163,13 +187,9 @@ async def generate_karaoke(job_id: str, request: Request) -> JSONResponse:
     run = claim_run(job_id)
     if run is None:
         raise HTTPException(status_code=409, detail="lyrics processing already running")
-    try:
-        if replace:
-            _archive_timing(job_dir, "regenerated")
-    except Exception:
-        run.state = "idle"
-        run.ended.set()
-        raise
+    # Keep the active sidecar visible until a complete, validated replacement
+    # is committed. store_timing(replace=True) creates the recovery backup and
+    # atomically replaces the file only after successful acoustic alignment.
     run.karaoke_language = language
     run.karaoke_started = time.monotonic()
     _phase(run, "queued")
@@ -188,19 +208,39 @@ def karaoke_status(job_id: str) -> dict:
         run = None
     output = job_dir / _SIDE_CAR
     language_models = {}
+    language_issues = {}
     for language in ("pt", "en"):
         language_models[language] = []
-        for name in ("large-v3", "medium"):
+        for name in ("large-v3",):
             try:
                 _configuration(name, language)
                 language_models[language].append(name)
-            except HTTPException:
-                pass
+            except HTTPException as exc:
+                language_issues[language] = (
+                    "model_cache_missing"
+                    if "alignment model not cached" in str(exc.detail)
+                    else "unavailable"
+                )
     models = language_models["pt"]
+    # The filename existing is not sufficient evidence of a current acoustic
+    # alignment. Check its pipeline revision and the verified source, language,
+    # and acoustic backend before the UI decides to skip regeneration.
+    current_alignment = {"pt": False, "en": False}
+    if output.is_file():
+        try:
+            from app.pipeline.lyrics_retime import read_karaoke_transcript
+            metadata = json.loads(output.read_text(encoding="utf-8"))
+            if isinstance(metadata, dict) and metadata.get("pipeline_revision") == 2:
+                for lang in current_alignment:
+                    current_alignment[lang] = read_karaoke_transcript(job_dir, lang) is not None
+        except (OSError, ValueError, TypeError):
+            pass
     now = time.monotonic()
     return {
         "state": run.state if run is not None else "idle",
-        "available": output.is_file(), "models": models, "language_models": language_models,
+        "available": output.is_file(), "current_alignment": current_alignment,
+        "models": models, "language_models": language_models,
+        "language_issues": language_issues,
         "language": getattr(run, "karaoke_language", None) if run is not None else None,
         "phase": getattr(run, "karaoke_phase", "queued") if run is not None else None,
         "elapsed_seconds": round(max(0, now - getattr(run, "karaoke_started", now))),

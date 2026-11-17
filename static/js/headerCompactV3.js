@@ -10,7 +10,8 @@ export function initHeaderCompactV3() {
   const fill = card?.querySelector("#footer-scrub-fill");
   const sidebar = document.getElementById("sidebarCollapseBtn");
   if (!app || !card || !play || !seek || !fill || !sidebar) return;
-  if (app.classList.contains("header-v3")) return;
+  if (sidebar.dataset.headerV3Ready) return;
+  sidebar.dataset.headerV3Ready = "true";
 
   // The single updateFooterTimes() clock in transport.js already writes
   // #footer-scrub-fill.style.width. CSS v3 makes that fill visible.

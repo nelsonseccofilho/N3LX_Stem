@@ -440,7 +440,6 @@ wireVocalModeToggle();
 wireStemChipsPopover();
 wireAutoSectionsToggle();
 wireFileDrop();
-wireAppShellControls();
 initFooterFit();
 initArtistInfo();
 initLyrics();
@@ -1023,24 +1022,6 @@ function wireFileDrop() {
     }
     stageFiles({ ...screened, files });
   }
-}
-
-// ─── App shell controls ───
-
-function wireAppShellControls() {
-  document.getElementById("appMenuBtn")?.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const app = document.querySelector(".app");
-    // In trash view: switch back to library.
-    if (document.querySelector(".sidebar.trash-view, .sidebar.favorites-view")) {
-      document.querySelector(".rail-library")?.click();
-    }
-    // If collapsed: open. Never collapse from the library button.
-    if (app?.classList.contains("cat-collapsed")) {
-      document.getElementById("catalogToggle")?.click();
-    }
-  });
-
 }
 
 // ─── Keyboard shortcuts ───

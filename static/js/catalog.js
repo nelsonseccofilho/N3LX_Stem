@@ -1,6 +1,7 @@
 import { getTheme, setTheme } from "./theme.js";
 import { confirmAction } from "./confirmAction.js";
 import { enhanceSettings } from "./settingsAccessibility.js";
+import { wireStorageSettings } from "./storageSettings.js";
 import { initSetlist, renderSetlistPanel } from "./setlist.js";
 import { setDefaultSeparationProfile, defaultSeparationProfile } from "./constants.js";
 // catalog.js — library panel: folders, tracks, collapse, drag-and-drop
@@ -19,7 +20,7 @@ import {
   startQueueStream,
 } from "./queue.js";
 import { fmtTime, isReimportableSource, storeGet, storeSet, flushStoreWrites } from "./utils.js";
-import { notifyFailure, setReleasePending, dismissFailuresByJobId, dismissFailuresByKind } from "./notifications.js";
+import { notifyFailure, notifyActivity, setReleasePending, dismissFailuresByJobId, dismissFailuresByKind } from "./notifications.js";
 // Aliased (not the bare "t") -- this file already uses "t"/"tr" as local
 // variable names for track objects and table rows in several scopes.
 import { t as i18nT, plural as i18nPlural, LANGUAGES, getLanguage, setLanguage, onLanguageChange, applyTranslations } from "./i18n.js";
@@ -2161,19 +2162,8 @@ function render() {
   // daw.css swaps which of the two is shown.
   catalog?.classList.toggle("lyrics-view", isLyricsView);
   catalog?.classList.toggle("setlist-view", isSetlistView);
-  document.querySelector(".rail-setlist")?.classList.toggle("active", isSetlistView);
-  document.querySelector(".rail-setlist")?.setAttribute("aria-pressed", String(isSetlistView));
-  document.querySelector(".rail-lyrics")?.classList.toggle("active", isLyricsView);
-  document.querySelector(".rail-lyrics")?.setAttribute("aria-pressed", String(isLyricsView));
-
-  document.querySelector(".rail-library")?.classList.toggle("active", isLibraryView);
-  document.querySelector(".rail-library")?.setAttribute("aria-pressed", String(isLibraryView));
-  document.querySelector(".rail-favorites")?.classList.toggle("active", isFavoritesView);
-  document.querySelector(".rail-favorites")?.setAttribute("aria-pressed", String(isFavoritesView));
-  document.querySelector(".rail-trash")?.classList.toggle("active", isTrashView);
-  document.querySelector(".rail-trash")?.setAttribute("aria-pressed", String(isTrashView));
-  document.querySelector(".rail-queue")?.classList.toggle("active", isQueueView);
-  document.querySelector(".rail-queue")?.setAttribute("aria-pressed", String(isQueueView));
+  syncRailExpanded();
+  syncRailExpanded();
 
   if (searchInput) {
     searchInput.placeholder = isTrashView
@@ -2423,9 +2413,19 @@ function closeSettledQueue() {
  *  per-job stream, so fetch its final state once and complete its library entry
  *  -- stems, duration and analysis all land here, which is what makes the track
  *  playable from the sidebar without a page reload. */
+const _settleInFlight = new Set();
+const _settleAgain = new Set();
+
 async function completeSettledJob(jobId) {
   const existing = tracks[jobId];
   if (!existing) return; // not ours (or already deleted)
+
+  if (_settleInFlight.has(jobId)) {
+    _settleAgain.add(jobId);
+    return;
+  }
+  _settleInFlight.add(jobId);
+
   try {
     const res = await fetch(`/api/jobs/${jobId}`, { cache: "no-store" });
     if (!res.ok) {
@@ -2439,6 +2439,12 @@ async function completeSettledJob(jobId) {
       return;
     }
     const state = await res.json();
+
+    if (PROCESSING_STATUSES.has(state.status)) {
+      updateProcessingStudio(state);
+      return;
+    }
+
     if (state.status === "cancelled") {
       updateProcessingStudio(state);
       _autoOpenTokens.delete(jobId);
@@ -2475,22 +2481,43 @@ async function completeSettledJob(jobId) {
     // is the only place a background import's on-demand vocal split (#275)
     // can be triggered -- runVocalSplitIfWanted no-ops if it wasn't requested.
     const finalState = state.status === "done" ? await runVocalSplitIfWanted(state) : state;
-    if (finalState.status !== "done") updateProcessingStudio(finalState);
+    updateProcessingStudio(finalState);
     const track = stateMetadataToTrack(finalState, { ...existing, id: jobId });
     track.id = jobId;
     // A server that sends "work" looked for it while the job ran, so the track
     // that opens next never needs to ask again (#747: every import lands here).
     if (finalState.status === "done" && "work" in finalState) track.workChecked = true;
     addTrackToLibrary(track);
+    if (finalState.status === "done") {
+      notifyActivity({
+        key: `import:done:${jobId}`,
+        kind: "import",
+        level: "success",
+        titleKey: "notifActivity.importDone",
+        message: track.title,
+        action: { type: "track", jobId },
+      });
+    }
     // Checked after the split so the stems it makes are there when it opens,
     // and through the library's own loader so it behaves like a click on the row.
-    if (finalState.status === "done" && shouldAutoOpen(jobId)) loadTrackIntoStudio(jobId);
-    else _autoOpenTokens.delete(jobId);
+    // Only the selection token can authorize automatic opening.
+    // The visible processing panel may be stale while another
+    // track is loading, so it must never override this guard.
+    if (finalState.status === "done" && shouldAutoOpen(jobId)) {
+      void loadTrackIntoStudio(jobId);
+    } else {
+      _autoOpenTokens.delete(jobId);
+    }
     // Wait until final metadata has landed before leaving an empty queue, so
     // there is no flash of a library that still lacks the completed result.
     closeSettledQueue();
   } catch (e) {
     console.warn("[catalog] could not finish background job", jobId, e);
+  } finally {
+    _settleInFlight.delete(jobId);
+    if (_settleAgain.delete(jobId)) {
+      queueMicrotask(() => void completeSettledJob(jobId));
+    }
   }
 }
 
@@ -2729,7 +2756,25 @@ function updateQueueBadge(snap = getQueueSnapshot()) {
   }
 }
 
+const _lastIdleReconcile = new Map();
+
 function onQueueFrame(snap) {
+  if (
+    !snap.running &&
+    !(snap.queued?.length) &&
+    _currentTrackId &&
+    isProcessingStudio(_currentTrackId)
+  ) {
+    const id = _currentTrackId;
+    const now = Date.now();
+    const previous = _lastIdleReconcile.get(id) || 0;
+
+    if (now - previous >= 3000) {
+      _lastIdleReconcile.set(id, now);
+      void completeSettledJob(id);
+    }
+  }
+
   const selected = snap.running?.job_id === _currentTrackId ? snap.running
     : snap.queued?.find((job) => job.job_id === _currentTrackId);
   if (selected) updateProcessingStudio(selected);
@@ -2767,13 +2812,44 @@ function applyQueueDecorations(snap = getQueueSnapshot()) {
  *  localStorage flag, and a second writer reproducing those by hand is exactly
  *  the kind of pair that drifts the first time either changes.
  */
+function syncRailExpanded() {
+  const expanded = !isSidebarCollapsed();
+
+  const views = {
+    ".rail-library": "library",
+    ".rail-favorites": "favorites",
+    ".rail-setlist": "setlist",
+    ".rail-trash": "trash",
+    ".rail-queue": "queue",
+    ".rail-lyrics": "lyrics",
+  };
+
+  for (const [selector, view] of Object.entries(views)) {
+    const button = document.querySelector(selector);
+    if (!button) continue;
+
+    const selected = catalogView === view;
+    const isExpanded = selected && expanded;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-pressed", String(selected));
+    button.setAttribute("aria-expanded", String(isExpanded));
+  }
+}
+
 export function setSidebarCollapsed(isCollapsed) {
   const app = document.querySelector(".app");
   if (!app) return;
   app.classList.toggle("cat-collapsed", isCollapsed);
+
+  // A collapsed sidebar must never retain horizontal scroll.
+  // Keep the rail anchored at x=0 when changing navigation views.
+  const sidebar = document.getElementById("catalogPanel");
+  if (sidebar) sidebar.scrollLeft = 0;
+
   document
     .getElementById("sidebarCollapseBtn")
     ?.setAttribute("aria-expanded", String(!isCollapsed));
+  syncRailExpanded();
   try {
     localStorage.setItem("stemdeck.catalog.collapsed", isCollapsed ? "1" : "0");
   } catch (e) {
@@ -2791,11 +2867,24 @@ function wireCatalogToggle() {
   const app = document.querySelector(".app");
   if (!app) return;
 
-  const collapsed = localStorage.getItem("stemdeck.catalog.collapsed") === "1";
-  if (collapsed) {
-    app.classList.add("cat-collapsed");
-    collapseBtn?.setAttribute("aria-expanded", "false");
+  // Keep the fixed navigation rail at x=0 after collapse.
+  // Browsers may scroll an overflow-hidden flex container
+  // after the width transition to reveal a focused element.
+  const sidebar = document.getElementById("catalogPanel");
+  if (sidebar && sidebar.dataset.railScrollGuard !== "1") {
+    sidebar.dataset.railScrollGuard = "1";
+    sidebar.addEventListener("scroll", () => {
+      if (app.classList.contains("cat-collapsed") &&
+          sidebar.scrollLeft !== 0) {
+        sidebar.scrollLeft = 0;
+      }
+    }, { passive: true });
   }
+
+  // Default for every application launch.
+  // Do not restore a previously collapsed navigation state.
+  catalogView = "library";
+  setSidebarCollapsed(false);
 
   collapseBtn?.addEventListener("click", () => {
     setSidebarCollapsed(!app.classList.contains("cat-collapsed"));
@@ -2815,12 +2904,41 @@ function wireCatalogToggle() {
 }
 
 function wireCatalogRailViews() {
-  document.querySelector(".rail-setlist")?.addEventListener("click", () => setCatalogView("setlist"));
-  document.querySelector(".rail-library")?.addEventListener("click", () => setCatalogView("library"));
-  document.querySelector(".rail-favorites")?.addEventListener("click", () => setCatalogView("favorites"));
-  document.querySelector(".rail-trash")?.addEventListener("click", () => setCatalogView("trash"));
-  document.querySelector(".rail-lyrics")?.addEventListener("click", () => setCatalogView("lyrics"));
-  document.querySelector(".rail-queue")?.addEventListener("click", () => setCatalogView("queue"));
+  const views = {
+    ".rail-library": "library",
+    ".rail-favorites": "favorites",
+    ".rail-setlist": "setlist",
+    ".rail-trash": "trash",
+    ".rail-queue": "queue",
+  };
+
+  for (const [selector, view] of Object.entries(views)) {
+    const button = document.querySelector(selector);
+    if (!button) continue;
+
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+
+      const sameView = catalogView === view;
+      const collapsed = isSidebarCollapsed();
+
+      // Clicking the currently visible view closes its panel.
+      if (sameView && !collapsed) {
+        setSidebarCollapsed(true);
+        return;
+      }
+
+      // A collapsed view must reopen even when already selected.
+      setSidebarCollapsed(false);
+
+      if (!sameView) {
+        setCatalogView(view);
+      } else {
+        syncRailExpanded();
+      }
+    });
+  }
+
   document.getElementById("clearBinBtn")?.addEventListener("click", async (e) => {
     const btn = e.currentTarget;
     if (btn.disabled) return;
@@ -4646,6 +4764,7 @@ function openLibraryEditor() {
       </div>
       <div class="settings-tabs" role="tablist">
         <button class="settings-tab active" type="button" data-tab="general" role="tab" data-i18n="settings.tab.general">General</button>
+        <button class="settings-tab" type="button" data-tab="storage" role="tab" data-i18n="storage.title">Storage</button>
         <button class="settings-tab" type="button" data-tab="details" role="tab" data-i18n="settings.tab.songDetails">Song details</button>
         <button class="settings-tab" type="button" data-tab="network" role="tab" data-i18n="settings.tab.network">Network</button>
         <button class="settings-tab" type="button" data-tab="export" role="tab" data-i18n="settings.tab.export">Export</button>
@@ -4803,6 +4922,23 @@ function openLibraryEditor() {
             <button class="settings-reset-btn" type="button" data-i18n="settings.resetData.button">Reset app data…</button>
           </div>
         </div>
+      </div>
+      <div class="settings-pane hidden" data-pane="storage">
+        <section class="storage-settings-group" aria-labelledby="storageStemsLabel">
+          <h3 id="storageStemsLabel" data-i18n="storage.stemsTitle">Multitrack library</h3>
+          <p data-i18n="storage.stemsHelp">Separated songs, stems, projects and metadata stay outside the app package.</p>
+          <output id="storageStemsPath" class="storage-settings-path">—</output>
+          <button id="storageStemsChange" class="storage-settings-action" type="button" disabled data-i18n="storage.change">Choose folder</button>
+          <p id="storageStemsNote" class="storage-settings-note" role="status"></p>
+        </section>
+        <section class="storage-settings-group" aria-labelledby="storageExportsLabel">
+          <h3 id="storageExportsLabel" data-i18n="storage.exportsTitle">Exports</h3>
+          <p data-i18n="storage.exportsHelp">Suggested folder for WAV, ZIP, mixes and loops. You can still choose another destination when saving.</p>
+          <output id="storageExportsPath" class="storage-settings-path">—</output>
+          <button id="storageExportsChange" class="storage-settings-action" type="button" disabled data-i18n="storage.change">Choose folder</button>
+          <p id="storageExportsNote" class="storage-settings-note" role="status"></p>
+        </section>
+        <p id="storageSettingsStatus" class="storage-settings-note" role="status" aria-live="polite"></p>
       </div>
       <div class="settings-pane hidden" data-pane="details">
         <div class="settings-section">
@@ -4998,6 +5134,7 @@ function openLibraryEditor() {
   libraryEditor = overlay;
   overlay._opener = opener;
   enhanceSettings(overlay, opener);
+  wireStorageSettings(overlay);
   if (previousTab) overlay.querySelector(`[data-tab="${previousTab}"]`)?.click();
   refreshLibrarySyncSummary();
   const isDesktop = Boolean(window.__TAURI__?.core?.invoke);
@@ -5141,6 +5278,13 @@ export async function initCatalog() {
 
   // Patch rows in place on every queue frame. A full render() here would
   // rebuild the sidebar several times a second.
+  document.addEventListener("notificationaction", (event) => {
+    const { type, jobId } = event.detail || {};
+    if (type === "track" && tracks[jobId]?.status === "done") {
+      void loadTrackIntoStudio(jobId);
+    }
+  });
+
   onQueueChange(onQueueFrame);
   onJobSettled(completeSettledJob);
   startQueueStream();

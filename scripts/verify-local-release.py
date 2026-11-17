@@ -23,11 +23,17 @@ PYTHON_TESTS = [
     "tests/test_complete_multitrack_local.py", "tests/test_processing_progress.py",
     "tests/test_ui_store.py", "tests/test_karaoke_timing.py",
     "tests/test_karaoke_service.py", "tests/test_karaoke_delete_model.py",
+    "tests/test_karaoke_workspace_large_v3.py", "tests/test_stems_location.py",
+    "tests/test_drum_float_alignment.py", "tests/test_residue_export.py",
+    "tests/test_rc10_source_parity_audit.py",
 ]
 JS_TESTS = [
     "studio-lanes", "multitrack-playback", "wav-header", "audio-routing",
     "theme", "shared-ui-store", "karaoke-timing-ui", "karaoke",
     "processing-selection", "setlist", "song-setlist",
+    "desktop-storage-paths",
+    "desktop-backend-lifecycle",
+    "lyrics-auto-lookup-rc10",
 ]
 
 
@@ -81,7 +87,10 @@ def main():
         result["node"] = run("node-version", [options.node, "--version"]).strip()
         if int(result["node"].lstrip("v").split(".")[0]) < 20:
             raise RuntimeError("Node 20 or newer is required.")
-        run("diff-check", ["git", "diff", "--check", "HEAD^", "HEAD"])
+        # Consolidated release spans several commits; check the full delta from main,
+        # not only the most recent commit (which could be documentation).
+        run("diff-check", ["git", "diff", "--check",
+                           "1ca88e17d37ecf72e932cecd0a0570ae5949ed98", "HEAD"])
         run("pytest", [options.python, "-m", "pytest", *PYTHON_TESTS, "-q", "--tb=short",
                        "--junitxml=" + str(report_dir / "pytest.xml")], timeout=300)
         tree = ET.parse(report_dir / "pytest.xml")
@@ -91,7 +100,8 @@ def main():
         run("javascript-tests", [options.node, "--test", *[f"tests/js/{name}.test.mjs" for name in JS_TESTS]], timeout=180)
         result["javascript_files"] = len(JS_TESTS)
         for source in ("desktop-app/main.cjs", "desktop-app/preload.cjs", "static/js/theme.js",
-                       "static/js/themeBoot.js", "static/js/confirmAction.js", "static/js/catalog.js", "static/js/lyrics.js"):
+                       "static/js/themeBoot.js", "static/js/confirmAction.js", "static/js/catalog.js", "static/js/lyrics.js",
+                       "static/js/storageSettings.js", "static/js/i18n.js"):
             run("syntax-" + Path(source).stem, [options.node, "--check", source])
         if git(root, "rev-parse", "HEAD") != revision:
             raise RuntimeError("HEAD changed during validation; results cannot authorize a different revision.")

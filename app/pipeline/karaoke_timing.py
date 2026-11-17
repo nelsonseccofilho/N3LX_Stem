@@ -1,6 +1,7 @@
-"""Opt-in, independent karaoke timing via whisper.cpp.
+"""Opt-in karaoke timing: whisper.cpp/Vulkan recognition + WhisperX/CPU alignment.
 
-Does not modify stems, playlists or the canonical lyrics.json.
+Both Portuguese and English follow the same pipeline with language-specific
+acoustic aligners. Does not modify stems, playlists or the canonical lyrics.json.
 Writes a versioned sidecar for later reconciliation with lyrics_retime.
 No VAD: some whisper.cpp versions mix token and segment timebases when VAD
 removes silence. Machine timestamps remain unverified until audio QA.
@@ -17,10 +18,12 @@ import subprocess
 import tempfile
 import time
 import uuid
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from collections.abc import Callable
 from typing import Any
+
+from app.pipeline.karaoke_diagnostics import record_worker_failure
 
 MAX_WORDS = 30_000
 MAX_BYTES = 8 * 1024 * 1024
@@ -313,19 +316,87 @@ def _run_command(
                 proc.wait(timeout=5)
 
 
+# WhisperX 3.8.x defaults to torchaudio's WAV2VEC2_ASR_BASE_960H for EN.
+# Check the cache without importing torch/torchaudio or downloading weights.
+# WhisperX uses torch.hub.get_dir()/checkpoints when model_dir is unspecified.
+ENGLISH_ALIGN_CHECKPOINT = "wav2vec2_fairseq_base_ls960_asr_ls960.pth"
+
+
+def english_alignment_checkpoint() -> Path:
+    """Locate the English acoustic alignment model in torch's effective cache."""
+    torch_home = os.environ.get("TORCH_HOME")
+    if torch_home:
+        base = Path(torch_home)
+    else:
+        base = Path(os.environ.get("XDG_CACHE_HOME") or (Path.home() / ".cache")) / "torch"
+    return base.expanduser() / "hub" / "checkpoints" / ENGLISH_ALIGN_CHECKPOINT
+
+
+def english_alignment_ready() -> bool:
+    """Never advertise English when WhisperX would fetch a missing model."""
+    checkpoint = english_alignment_checkpoint()
+    return checkpoint.is_file() and checkpoint.stat().st_size > 16 * 1024 * 1024
+
+
+def portuguese_alignment_cache() -> Path | None:
+    """Find existing PT weights without letting portable XDG hide the profile cache.
+
+    Explicit Hugging Face/Transformers settings remain authoritative. Only the
+    app's implicit XDG default may fall back to the already installed model.
+    """
+    explicit = next((os.environ[key].strip() for key in (
+        "TRANSFORMERS_CACHE", "HF_HUB_CACHE", "HUGGINGFACE_HUB_CACHE")
+        if os.environ.get(key, "").strip()), None)
+    hf_home = os.environ.get("HF_HOME", "").strip()
+    profile = Path.home() / ".cache" / "huggingface" / "hub"
+    effective = (Path(explicit) if explicit else Path(hf_home) / "hub" if hf_home
+                 else Path(os.environ.get("XDG_CACHE_HOME") or (Path.home() / ".cache")) / "huggingface" / "hub")
+    candidates = [effective] if explicit or hf_home else [effective, profile]
+    for cache in candidates:
+        cache = cache.expanduser()
+        repo = cache / "models--jonatasgrosman--wav2vec2-large-xlsr-53-portuguese"
+        try:
+            revision = (repo / "refs" / "main").read_text(encoding="utf-8").strip()
+            if not re.fullmatch(r"[a-f0-9]{40,64}", revision):
+                continue
+            snapshot = repo / "snapshots" / revision
+            if (all((snapshot / name).is_file() and (snapshot / name).stat().st_size > 0
+                    for name in ("config.json", "preprocessor_config.json", "vocab.json"))
+                    and any((snapshot / name).is_file() and (snapshot / name).stat().st_size > 16 * 1024 * 1024
+                            for name in ("pytorch_model.bin", "model.safetensors"))):
+                return cache
+        except OSError:
+            continue
+    return None
+
+
 def aligned_worker_resources() -> tuple[Path, Path]:
-    """Use the already-installed NELX worker; never download or fall back."""
-    root = Path(os.environ.get("N3LX_WHISPER_GPU_HOME", str(Path.home() / "NELX-Whisper-GPU"))).expanduser().resolve()
-    python = root / "venv" / "Scripts" / "python.exe"
-    script = root / "transcrever_gpu.py"
-    required = (python, script, root / "alinhamento_directml.py",
+    """Locate the existing NELX worker; no downloads or implicit GPU fallback.
+
+    The current workspace layout has the transcriber under src/ and its own
+    Python environment in _workspace/venvs. The legacy DirectML worker is
+    supported only when all of its original prerequisites still exist.
+    """
+    shared = Path(os.environ.get("N3LX_SHARED_WORKSPACE",
+                                str(Path.home() / "Git" / "_workspace"))).expanduser().resolve()
+    root = Path(os.environ.get("N3LX_WHISPER_GPU_HOME",
+                               str(shared.parent / "NELX-Whisper-GPU"))).expanduser().resolve()
+    python = Path(os.environ.get("N3LX_WHISPER_GPU_PYTHON",
+                                str(shared / "venvs" / "whispergpu" / "Scripts" / "python.exe"))).expanduser().resolve()
+    worker = root / "src" / "transcrever_gpu.py"
+    if python.is_file() and worker.is_file():
+        return python, worker
+
+    legacy_python = root / "venv" / "Scripts" / "python.exe"
+    legacy_worker = root / "transcrever_gpu.py"
+    required = (legacy_python, legacy_worker, root / "alinhamento_directml.py",
                 root / "alinhamento_directml_worker.py",
                 root / "experimentos" / "diarizacao-directml" / "venv" / "Scripts" / "python.exe",
                 root / "experimentos" / "alinhamento-directml" / "modelo" / "onnx" / "model.onnx",
                 root / "experimentos" / "alinhamento-directml" / "modelo" / "vocab.json")
-    if not all(path.is_file() for path in required):
-        raise KaraokeTimingError("WhisperGPU alignment environment not configured")
-    return python, script
+    if all(path.is_file() for path in required):
+        return legacy_python, legacy_worker
+    raise KaraokeTimingError("WhisperGPU worker or alignment environment not configured")
 
 
 def _terminate_worker_tree(proc: subprocess.Popen) -> None:
@@ -349,52 +420,6 @@ def _terminate_worker_tree(proc: subprocess.Popen) -> None:
         proc.wait(timeout=10)
 
 
-def _generate_english_timing(audio: Path, cli: str, model: Path, ffmpeg: str,
-                             timeout: int, cancelled, phase_changed) -> dict[str, Any]:
-    """English: explicit Whisper Vulkan word timestamps, without PT aligner."""
-    ffmpeg_bin = _checked_executable(ffmpeg, "ffmpeg")
-    with tempfile.TemporaryDirectory(prefix="n3lx-english-") as tmp:
-        root = Path(tmp)
-        wav = root / "vocals16.wav"
-        prefix = root / "transcription"
-        if phase_changed: phase_changed("prepare")
-        code = _run_command([ffmpeg_bin, "-nostdin", "-v", "error", "-y", "-i", str(audio),
-                             "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(wav)],
-                            timeout=180, cancelled=cancelled)
-        if code or not wav.is_file(): raise KaraokeTimingError("ffmpeg failed to prepare vocal audio")
-        if phase_changed: phase_changed("transcribe")
-        log_path = root / "vulkan.log"
-        with log_path.open("w", encoding="utf-8") as log:
-            if cancelled is not None and cancelled():
-                raise KaraokeTimingError("karaoke generation cancelled")
-            proc = subprocess.Popen([cli, "-m", str(model), "-f", str(wav), "-l", "en", "-t", "6",
-                                     "-dev", "0", "-ml", "1", "-sow", "-ojf", "-of", str(prefix)],
-                                    stdout=log, stderr=subprocess.STDOUT, start_new_session=os.name != "nt")
-            started = time.monotonic()
-            try:
-                while proc.poll() is None:
-                    if cancelled is not None and cancelled(): raise KaraokeTimingError("karaoke generation cancelled")
-                    if time.monotonic() - started > timeout: raise KaraokeTimingError("karaoke worker exceeded its timeout")
-                    time.sleep(.3)
-                code = proc.returncode
-            finally:
-                _terminate_worker_tree(proc)
-        log_text = log_path.read_text(encoding="utf-8", errors="replace")
-        if code or not re.search(r"use gpu\s*=\s*1", log_text) or "using Vulkan0 backend" not in log_text:
-            raise KaraokeTimingError("English Vulkan recognition failed or GPU not verified")
-        output = prefix.with_suffix(".json")
-        if not output.is_file() or output.stat().st_size > MAX_BYTES:
-            raise KaraokeTimingError("Whisper did not produce bounded JSON")
-        try: result = json.loads(output.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as exc: raise KaraokeTimingError("Whisper returned unreadable JSON") from exc
-        if phase_changed: phase_changed("finalize")
-        timing = normalize_timing(result)
-        if timing.get("language") != "en": raise KaraokeTimingError("Whisper returned unexpected language")
-        timing.update({"lrc_preview": enhanced_lrc(timing["words"]), "requested_device": "vulkan_device_0",
-                       "gpu_verified": True, "alignment_backend": "whisper_word_timestamps"})
-        return timing
-
-
 def generate_timing(
     audio: Path, *, whisper_cli: str, model: Path, ffmpeg: str = "ffmpeg",
     timeout: int = 3600,
@@ -408,24 +433,36 @@ def generate_timing(
         raise KaraokeTimingError("audio or Whisper model not found")
     cli = _checked_executable(whisper_cli, "whisper-cli")
     _checked_executable(ffmpeg, "ffmpeg")
-    if language == "en":
-        return _generate_english_timing(audio, cli, model, ffmpeg, timeout, cancelled, phase_changed)
-    if language != "pt":
+    if language not in {"pt", "en"}:
         raise KaraokeTimingError("unsupported karaoke language")
     python, worker = aligned_worker_resources()
+    pt_cache = portuguese_alignment_cache() if language == "pt" and worker.parent.name == "src" else None
+    if language == "pt" and worker.parent.name == "src" and pt_cache is None:
+        raise KaraokeTimingError("PT alignment model unavailable in offline cache")
+    if language == "en" and not english_alignment_ready():
+        raise KaraokeTimingError("English WhisperX acoustic checkpoint not available in torch cache")
+    # Legacy experimental DirectML alignment was built only for PT. The modern
+    # WhisperX worker supports a language-specific acoustic model for PT and EN.
+    if language == "en" and worker.parent.name != "src":
+        raise KaraokeTimingError("English requires the modern WhisperX alignment worker")
     model_name = model.stem.removeprefix("ggml-")
-    if model_name not in {"large-v3", "medium"}:
-        raise KaraokeTimingError("unsupported Whisper model")
-    with tempfile.TemporaryDirectory(prefix="n3lx-whispergpu-") as tmp:
+    if model_name != "large-v3":
+        raise KaraokeTimingError("only Whisper Large v3 is supported")
+    with tempfile.TemporaryDirectory(prefix=f"n3lx-whispergpu-{language}-") as tmp:
         output = Path(tmp)
         logfile = output / "worker.log"
+        modern = worker.parent.name == "src"
         command = [str(python), str(worker), str(audio), "--model", model_name,
                    "--whisper-model", str(model), "--whisper-cli", cli,
-                   "--device", "vulkan", "--gpu", "0", "--language", "pt",
-                   "--threads", "6", "--no-diarize", "--no-preload-align",
-                   "--output-format", "json", "--output-profile", "quality",
-                   "--output-dir", str(output)]
+                   "--device", "vulkan", "--gpu", "0", "--language", language,
+                   "--threads", "6", "--no-diarize",
+                   "--output-format", "json", "--output-dir", str(output)]
+        if not modern:
+            # Legacy DirectML worker accepts these two extra options.
+            command += ["--no-preload-align", "--output-profile", "quality"]
         env = os.environ.copy()
+        if pt_cache is not None:
+            env["HF_HUB_CACHE"] = str(pt_cache)
         env.update({"HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1",
                     "HF_HUB_DISABLE_TELEMETRY": "1", "PYTHONIOENCODING": "utf-8",
                     "PYTHONDONTWRITEBYTECODE": "1", "PYTHONUNBUFFERED": "1"})
@@ -455,7 +492,24 @@ def generate_timing(
             finally:
                 _terminate_worker_tree(proc)
         if code != 0:
-            raise KaraokeTimingError(f"WhisperGPU alignment failed (exit {code})")
+            # The detailed worker log is in the temporary directory. Surface
+            # only diagnostic categories, never the transcribed lyrics.
+            log_text = logfile.read_text(encoding="utf-8", errors="replace").lower()
+            if "offline" in log_text and ("model" in log_text or "cache" in log_text):
+                issue = f"{language.upper()} alignment model unavailable in offline cache"
+            elif "out of memory" in log_text or "memoryerror" in log_text:
+                issue = "alignment worker ran out of memory"
+            else:
+                issue = f"WhisperGPU/WhisperX worker exited with code {code}"
+            # C27.4D: persist only classified metadata. Never keep raw worker
+            # stdout, which may contain transcribed lyrics or local paths.
+            report_id = record_worker_failure(
+                logfile=logfile, audio=audio, language=language, phase=phase,
+                exit_code=code, alignment_backend="cpu" if modern else "directml",
+            )
+            if report_id:
+                issue += f" [diagnostic: {report_id}]"
+            raise KaraokeTimingError(issue)
         results = list(output.glob("*.integrado.json"))
         reports = list(output.glob("*.qualidade.json"))
         if len(results) != 1 or len(reports) != 1 or results[0].stat().st_size > MAX_BYTES or reports[0].stat().st_size > MAX_BYTES:
@@ -465,17 +519,21 @@ def generate_timing(
             report = json.loads(reports[0].read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
             raise KaraokeTimingError("WhisperGPU returned unreadable JSON") from exc
+        alignment = "cpu" if modern else "onnx_directml_confirmado"
         if (report.get("etapas", {}).get("alinhamento") != "ok" or
-            report.get("backend_alinhamento") != "onnx_directml_confirmado" or
+            report.get("backend_alinhamento") != alignment or
             report.get("gpu_reconhecimento") != "vulkan_confirmado_pelo_log"):
-            raise KaraokeTimingError("Vulkan recognition or DirectML alignment not verified")
+            raise KaraokeTimingError("Vulkan recognition or selected alignment not verified")
         if phase_changed:
             phase_changed("finalize")
         timing = normalize_timing(result)
+        if timing.get("language") not in (None, language):
+            raise KaraokeTimingError("alignment worker returned an unexpected language")
+        timing["language"] = language
         timing["lrc_preview"] = enhanced_lrc(timing["words"])
         timing["requested_device"] = "vulkan_device_0"
         timing["gpu_verified"] = True
-        timing["alignment_backend"] = "onnx_directml_confirmado"
+        timing["alignment_backend"] = alignment
         timing["alignment_alerts"] = report.get("total_alertas")
         return timing
 
@@ -488,13 +546,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model", type=Path, required=True)
     parser.add_argument("--ffmpeg", default="ffmpeg")
     parser.add_argument("--replace", action="store_true")
+    parser.add_argument("--language", choices=("pt", "en"), default="pt")
     args = parser.parse_args(argv)
     if args.output.is_file() and not args.replace:
         parser.error("output exists; use --replace to preserve its previous version")
     try:
         timing = generate_timing(
             args.audio, whisper_cli=args.whisper_cli,
-            model=args.model, ffmpeg=args.ffmpeg,
+            model=args.model, ffmpeg=args.ffmpeg, language=args.language,
         )
         backup = store_timing(args.output, timing, replace=args.replace)
     except (KaraokeTimingError, OSError, subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
@@ -502,7 +561,7 @@ def main(argv: list[str] | None = None) -> int:
     print(json.dumps({
         "state": "generated", "words": len(timing["words"]),
         "output": str(args.output),
-        "backup": str(backup) if backup else None, "gpu_verified": False,
+        "backup": str(backup) if backup else None, "gpu_verified": bool(timing.get("gpu_verified")),
     }, ensure_ascii=False))
     return 0
 

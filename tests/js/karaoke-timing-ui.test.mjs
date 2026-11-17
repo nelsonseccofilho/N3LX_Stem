@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { karaokePreviewFromTiming, hasProtectedLyrics } from "../../static/js/karaokeTiming.js";
+import { karaokePreviewFromTiming, hasProtectedLyrics, timingForMatchingEditedLyrics } from "../../static/js/karaokeTiming.js";
 
 const timing = {
   v: 1, engine: "whisper.cpp", timing_status: "machine_unverified",
@@ -38,6 +38,22 @@ assert.equal(hasProtectedLyrics({ source: "manual" }), true);
 assert.equal(hasProtectedLyrics({ userSynced: "[00:01.00] Olá" }), true);
 assert.equal(hasProtectedLyrics({}, true), true, "active editor protects work in progress");
 assert.equal(hasProtectedLyrics({ source: "lrclib", synced: "" }), false);
+
+// Only attach machine word timestamps when all edited words agree in order.
+// A truncated edit may share a prefix but must not receive invented alignment.
+const manual = { source: "manual", plain: "Eu vou cantar\nagora" };
+const manualTimed = timingForMatchingEditedLyrics(manual, timing);
+assert.ok(manualTimed?.generatedTimingApplied, "exact edited text can borrow machine timestamps");
+assert.match(manualTimed.synced, /<00:02\.10>agora/);
+assert.equal(manual.synced, undefined, "manual source is never mutated");
+assert.equal(
+  timingForMatchingEditedLyrics({ source: "manual", plain: "Eu vou cantar" }, timing),
+  null, "an edited lyric missing the final word cannot inherit incomplete timings"
+);
+assert.equal(
+  timingForMatchingEditedLyrics({ source: "manual", plain: "Eu quero cantar agora" }, timing),
+  null, "different edited words cannot receive generated timings"
+);
 
 const html = readFileSync(new URL("../../static/index.html", import.meta.url), "utf8");
 for (const id of ["lyricsGenerateKaraokeBtn", "lyricsCancelKaraokeBtn", "lyricsRegenerateKaraokeBtn", "lyricsTimingJsonLink", "karaokeSettings", "lyricsSettingsOpen", "karaokeCinemaOpen", "karaokeCinemaExit"]) {

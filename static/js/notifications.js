@@ -13,8 +13,12 @@
 
 import { storeGet, storeSet } from "./utils.js";
 import { t, plural } from "./i18n.js";
+import { confirmAction } from "./confirmAction.js";
 
 const FAILURES_KEY = "stemdeck:failures";
+const ACTIVITY_KEY = "stemdeck:activity:c27";
+const MAX_ACTIVITY = 80;
+let activities = [];
 // Enough to cover a bad session without letting a crash loop fill the store.
 const MAX_FAILURES = 20;
 const NEW_ISSUE_URL = "https://github.com/stemdeckapp/stemdeck/issues/new";
@@ -36,6 +40,13 @@ const KIND_KEYS = {
   playback: "notifKind.playbackFailed",
   export: "notifKind.exportFailed",
   update: "notifKind.updateCheckFailed",
+  sync: "notifKind.syncFailed",
+  karaoke: "notifKind.karaokeFailed",
+  timing: "notifKind.timingFailed",
+  delete: "notifKind.deleteFailed",
+  lyrics: "notifKind.lyricsFailed",
+  sync: "notifKind.syncFailed",
+  sections: "notifKind.sectionsFailed",
 };
 function kindLabel(kind) {
   return kind in KIND_KEYS ? t(KIND_KEYS[kind]) : t("notifKind.default");
@@ -255,6 +266,7 @@ export function notifyFailure({ kind, message, detail = null, cause = null, cont
     // Keep whichever sighting carried the richer detail.
     const prev = failures[dupe];
     record.id = prev.id;
+    record.readAt = prev.readAt || null;
     record.detail = record.detail || prev.detail;
     record.cause = record.cause || prev.cause;
     record.context = { ...prev.context, ...record.context };
@@ -319,6 +331,155 @@ export function getFailures() {
 export function setReleasePending(pending) {
   releasePending = Boolean(pending);
   render();
+}
+
+
+// C27: successful operations and informational events. Unlike failures,
+// these never carry diagnostic logs or full edited lyrics.
+let activitySaveChain = Promise.resolve();
+
+function persistActivities() {
+  const snapshot = activities.map(record => ({ ...record }));
+  activitySaveChain = activitySaveChain
+    .catch(() => {})
+    .then(() => storeSet(ACTIVITY_KEY, snapshot));
+  return activitySaveChain;
+}
+
+export function getActivities() {
+  return activities;
+}
+
+export function notifyActivity({
+  key, kind = "import", level = "success",
+  titleKey, message = "", action = null
+} = {}) {
+  if (!key || !titleKey) throw new Error("Notification key and titleKey required");
+
+  // A terminal SSE frame, polling response and startup reconciliation may
+  // all describe the same operation. Store exactly one notification.
+  const existing = activities.find(record => record.key === key);
+  if (existing) return existing;
+
+  const safeAction = action?.type === "track" &&
+    /^[a-z0-9-]{4,80}$/i.test(String(action.jobId || ""))
+      ? { type: "track", jobId: action.jobId }
+      : null;
+
+  const record = {
+    id: nowId(),
+    key: String(key).slice(0, 180),
+    kind: String(kind),
+    level: ["success", "info", "warning"].includes(level) ? level : "info",
+    titleKey: String(titleKey),
+    message: String(message).slice(0, 180),
+    action: safeAction,
+    at: Date.now(),
+    readAt: null,
+  };
+
+  activities.unshift(record);
+  activities = activities.slice(0, MAX_ACTIVITY);
+  void persistActivities();
+  render();
+  return record;
+}
+
+export function dismissActivity(id) {
+  activities = activities.filter(record => record.id !== id);
+  void persistActivities();
+  render();
+}
+
+export function markAllRead() {
+  const now = Date.now();
+  let failureChanged = false;
+  let activityChanged = false;
+
+  for (const record of failures) {
+    if (!record.readAt) {
+      record.readAt = now;
+      failureChanged = true;
+    }
+  }
+  for (const record of activities) {
+    if (!record.readAt) {
+      record.readAt = now;
+      activityChanged = true;
+    }
+  }
+  if (failureChanged) void persist();
+  if (activityChanged) void persistActivities();
+  render();
+}
+
+export function clearAllNotifications() {
+  failures = [];
+  activities = [];
+  void persist();
+  void persistActivities();
+  render();
+}
+
+function buildActivityCard(record) {
+  const card = document.createElement("div");
+  card.className = "daw-notif-card daw-notif-activity daw-notif-" + record.level;
+  if (record.readAt) card.classList.add("daw-notif-read");
+
+  const icon = document.createElement("div");
+  icon.className = "daw-notif-card-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.textContent = record.level === "success" ? "✓" : "!";
+
+  const body = document.createElement("div");
+  body.className = "daw-notif-card-body";
+
+  const title = document.createElement("div");
+  title.className = "daw-notif-card-title";
+  title.textContent = t(record.titleKey);
+
+  const description = document.createElement("div");
+  description.className = "daw-notif-card-desc";
+  description.textContent = [
+    record.message, relativeTime(record.at)
+  ].filter(Boolean).join(" · ");
+  body.append(title, description);
+
+  if (record.action) {
+    card.setAttribute("role", "button");
+    card.setAttribute("tabindex", "0");
+    const open = () => {
+      if (!record.readAt) {
+        record.readAt = Date.now();
+        void persistActivities();
+      }
+      document.dispatchEvent(new CustomEvent(
+        "notificationaction",
+        { detail: record.action }
+      ));
+      render();
+    };
+    card.addEventListener("click", open);
+    card.addEventListener("keydown", event => {
+      if (event.code === "Enter" || event.code === "Space") {
+        event.preventDefault();
+        open();
+      }
+    });
+  }
+
+  const dismiss = document.createElement("button");
+  dismiss.className = "daw-notif-dismiss";
+  dismiss.type = "button";
+  dismiss.textContent = "×";
+  dismiss.setAttribute("aria-label", t("notif.dismiss"));
+  dismiss.addEventListener("click", event => {
+    event.stopPropagation();
+    dismissActivity(record.id);
+  });
+
+  card.append(icon, body, dismiss);
+  return card;
 }
 
 // ─── Rendering ────────────────────────────────────────────────────────────
@@ -397,13 +558,44 @@ export function render() {
   const empty = document.getElementById("notifEmpty");
   if (!list) return;
 
-  for (const el of list.querySelectorAll(".daw-notif-error")) el.remove();
-  const anchor = list.firstChild;
-  for (const record of failures) list.insertBefore(buildCard(record), anchor);
+  for (const el of list.querySelectorAll(
+    ".daw-notif-error, .daw-notif-activity"
+  )) el.remove();
 
-  const any = failures.length > 0 || releasePending;
-  badge?.classList.toggle("hidden", !any);
-  empty?.classList.toggle("hidden", any);
+  const anchor = list.firstChild;
+  const records = [
+    ...failures.map(record => ({ type: "failure", record })),
+    ...activities.map(record => ({ type: "activity", record })),
+  ].sort((a, b) => b.record.at - a.record.at);
+
+  for (const item of records) {
+    list.insertBefore(
+      item.type === "failure"
+        ? buildCard(item.record)
+        : buildActivityCard(item.record),
+      anchor
+    );
+  }
+
+  const unread = failures.filter(r => !r.readAt).length +
+    activities.filter(r => !r.readAt).length;
+
+  const total = unread + (releasePending ? 1 : 0);
+  if (badge) {
+    badge.textContent = total ? String(Math.min(total, 99)) : "";
+    badge.classList.toggle("hidden", total === 0);
+  }
+
+  const bell = document.getElementById("notifBtn");
+  bell?.setAttribute(
+    "aria-label",
+    `${t("notif.bell")}${unread ? ` (${unread})` : ""}`
+  );
+
+  empty?.classList.toggle(
+    "hidden",
+    records.length > 0 || releasePending
+  );
 }
 
 // ─── Detail dialog ────────────────────────────────────────────────────────
@@ -524,9 +716,19 @@ function wireFailureDialog() {
   close?.addEventListener("click", hide);
   dialog.addEventListener("mousedown", (e) => { if (e.target === dialog) hide(); });
   dialog.addEventListener("keydown", (e) => { if (e.code === "Escape") hide(); });
-  document.getElementById("notifClearAll")?.addEventListener("click", (e) => {
+  document.getElementById("notifClearAll")?.addEventListener("click", async (e) => {
     e.stopPropagation();
-    clearFailures();
+    const accepted = await confirmAction({
+      title: t("notif.clearConfirmTitle"),
+      message: t("notif.clearConfirmMessage"),
+      confirmLabel: t("notif.clearAll"),
+    });
+    if (accepted) clearAllNotifications();
+  });
+
+  document.getElementById("notifMarkAllRead")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    markAllRead();
   });
   document.getElementById("failureReport")?.addEventListener("click", (e) => copyReportToClipboard(e.currentTarget));
   document.getElementById("failureReportDiscord")?.addEventListener("click", (e) => copyReportToClipboard(e.currentTarget));
@@ -556,5 +758,13 @@ export async function initNotifications({ diagnostics } = {}) {
   failures = [...failures, ...restored.filter((f) => !live.has(f.id))]
     .sort((a, b) => b.at - a.at)
     .slice(0, MAX_FAILURES);
+  const restoredActivity = await storeGet(ACTIVITY_KEY, []);
+  const liveKeys = new Set(activities.map(item => item.key));
+  activities = [
+    ...activities,
+    ...(Array.isArray(restoredActivity) ? restoredActivity : [])
+      .filter(item => item?.key && !liveKeys.has(item.key)),
+  ].sort((a, b) => b.at - a.at).slice(0, MAX_ACTIVITY);
+
   render();
 }

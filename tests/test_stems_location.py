@@ -527,3 +527,50 @@ def test_a_refused_move_reopens_the_door(client, tmp_path):
 
     assert r.status_code == 409
     assert stems_location.is_relocating() is False, "imports would be blocked forever"
+
+
+def test_desktop_empty_only_never_moves_existing_music(client, tmp_path):
+    """A stale UI or accidental click must not move even one existing WAV."""
+    import app.core.settings as settings_mod
+
+    original = _job_dir(client.jobs_dir, "aaaaaaaaaaaa", size=100)
+    before = (original / "stems" / "vocals.wav").read_bytes()
+    destination = tmp_path / "D-drive" / "Stems"
+
+    response = client.post("/api/settings/stems-location", json={
+        "path": str(destination), "only_if_source_empty": True,
+    })
+
+    assert response.status_code == 409
+    assert "migration" in response.json()["detail"]
+    assert (original / "stems" / "vocals.wav").read_bytes() == before
+    assert not destination.exists()
+    assert settings_mod.get_jobs_dir() is None
+
+
+def test_desktop_empty_only_configures_a_new_library(client, tmp_path):
+    """Changing an empty library does not copy or remove anything."""
+    destination = tmp_path / "D-drive" / "Stems"
+    response = client.post("/api/settings/stems-location", json={
+        "path": str(destination), "only_if_source_empty": True,
+    })
+
+    assert response.status_code == 200
+    assert response.json()["moved_entries"] == 0
+    assert response.json()["persisted"] is True
+    assert destination.is_dir()
+    assert client.jobs_dir.is_dir()
+
+
+def test_desktop_empty_only_refuses_merging_into_nonempty_folder(client, tmp_path):
+    destination = tmp_path / "D-drive" / "Stems"
+    destination.mkdir(parents=True)
+    (destination / "user-data.json").write_text("{}", encoding="utf-8")
+
+    response = client.post("/api/settings/stems-location", json={
+        "path": str(destination), "only_if_source_empty": True,
+    })
+
+    assert response.status_code == 409
+    assert "empty" in response.json()["detail"]
+    assert (destination / "user-data.json").read_text(encoding="utf-8") == "{}"

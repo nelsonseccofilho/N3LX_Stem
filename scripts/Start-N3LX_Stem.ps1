@@ -18,13 +18,23 @@ $env:PYTHONIOENCODING = 'utf-8'
 $env:STEMDECK_SEPARATION_PROFILE = 'complete'
 $env:STEMDECK_SEPARATION_QUALITY = 'best'
 $env:STEMDECK_PERSIST_LIBRARY = '1'
+# Shared tools live alongside N3LX_Stem, not inside its Git checkout.
+# Explicit user overrides always win; never install or move shared models here.
+$gitRoot = Split-Path $RuntimeRoot -Parent
+$shared = Join-Path $gitRoot '_workspace'
 if (-not $env:N3LX_WHISPER_CLI) {
-    $env:N3LX_WHISPER_CLI = Join-Path $RuntimeRoot 'tools\whisper.cpp\whisper-cli.exe'
-    if (-not (Test-Path -LiteralPath $env:N3LX_WHISPER_CLI)) { $env:N3LX_WHISPER_CLI = Join-Path $env:USERPROFILE 'whisper.cpp\build-vulkan\bin\Release\whisper-cli.exe' }
+    $env:N3LX_WHISPER_CLI = Join-Path $shared 'tools\whisper.cpp\build-vulkan-nmake\bin\whisper-cli.exe'
+    if (-not (Test-Path -LiteralPath $env:N3LX_WHISPER_CLI)) { $env:N3LX_WHISPER_CLI = Join-Path $RuntimeRoot 'tools\whisper.cpp\whisper-cli.exe' }
 }
-if (-not $env:N3LX_WHISPER_MODEL) {
-    $env:N3LX_WHISPER_MODEL = Join-Path $RuntimeRoot 'tools\whisper.cpp\ggml-large-v3.bin'
-    if (-not (Test-Path -LiteralPath $env:N3LX_WHISPER_MODEL)) { $env:N3LX_WHISPER_MODEL = Join-Path $env:USERPROFILE 'whisper.cpp\models\ggml-large-v3.bin' }
+if (-not $env:N3LX_WHISPER_LARGE_MODEL) {
+    $env:N3LX_WHISPER_LARGE_MODEL = Join-Path $shared 'models\ggml-large-v3.bin'
+}
+if (-not $env:N3LX_WHISPER_MODEL) { $env:N3LX_WHISPER_MODEL = $env:N3LX_WHISPER_LARGE_MODEL }
+if (-not $env:N3LX_WHISPER_GPU_HOME) {
+    $env:N3LX_WHISPER_GPU_HOME = Join-Path $gitRoot 'NELX-Whisper-GPU'
+}
+if (-not $env:N3LX_WHISPER_GPU_PYTHON) {
+    $env:N3LX_WHISPER_GPU_PYTHON = Join-Path $shared 'venvs\whispergpu\Scripts\python.exe'
 }
 if (-not $env:STEMDECK_SAM_SOURCE) { $env:STEMDECK_SAM_SOURCE = Join-Path (Split-Path $RuntimeRoot -Parent) 'sam-audio-amd' }
 $env:STEMDECK_FFMPEG = (Get-Command ffmpeg.exe -ErrorAction Stop).Source
@@ -33,21 +43,9 @@ $python = Join-Path $RuntimeRoot '.venv\Scripts\python.exe'
 $logDir = Join-Path $DataDir 'logs'
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 $url = "http://127.0.0.1:$Port"
-$health = $null
-try { $health = Invoke-RestMethod "$url/api/health" -TimeoutSec 2 } catch {}
-if ($health -and $env:STEMDECK_INSTANCE_TOKEN -and $health.instance -ne $env:STEMDECK_INSTANCE_TOKEN) { throw "Outro servidor ocupa a porta $Port. Feche a outra instancia ou escolha outra porta." }
-if (-not $health) {
-    $connection = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
-    if ($connection) { throw "Porta $Port ocupada. Use -Port para escolher outra." }
-    $proc = Start-Process -FilePath $python -WorkingDirectory $repo -WindowStyle Hidden -PassThru -ArgumentList @('-m','uvicorn','app.main:app','--host','127.0.0.1','--port',"$Port",'--timeout-graceful-shutdown','5') -RedirectStandardOutput (Join-Path $logDir 'server.stdout.log') -RedirectStandardError (Join-Path $logDir 'server.stderr.log')
-    Set-Content -LiteralPath (Join-Path $logDir 'server.pid') -Value $proc.Id
-    for ($attempt=0; $attempt -lt 60; $attempt++) {
-        Start-Sleep -Seconds 1
-        try { $health = Invoke-RestMethod "$url/api/health" -TimeoutSec 2; break } catch {}
-        if ($proc.HasExited) { throw "N3LX_Stem encerrou. Consulte data\logs\server.stderr.log." }
-    }
-    if (-not $health) { throw 'Inicializacao excedeu o tempo. Consulte data\logs.' }
-}
+& $python (Join-Path $PSScriptRoot 'backend_control.py') start --port $Port --runtime $RuntimeRoot --data $DataDir
+if ($LASTEXITCODE -ne 0) { throw 'Inicializacao controlada recusada. Consulte a mensagem acima.' }
+$health = Invoke-RestMethod "$url/api/health" -TimeoutSec 5
 if ($health.name -ne "StemDeck" -or $health.status -ne "ok") { throw "Outro aplicativo esta usando $url." }
 $settings = Invoke-RestMethod "$url/api/settings" -TimeoutSec 60
 if ($settings.demucs_devices_available -notcontains 'directml') { throw 'A RX6600M nao passou no teste DirectML. Consulte data\logs.' }

@@ -1,0 +1,20 @@
+import assert from "node:assert/strict";
+import { currentLineIndex, parseLrc, wordTimings } from "../../static/js/lyricsLookup.js";
+
+const lines = parseLrc("[00:01.00]<00:01.00>First<00:02.00>\n[00:06.00]<00:06.00>Next<00:07.00>");
+const original = JSON.stringify(lines);
+const displayed = time => currentLineIndex(lines, time, { holdPrevious: true });
+assert.equal(displayed(0), -1, "no premature highlight before the first phrase");
+assert.equal(displayed(1), 0);
+assert.equal(displayed(2), 0, "keep highlight at the exact phrase end");
+assert.equal(displayed(5.99), 0, "keep highlight throughout the gap");
+assert.equal(currentLineIndex(lines, 3), -1, "timing consumers still see the acoustic gap");
+assert.equal(displayed(6), 1, "switch at the next phrase start");
+assert.equal(displayed(8), 1, "last phrase remains highlighted");
+assert.equal(displayed(3), 0, "seeking backwards restores the correct phrase");
+assert.equal(displayed(0), -1, "seeking before the lyrics clears the highlight");
+assert.equal(currentLineIndex([], 3, { holdPrevious: true }), -1);
+const words = wordTimings(lines[0], lines[1].time);
+assert.equal(words.at(-1).end, 2, "word fill ends at its original timestamp");
+assert.equal(JSON.stringify(lines), original, "presentation never mutates the timings");
+console.log("Lyrics highlight: pauses, boundaries, seek and original word timing PASS");

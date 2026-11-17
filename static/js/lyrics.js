@@ -1,20 +1,12 @@
+import { initKaraokeSettingsTabs } from "./karaokeSettingsTabs.js";
 import { confirmAction } from "./confirmAction.js";
 // The Lyrics tab: a view of the sidebar where the open track's lyrics are
 // found, kept, and shown in time with playback, karaoke style (#699).
 //
-// Where they come from, in order:
-//   0. what the user chose for the track, kept here; else what the server
-//      found while the track was separated (GET /api/jobs/{id}/lyrics: the
-//      file's own, LRCLIB's, or a transcription), shown but not kept here, so
-//      a better answer from the server later still shows. Failing both:
-//   1. lyrics the file itself carried (an upload's embedded lyrics tag);
-//   2. LRCLIB (lyricsLookup.js), looked up by itself when the tab opens, by
-//      the artist and song the file was tagged with, or failing that the band
-//      saved from the artist box and the song's name cleaned out of the
-//      title. Kept straight away only when a version is the same length as
-//      the track; otherwise the versions are offered to pick from.
-// There is no search box: what is looked up is what the track says it is.
-// What was kept belongs to the track and comes back whenever it is open.
+// Existing saved or embedded lyrics load locally; no external requests.
+// LRCLIB search happens only after Find lyrics in Karaoke settings is
+// explicitly submitted with artist and song. A result is never selected
+// automatically. Generating karaoke with Whisper is a separate local action.
 //
 // Synced lyrics follow playback: the line being sung fills with colour word by
 // word, the next line is raised a step, the view keeps the line in the middle,
@@ -40,10 +32,23 @@ import { confirmAction } from "./confirmAction.js";
 
 import { lyricsEditorText, editedLyrics, untimedLines } from "./lyricsEditing.js";
 import { karaokePreviewFromTiming, hasProtectedLyrics, timingForMatchingEditedLyrics } from "./karaokeTiming.js";
+import { createLyricsAutoSyncController } from "./lyricsAutoSync.js";
+import { cinemaTiming } from "./cinemaTiming.js";
+import {
+  karaokeCompletionOutcome
+} from "./karaokeNotificationPolicy.js";
 import { t, getLanguage, onLanguageChange } from "./i18n.js";
-import { storeGet, storeSet } from "./utils.js";
+import {
+  createManualTimingNotificationSession
+} from "./manualTimingNotification.js";
+import {
+  storeGet, storeSet, storeSetConfirmed
+} from "./utils.js";
+import {
+  notifyActivity, notifyFailure, dismissFailuresByJobId
+} from "./notifications.js";
 import { getCurrentTrackInfo, getCurrentTrackArtist } from "./catalog.js";
-import { transport, setPlayheadTime } from "./transport.js";
+import { transport, setPlayheadTime, togglePlayPause } from "./transport.js";
 import { totalDuration } from "./state.js";
 import {
   parseLrc,
@@ -61,6 +66,10 @@ import {
 import {
   timingOf,
   serializeLrc,
+  formatStamp,
+  preciseStamp,
+  parsePreciseStamp,
+  editPhraseRange,
   snapToVoice,
   applyTime,
   SyncSession,
@@ -80,6 +89,16 @@ import {
 // lyrics run to a few kilobytes, and the library is rewritten whole on every
 // change to any track.
 const storeKey = (trackId) => `stemdeck:lyrics:${trackId}`;
+
+function reportLyricsSaveError(trackId, error) {
+  console.warn("[lyrics] could not confirm save", error);
+  notifyFailure({
+    kind: "lyrics",
+    message: t("lyrics.sync.saveFailed"),
+    detail: String(error?.message || error),
+    context: { jobId: trackId },
+  });
+}
 
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
@@ -113,6 +132,7 @@ let syncToggleEl = null; // the Sync lines link in the tools row
 let userSave = null; // the user's timing waiting to be saved, or its removal
 let userSaveTimer = 0;
 let userSaveChain = Promise.resolve();
+let manualTimingSession = null;
 let retimeToken = 0; // guards a re-time's polling against a switch or a close
 let leadIn = false; // a line taken in hand puts the playhead a little before it
 let snapOn = true; // taps and drops snap to where the singing starts
@@ -128,13 +148,6 @@ let currentIndex = -1;
 let frame = 0;
 let searchController = null;
 let loadToken = 0; // guards against a slow store read landing after a switch
-// The track the tab said "nothing known" for, so tags read for it after it
-// was opened (catalog.js, "tracktags") can be looked up without a reopen.
-let nothingKnownFor = null;
-// Per track, a lookup this session that kept nothing: { song, matches }, the
-// versions offered or none. Opening the tab again shows it rather than asking
-// LRCLIB the same question.
-const answered = new Map();
 // The vocals stem's level over time for one track, { hop, db }, which times
 // the wipe to the singing (lyricsLookup.js wordTimings). Only the open
 // track's is kept: it is asked for again, cheaply, when a track comes back.
@@ -340,15 +353,46 @@ function show(entry, others = [], from = "store") {
 function setKaraokeMessage(key = "", kind = "") {
   karaokeMessageKey = key;
   karaokeMessageKind = kind;
+
   const node = document.getElementById("lyricsGeneratorStatus");
-  if (node) {
-    node.textContent = key ? t(key) : "";
-    node.className = `lyrics-note${kind ? ` ${kind}` : ""}`;
+  if (!node) return;
+
+  const message = key
+    ? t(key === "karaokeTiming.ready" ? "karaokeTiming.readyShort" : key)
+    : "";
+
+  node.className = `lyrics-note lyrics-generation-status${kind ? ` ${kind}` : ""}`;
+  node.title = key === "karaokeTiming.ready" ? t(key) : "";
+
+  if (kind === "error" && message) {
+    node.setAttribute("role", "alert");
+    node.setAttribute("aria-live", "assertive");
+
+    const icon = el("span", "karaoke-alert-icon", "!");
+    icon.setAttribute("aria-hidden", "true");
+
+    const content = el("span", "karaoke-alert-content");
+    const title = el(
+      "strong",
+      "karaoke-alert-title",
+      t(key === "karaokeTiming.failed"
+        ? "notifKind.karaokeFailed"
+        : "notif.somethingWentWrong")
+    );
+    const description = el("span", "karaoke-alert-description", message);
+
+    content.append(title, description);
+    node.replaceChildren(icon, content);
+  } else {
+    node.setAttribute("role", "status");
+    node.setAttribute("aria-live", "polite");
+    node.textContent = message;
   }
 }
 
 let karaokeProgress = { phase: "queued", elapsed_seconds: 0 };
 let karaokeLanguageModels = null;
+let karaokeLanguageIssues = {};
 let karaokeProgressTimer = null;
 let karaokeProgressReceived = 0;
 let karaokeCancelRequested = false;
@@ -404,15 +448,20 @@ function updateKaraokeControls() {
   const info = getCurrentTrackInfo();
   const same = Boolean(info?.id && info.id === karaokeTrackId);
   const busy = karaokeRunning || karaokeDeleting;
-  const selectedModel = document.getElementById("lyricsKaraokeModel");
-  const modelUnavailable = Boolean(karaokeLanguageModels && selectedModel?.selectedOptions[0]?.disabled);
+  const languageCode = document.getElementById("lyricsKaraokeLanguage")?.value || "pt";
+  const modelUnavailable = !karaokeLanguageModels || !(karaokeLanguageModels[languageCode] || []).includes("large-v3");
   const unavailable = document.getElementById("karaokeModelUnavailable");
-  if (unavailable) unavailable.hidden = !same || !modelUnavailable;
+  if (unavailable) {
+    unavailable.hidden = !same || !karaokeLanguageModels || !modelUnavailable;
+    unavailable.textContent = languageCode === "en" && karaokeLanguageIssues.en === "model_cache_missing"
+      ? t("karaokeTiming.englishModelCacheMissing")
+      : t("karaokeTiming.modelUnavailable");
+  }
   const button = document.getElementById("lyricsGenerateKaraokeBtn");
   if (button) {
     const activePreview = shownFrom === "preview" && shownEntry?.machinePreview;
     button.textContent = t(activePreview && karaokeBeforePreview ? "karaokeTiming.restore"
-      : karaokeAvailable ? "karaokeTiming.view" : "karaokeTiming.generate");
+      : karaokeAvailable ? "karaokeTiming.view" : "karaokeTiming.generateAi");
     button.hidden = same && karaokeAvailable && ((activePreview && !karaokeBeforePreview) || shownEntry?.generatedTimingApplied === true);
     button.disabled = !same || busy || (!karaokeAvailable && modelUnavailable) || (activePreview && !karaokeBeforePreview);
     button.setAttribute("aria-busy", String(same && karaokeRunning));
@@ -423,6 +472,8 @@ function updateKaraokeControls() {
   if (regenerate) { regenerate.disabled = !same || !karaokeAvailable || busy || modelUnavailable; regenerate.hidden = !karaokeAvailable; }
   const remove = document.getElementById("lyricsDeleteKaraokeBtn");
   if (remove) { remove.disabled = !same || !karaokeAvailable || busy; remove.hidden = !karaokeAvailable; }
+  const search = document.getElementById("lyricsOpenSearchBtn");
+  if (search) search.disabled = !same || busy;
   const language = document.getElementById("lyricsKaraokeLanguage");
   if (language) language.disabled = !same || busy;
   const model = document.getElementById("lyricsKaraokeModel");
@@ -446,11 +497,237 @@ function restoreKaraokeLyrics() {
   updateKaraokeControls();
 }
 
+
+/** Automatic line timing runs apart from the manual T/Enter editor.
+ * Progress is backend-reported only, and corrected text is never rewritten. */
+let autoSyncController = null;
+let autoSyncView = null;
+function renderAutoSync() {
+  const heading = document.getElementById("lyricsGeneratorStatus");
+  if (!heading) return;
+  let panel = document.getElementById("lyricsAutoSyncProgress");
+  if (!panel) {
+    panel = el("section", "lyrics-auto-sync");
+    panel.id = "lyricsAutoSyncProgress";
+    panel.setAttribute("role", "status");
+    panel.setAttribute("aria-live", "polite");
+    heading.after(panel);
+  }
+  const same = Boolean(autoSyncView && getCurrentTrackInfo()?.id === autoSyncView.trackId);
+  const running = same && autoSyncView.state === "running";
+  panel.hidden = !same;
+  document.getElementById("lyricsPanel")?.classList.toggle("is-auto-sync-processing", running);
+  if (!same) return;
+  panel.replaceChildren(el("h3", "", t("lyricsAutoSync.title")));
+  const state = autoSyncView.state;
+  if (running) {
+    const pct = autoSyncView.progress;
+    panel.append(el("p", "", pct === null ? t("lyricsAutoSync.working")
+      : t("lyricsAutoSync.progress", { percent: Math.round(pct * 100) })));
+    const progress = el("progress"); progress.max = 1;
+    if (pct !== null) progress.value = pct;
+    panel.append(progress, el("p", "lyrics-note", t("lyricsAutoSync.preserved")));
+  } else {
+    const result = state === "done" && autoSyncView.lines !== null
+      ? t("lyricsAutoSync.done", { matched: autoSyncView.linesMatched, count: autoSyncView.lines })
+      : t("lyricsAutoSync." + (["unsure", "changed", "timeout"].includes(state) ? state : state === "done" ? "doneGeneric" : "failed"));
+    panel.append(el("p", "", result), el("p", "lyrics-note", t("lyricsAutoSync.preserved")));
+    const actions = el("div", "lyrics-auto-sync-actions");
+    const button = (key, click, accent = false) => {
+      const b = el("button", accent ? "lyrics-align-btn lyrics-generate-btn" : "lyrics-align-btn", t(key));
+      b.type = "button"; b.addEventListener("click", click); actions.append(b);
+    };
+    if (state === "done") button("lyricsAutoSync.review", () => {
+      getAutoSyncController().dismiss();
+      setPlayheadTime(0);
+      if (!transport()?.isPlaying?.()) togglePlayPause();
+    }, true);
+    button("lyrics.sync.editPhrase", openManualPhraseEditor);
+    button("lyricsAutoSync.manual", () => {
+      getAutoSyncController().dismiss();
+      const dialog = document.getElementById("karaokeSettings");
+      if (dialog && !dialog.open) dialog.showModal();
+      openSync();
+    });
+    button("lyricsAutoSync.dismiss", () => getAutoSyncController().dismiss());
+    panel.append(actions);
+  }
+}
+const notificationOperationKey = (type, trackId) =>
+  `${type}:${trackId}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+
+function reportKaraokeFailure(trackId, cause) {
+  notifyFailure({
+    kind: "karaoke",
+    message: t("karaokeTiming.failed"),
+    detail: String(cause?.message || cause),
+    context: { jobId: trackId },
+  });
+}
+
+function getAutoSyncController() {
+  if (autoSyncController) return autoSyncController;
+  autoSyncController = createLyricsAutoSyncController({
+    startRequest: (run) => fetch(`/api/jobs/${encodeURIComponent(run.trackId)}/lyrics/retime`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(run.from === "server" ? {} : {
+        plain: run.entry.plain || "", synced: run.entry.synced || "",
+      }),
+    }),
+    readStatus: async (run) => {
+      const res = await fetch(`/api/jobs/${encodeURIComponent(run.trackId)}/lyrics/retime`, { cache: "no-store" });
+      if (!res.ok) throw Error("HTTP " + res.status);
+      return res.json();
+    },
+    commit: async (run, status) => {
+      if (run.from === "server") {
+        const result = await serverLyrics(run.trackId);
+        if (!result?.entry?.aligned?.synced) throw Error("Aligned lyrics missing");
+        if (getCurrentTrackInfo()?.id === run.trackId && !document.getElementById("lyricsEditor"))
+          show(result.entry, result.others, "server");
+        return;
+      }
+      const aligned = alignedFrom(status.aligned);
+      if (!aligned || !parseLrc(aligned.synced).length) throw Error("Aligned lyrics missing");
+      if (run.from === "store") {
+        const stored = await storeGet(storeKey(run.trackId), null);
+        if (stored?.entry?.plain !== run.entry.plain || stored?.entry?.synced !== run.entry.synced) {
+          const err = Error("Lyrics changed during timing");
+          err.code = "LYRICS_CHANGED";
+          throw err;
+        }
+        const updated = { ...stored.entry, aligned };
+        await storeSetConfirmed(storeKey(run.trackId), {
+          ...stored, entry: updated
+        });
+        if (getCurrentTrackInfo()?.id === run.trackId && !document.getElementById("lyricsEditor"))
+          show(updated, stored.others || [], "store");
+      } else if (getCurrentTrackInfo()?.id === run.trackId) {
+        show({ ...run.entry, aligned }, run.others, run.from);
+      }
+    },
+    notify: (view) => { autoSyncView = view; renderAutoSync(); updateTimingNote(); },
+  });
+  return autoSyncController;
+}
+
+/** Open the existing contextual line editor for the selected phrase. */
+function openManualPhraseEditor() {
+  if (autoSyncView?.state === "running" || karaokeRunning) return;
+  if (!sync) openSync();
+  if (!sync) return;
+  const candidate = pickedIndex >= 0 && pickedIndex < lines.length ? pickedIndex
+    : Math.max(0, currentLineIndex(lines, now()));
+  const index = lines[candidate]?.text?.trim() ? candidate
+    : lines.findIndex(line => line.text?.trim());
+  if (index < 0) return;
+  selectLine(index);
+  sync.rangeStart?.focus();
+  sync.rangeStart?.select();
+}
+
+/**
+ * One user action: obtain a verified, current acoustic alignment when needed,
+ * then fit that evidence to the user's corrected words. Do not preview the
+ * machine transcript over user edits, and do not repeat GPU recognition when
+ * the validated WhisperX sidecar is already current.
+ */
+async function startAutoSync() {
+  const info = getCurrentTrackInfo();
+  if (!info?.id || !shownEntry || !(shownEntry.plain || shownEntry.synced)) return;
+  if (getAutoSyncController().current()?.state === "running" || karaokeRunning) return;
+  if (sync) closeSync(false);
+  const run = { trackId: info.id, from: shownFrom, entry: { ...shownEntry }, others: [...shownOthers] };
+  const language = document.getElementById("lyricsKaraokeLanguage")?.value || "pt";
+  const noticeKey = notificationOperationKey("sync:auto", info.id);
+  const token = ++karaokeRequestToken;
+  document.getElementById("karaokeSettings")?.close();
+  try {
+    const status = await fetchKaraokeStatus(run.trackId);
+    if (token !== karaokeRequestToken || getCurrentTrackInfo()?.id !== run.trackId) return;
+    if (status.current_alignment?.[language] !== true) {
+      // Failed generation keeps the previous sidecar intact; the API commits a
+      // replacement only after the worker finishes and verifies the source.
+      if (!(status.language_models?.[language] || []).includes("large-v3")) {
+        setKaraokeMessage(language === "en" && status.language_issues?.en === "model_cache_missing"
+          ? "karaokeTiming.englishModelCacheMissing" : "karaokeTiming.modelUnavailable", "error");
+        return;
+      }
+      karaokeRunning = true;
+      updateKaraokeProgress({ phase: "queued", elapsed_seconds: 0, language });
+      setKaraokeMessage("karaokeTiming.running");
+      updateKaraokeControls();
+      const response = await fetch(karaokeApi(run.trackId, "generate"), {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ replace: status.available === true, model: "large-v3", language }),
+      });
+      if (!response.ok) throw new Error(`Acoustic alignment HTTP ${response.status}`);
+      let completed = false;
+      for (let attempt = 0; attempt < KARAOKE_MAX_POLLS; attempt++) {
+        await new Promise(resolve => setTimeout(resolve, KARAOKE_POLL_MS));
+        if (token !== karaokeRequestToken || getCurrentTrackInfo()?.id !== run.trackId) return;
+        const next = await fetchKaraokeStatus(run.trackId);
+        updateKaraokeProgress(next);
+        if (next.state === "failed" || next.state === "idle") {
+          throw new Error("Acoustic alignment failed or was cancelled");
+        }
+        if (next.state === "done") {
+          completed = next.current_alignment?.[language] === true;
+          break;
+        }
+      }
+      if (!completed) throw new Error("Acoustic alignment incomplete");
+      karaokeAvailable = true;
+    }
+    if (token !== karaokeRequestToken || getCurrentTrackInfo()?.id !== run.trackId) return;
+    karaokeRunning = false;
+    updateKaraokeControls();
+    // The controller still owns consistency checks and protects concurrent
+    // edits. An unsure match never replaces the original user timing.
+    const completed = await getAutoSyncController().start(run);
+
+    if (completed) {
+      dismissFailuresByJobId(run.trackId, "sync");
+      notifyActivity({
+        key: noticeKey,
+        kind: "sync",
+        level: "success",
+        titleKey: "notifActivity.syncDone",
+        message: info.title,
+      });
+    } else {
+      const outcome = getAutoSyncController().current();
+      if (["failed", "timeout"].includes(outcome?.state)) {
+        notifyFailure({
+          kind: "sync",
+          message: t("lyricsAutoSync.failed"),
+          detail: outcome.error || outcome.state,
+          context: { jobId: run.trackId },
+        });
+      }
+    }
+  } catch (error) {
+    console.warn("automatic acoustic lyric sync failed", error);
+    if (token === karaokeRequestToken && getCurrentTrackInfo()?.id === run.trackId)
+      setKaraokeMessage("karaokeTiming.failed", "error");
+  } finally {
+    if (token === karaokeRequestToken && getCurrentTrackInfo()?.id === run.trackId) {
+      karaokeRunning = false;
+      updateKaraokeControls();
+    }
+  }
+}
+
 function selectKaraokeTrack(trackId) {
   if (karaokeTrackId === trackId) return;
   karaokeTrackId = trackId;
+  // Search inputs belong to the open track; never carry them to another song.
+  const lookupForm = document.getElementById("lyricsSearchForm");
+  if (lookupForm) lookupForm.hidden = true;
+  document.getElementById("lyricsOpenSearchBtn")?.setAttribute("aria-expanded", "false");
   karaokeDeleting = false;
   karaokeLanguageModels = null;
+  karaokeLanguageIssues = {};
   karaokeRequestToken++;
   karaokeAvailable = false;
   karaokeRunning = false;
@@ -459,6 +736,7 @@ function selectKaraokeTrack(trackId) {
   setKaraokeMessage();
   updateKaraokeControls();
   if (trackId) void inspectKaraokeStatus(trackId, karaokeRequestToken);
+  renderAutoSync();
 }
 
 const karaokeApi = (trackId, tail) =>
@@ -471,12 +749,8 @@ async function fetchKaraokeStatus(trackId) {
 }
 
 function updateKaraokeModels() {
-  const language = document.getElementById("lyricsKaraokeLanguage")?.value || "pt";
-  const select = document.getElementById("lyricsKaraokeModel");
-  if (!select || !karaokeLanguageModels) return;
-  const available = karaokeLanguageModels[language] || [];
-  for (const option of select.options) option.disabled = !available.includes(option.value);
-  updateKaraokeControls();
+  // Large v3 is the only karaoke model; readiness is per language.
+  if (karaokeLanguageModels) updateKaraokeControls();
 }
 
 async function inspectKaraokeStatus(trackId, token) {
@@ -485,6 +759,7 @@ async function inspectKaraokeStatus(trackId, token) {
     if (token !== karaokeRequestToken || getCurrentTrackInfo()?.id !== trackId) return;
     karaokeAvailable = result?.available === true;
     karaokeLanguageModels = result.language_models || { pt: result.models || [], en: result.models || [] };
+    karaokeLanguageIssues = result.language_issues || {};
     updateKaraokeModels();
     karaokeRunning = result?.state === "running";
     updateKaraokeProgress(result);
@@ -528,15 +803,31 @@ async function showGeneratedKaraoke(trackId, { explicit = false } = {}) {
     const res = await fetch(karaokeApi(trackId, "timing"), { cache: "no-store" });
     if (!res.ok) throw new Error(`Karaoke timing HTTP ${res.status}`);
     const json = await res.json();
-    if (getCurrentTrackInfo()?.id !== trackId) return;
+    const info = getCurrentTrackInfo();
+    if (!info || info.id !== trackId) return false;
+
+    const valid = karaokePreviewFromTiming(json, {
+      title: info.audioTags?.title || info.title || "",
+      artist: info.audioTags?.artist || "",
+      duration: info.duration || 0,
+    });
+
+    if (!valid) {
+      setKaraokeMessage("karaokeTiming.invalid", "error");
+      return false;
+    }
+
     previewKaraoke(trackId, json, { explicit });
+    return true;
   } catch (err) {
     console.warn("karaoke preview failed", err);
-    if (getCurrentTrackInfo()?.id === trackId) setKaraokeMessage("karaokeTiming.failed", "error");
+    if (getCurrentTrackInfo()?.id === trackId)
+      setKaraokeMessage("karaokeTiming.failed", "error");
+    return false;
   }
 }
 
-async function pollKaraoke(trackId, token) {
+async function pollKaraoke(trackId, token, operation = null) {
   for (let attempt = 0; attempt < KARAOKE_MAX_POLLS; attempt++) {
     await new Promise((resolve) => setTimeout(resolve, KARAOKE_POLL_MS));
     if (token !== karaokeRequestToken || getCurrentTrackInfo()?.id !== trackId) return;
@@ -547,16 +838,44 @@ async function pollKaraoke(trackId, token) {
       karaokeRunning = state?.state === "running";
       updateKaraokeProgress(state);
       updateKaraokeControls();
-      if (karaokeRunning) continue;
-      if (state?.state === "failed") {
-        setKaraokeMessage("karaokeTiming.failed", "error");
-      } else if (state?.state === "idle" && !karaokeAvailable) {
-        setKaraokeMessage("karaokeTiming.cancelled");
-      } else if (state?.state === "done" || karaokeAvailable) {
+      const outcome = karaokeCompletionOutcome(
+        state,
+        operation?.language || state?.language || "pt",
+        karaokeCancelRequested
+      );
+
+      if (outcome === "running") continue;
+
+      if (outcome === "completed") {
+        setKaraokeMessage("karaokeTiming.ready");
+        const valid = await showGeneratedKaraoke(trackId);
+
+        if (
+          token !== karaokeRequestToken ||
+          getCurrentTrackInfo()?.id !== trackId
+        ) return;
+
+        if (operation && valid) {
+          dismissFailuresByJobId(trackId, "karaoke");
+          notifyActivity({
+            key: operation.key,
+            kind: "karaoke",
+            level: "success",
+            titleKey: "notifActivity.karaokeDone",
+            message: operation.title,
+          });
+        } else if (operation && !valid) {
+          reportKaraokeFailure(trackId, "Invalid generated timing");
+        }
+      } else if (outcome === "previous") {
         setKaraokeMessage("karaokeTiming.ready");
         await showGeneratedKaraoke(trackId);
+      } else if (outcome === "cancelled") {
+        setKaraokeMessage("karaokeTiming.cancelled");
       } else {
         setKaraokeMessage("karaokeTiming.failed", "error");
+        if (operation && !karaokeCancelRequested)
+          reportKaraokeFailure(trackId, state?.state || "failed");
       }
       return;
     } catch (err) {
@@ -564,6 +883,8 @@ async function pollKaraoke(trackId, token) {
       setKaraokeMessage("karaokeTiming.failed", "error");
       karaokeRunning = false;
       updateKaraokeControls();
+      if (operation && !karaokeCancelRequested)
+        reportKaraokeFailure(trackId, err);
       return;
     }
   }
@@ -571,6 +892,8 @@ async function pollKaraoke(trackId, token) {
     karaokeRunning = false;
     setKaraokeMessage("karaokeTiming.timeout", "error");
     updateKaraokeControls();
+    if (operation && !karaokeCancelRequested)
+      reportKaraokeFailure(trackId, "Karaoke processing timeout");
   }
 }
 
@@ -594,13 +917,18 @@ async function generateKaraoke({ replace = false } = {}) {
   karaokeRunning = true;
   karaokeCancelRequested = false;
   const language = document.getElementById("lyricsKaraokeLanguage")?.value || "pt";
+  const operation = {
+    key: notificationOperationKey("karaoke:generate", trackId),
+    language,
+    title: getCurrentTrackInfo()?.title || trackId,
+  };
   updateKaraokeProgress({ phase: "queued", elapsed_seconds: 0, language });
   setKaraokeMessage("karaokeTiming.running");
   updateKaraokeControls();
   try {
     const res = await fetch(karaokeApi(trackId, "generate"), {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ replace, model: document.getElementById("lyricsKaraokeModel")?.value || "large-v3", language }),
+      body: JSON.stringify({ replace, model: "large-v3", language }),
     });
     if (!res.ok) {
       // A sidecar from another session may have appeared since we last checked.
@@ -626,7 +954,7 @@ async function generateKaraoke({ replace = false } = {}) {
       karaokeAvailable = false;
       discardKaraokePreview();
       updateKaraokeControls();
-      void pollKaraoke(trackId, token);
+      void pollKaraoke(trackId, token, operation);
     }
   } catch (err) {
     console.warn("karaoke generation failed", err);
@@ -634,6 +962,8 @@ async function generateKaraoke({ replace = false } = {}) {
     karaokeRunning = false;
     updateKaraokeControls();
     setKaraokeMessage(resolutionUnavailable(err) ? "karaokeTiming.unavailable" : "karaokeTiming.failed", "error");
+    if (!karaokeCancelRequested)
+      reportKaraokeFailure(trackId, err);
   }
 }
 
@@ -1116,6 +1446,13 @@ function openSync({ focus = false } = {}) {
   if (!lines.length) return;
   if (align) closeAlign(false);
   syncOpen = true;
+  manualTimingSession = createManualTimingNotificationSession({
+    trackId: shownTrackId,
+    title: getCurrentTrackInfo()?.title || shownTrackId,
+    key: notificationOperationKey("sync:manual", shownTrackId),
+    initialLrc: shownEntry?.userSynced ?? null,
+  });
+
   const session = new SyncSession(lines, {
     // The lyrics' own timing is usually right line to line and off as a
     // whole, so a tap carries the lines after it along; timing already fitted
@@ -1125,8 +1462,13 @@ function openSync({ focus = false } = {}) {
     meta: { kind: timingKind },
   });
   sync = buildSyncPanel(session);
-  syncToggleEl?.closest(".lyrics-tools")?.after(sync.panel);
+  // The settings dialog is a modal; editing under that dialog would be
+  // inaccessible. Keep the editor adjacent to the lyrics, not in the modal.
+  sync.manualMode = true;
+  versionsEl?.before(sync.panel);
   syncToggleEl?.setAttribute("aria-expanded", "true");
+  const settingsDialog = document.getElementById("karaokeSettings");
+  if (settingsDialog?.open) settingsDialog.close();
   bodyEl.classList.add("syncing");
   showLineTimes();
   showLane(lines, laneLength(), {
@@ -1147,7 +1489,7 @@ function openSync({ focus = false } = {}) {
   showSyncState();
   if (provisional) setSyncMessage(t("karaoke.provisional"), "muted");
   updateTimingNote();
-  if (focus) sync.tap.focus();
+  if (focus) sync.byExact.focus();
 }
 
 /** Leave Sync lines: what is waiting to be saved is saved now. `keepOpen`
@@ -1156,7 +1498,36 @@ function closeSync(focusToggle, { keepOpen = false } = {}) {
   if (!keepOpen) syncOpen = false;
   if (!sync) return;
   retimeToken++;
-  flushUserSave();
+
+  const completedSession = manualTimingSession;
+  manualTimingSession = null;
+
+  void flushUserSave()
+    .then(() => {
+      if (completedSession?.finish() !== "saved") return;
+
+      dismissFailuresByJobId(completedSession.trackId, "timing");
+      notifyActivity({
+        key: completedSession.key,
+        kind: "timing",
+        level: "success",
+        titleKey: "notifActivity.manualTimingSaved",
+        message: completedSession.title,
+      });
+    })
+    .catch(err => {
+      console.warn("[lyrics] timing finalization failed", err);
+      if (completedSession) {
+        notifyFailure({
+          kind: "timing",
+          message: t("lyrics.sync.saveFailed"),
+          detail: String(err?.message || err),
+          context: { jobId: completedSession.trackId },
+        });
+      }
+    });
+
+  sync.pendingStart = null;
   sync.panel.remove();
   sync.lineTools.remove();
   for (const row of lineEls) {
@@ -1200,17 +1571,30 @@ function buildSyncPanel(session) {
   const kind = el("span", "lyrics-sync-kind");
   const saveState = el("span", "lyrics-sync-kind lyrics-sync-save");
   saveState.setAttribute("aria-live", "polite");
-  head.append(el("h3", "lyrics-sync-title", t("lyrics.sync.title")), kind, saveState);
+  head.append(el("h3", "lyrics-sync-title", t("lyrics.sync.manualTitle")), kind, saveState);
 
-  const next = el("p", "lyrics-sync-next");
+  // The full-sized lyric immediately below is the visual source of truth.
+  // Keep the next-phrase status available to screen readers without duplicating it.
+  const next = el("p", "lyrics-sync-next lyrics-sync-visually-hidden");
   const nextLabel = el("span", "lyrics-sync-next-label");
   const nextText = el("span", "lyrics-sync-next-text");
   next.append(nextLabel, nextText);
   next.setAttribute("aria-live", "polite");
 
-  const tap = alignButton(t("lyrics.sync.tap"), tapNow, "lyrics-sync-tap");
-  tap.append(el("kbd", "", t("lyrics.sync.tapKey")));
-  tap.title = t("lyrics.sync.tapTitle");
+  const tap = alignButton(t("lyrics.sync.tapStart"), tapNow, "lyrics-sync-tap");
+  tap.title = t("lyrics.sync.tapRangeHelp");
+  const method = el("div", "lyrics-sync-method");
+  method.setAttribute("role", "group");
+  method.setAttribute("aria-label", t("lyrics.sync.methodLabel"));
+  const byPlay = alignButton(t("lyrics.sync.methodPlay"), () => setSyncMethod("play"));
+  const byExact = alignButton(t("lyrics.sync.methodExact"), () => setSyncMethod("exact"));
+  byPlay.setAttribute("aria-pressed", "false");
+  byExact.setAttribute("aria-pressed", "true");
+  method.append(byPlay, byExact);
+  const playControls = el("div", "lyrics-sync-play-controls");
+  playControls.append(next, tap);
+  const playHint = el("p", "lyrics-sync-keys", t("lyrics.sync.tapRangeHelp"));
+  playControls.append(playHint);
 
   const undo = alignButton(t("lyrics.sync.undo"), undoSync);
   undo.title = t("lyrics.sync.undoTitle");
@@ -1218,11 +1602,14 @@ function buildSyncPanel(session) {
   edits.append(undo);
 
   const opts = el("div", "lyrics-sync-opts");
-  opts.append(
+  const playOptions = el("div", "lyrics-sync-options-group");
+  playOptions.append(el("strong", "", t("lyrics.sync.playOptions")),
     syncOption("lyrics.sync.leadIn", leadIn, (on) => { leadIn = on; }, "lyrics.sync.leadInTitle"),
-    syncOption("lyrics.sync.snap", snapOn, (on) => { snapOn = on; }, "lyrics.sync.snapTitle"),
-    syncOption("lyrics.sync.ripple", session.ripple, (on) => { session.ripple = on; }, "lyrics.sync.rippleTitle"),
-  );
+    syncOption("lyrics.sync.snap", snapOn, (on) => { snapOn = on; }, "lyrics.sync.snapTitle"));
+  const lineOptions = el("div", "lyrics-sync-options-group");
+  lineOptions.append(el("strong", "", t("lyrics.sync.lineOptions")),
+    syncOption("lyrics.sync.ripple", session.ripple, (on) => { session.ripple = on; }, "lyrics.sync.rippleTitle"));
+  opts.append(playOptions, lineOptions);
 
   const retimeBtn = alignButton(t("lyrics.sync.retime"), retimeFromVocals);
   retimeBtn.title = t("lyrics.sync.retimeTitle");
@@ -1233,16 +1620,24 @@ function buildSyncPanel(session) {
   // No timing of their own (plain lyrics fitted to the vocals): nothing to
   // go back to.
   original.disabled = !baseLines.length;
-  const resets = el("div", "lyrics-sync-row");
-  resets.append(retimeBtn, detected, original);
+  const resets = el("div", "lyrics-sync-options-group");
+  resets.append(el("strong", "", t("lyrics.sync.moreActions")), retimeBtn, detected, original);
 
   const message = el("p", "lyrics-align-message");
   message.setAttribute("aria-live", "polite");
   const keys = el("p", "lyrics-sync-keys", t("lyrics.sync.keys"));
-  const done = alignButton(t("lyrics.sync.done"), () => closeSync(true), "lyrics-align-done");
+  const done = alignButton(t("lyrics.sync.saveExit"), () => closeSync(true), "lyrics-align-done");
   done.title = t("lyrics.sync.doneTitle");
 
-  panel.append(head, next, tap, edits, opts, resets, message, keys, done);
+  // Manual phrase timing is the default task. Sequential tapping, voice
+  // detection, resets and their options remain available on demand.
+  const actions = el("div", "lyrics-sync-primary");
+  actions.append(undo, done);
+  head.append(actions);
+  const advanced = el("details", "lyrics-sync-advanced");
+  const advancedLabel = el("summary", "", t("lyrics.sync.advanced"));
+  advanced.append(advancedLabel, opts, resets, keys);
+  panel.append(head, method, playControls, advanced, message);
 
   // The line in hand's own controls, shown under it in the list.
   const lineTools = el("div", "lyrics-line-tools");
@@ -1258,9 +1653,55 @@ function buildSyncPanel(session) {
   };
   const here = alignButton(t("lyrics.sync.here"), lineToPlayhead, "lyrics-line-here");
   here.title = t("lyrics.sync.hereTitle");
-  lineTools.append(lineStep(-NUDGE_COARSE), lineStep(-NUDGE_FINE), lineStep(NUDGE_FINE), lineStep(NUDGE_COARSE), here);
+  // Only fine nudges are needed in the default editor. Coarse movement and
+  // playhead capture remain available via the timing fields.
+  lineTools.append(lineStep(-NUDGE_FINE), lineStep(NUDGE_FINE));
 
-  return { panel, session, kind, saveState, nextLabel, nextText, tap, undo, retimeBtn, message, lineTools };
+  // Inline controls are placed beneath the currently selected lyric.
+  const range = el("div", "lyrics-phrase-range");
+  const rangeError = el("p", "lyrics-align-message");
+  rangeError.setAttribute("role", "alert");
+  const rangeField = (labelKey) => {
+    const wrap = el("div", "lyrics-phrase-range-field");
+    const label = el("span", "", t(labelKey));
+    const input = el("input", "lyrics-phrase-time");
+    input.type = "text";
+    input.inputMode = "decimal";
+    input.placeholder = "00:22.000";
+    input.setAttribute("aria-label", t(labelKey));
+    const capture = alignButton(t("lyrics.sync.capture"), () => {
+      input.value = preciseStamp(now());
+      input.focus();
+    });
+    capture.type = "button";
+    wrap.append(label, input, capture);
+    return { wrap, input };
+  };
+  const begin = rangeField("lyrics.sync.rangeStart");
+  const finish = rangeField("lyrics.sync.rangeEnd");
+  const saveRange = alignButton(t("lyrics.sync.saveRange"), () => {
+    const index = session.cursor;
+    const start = parsePreciseStamp(begin.input.value, totalDuration || Infinity);
+    const end = parsePreciseStamp(finish.input.value, totalDuration || Infinity);
+    const revised = editPhraseRange(session.lines, index, start, end, totalDuration || Infinity);
+    if (!revised) {
+      rangeError.textContent = t("lyrics.sync.rangeInvalid");
+      return;
+    }
+    session.record();
+    session.lines = revised;
+    session.touched.add(index);
+    edited({ reveal: false });
+    rangeError.textContent = "";
+    saveRange.textContent = t("lyrics.sync.savedRange");
+  });
+  saveRange.type = "button";
+  range.append(begin.wrap, finish.wrap, saveRange, rangeError);
+  lineTools.append(range);
+
+  return { panel, session, kind, saveState, nextLabel, nextText, tap, undo, retimeBtn, message,
+    method: "exact", pendingStart: null, byPlay, byExact, playControls,
+    lineTools, rangePanel: range, rangeStart: begin.input, rangeEnd: finish.input, rangeError, rangeSave: saveRange };
 }
 
 /** Where the singing starts near `time`, with Snap on and Alt not held. */
@@ -1271,6 +1712,7 @@ function snapped(time, free = false) {
 /** Take line `index` in hand; with `seek`, the playhead goes to it. */
 function selectLine(index, { seek = false } = {}) {
   if (!sync || index < 0 || index >= lines.length) return;
+  sync.pendingStart = null;
   sync.session.select(index);
   onCursor({ reveal: true });
   if (seek) setPlayheadTime(Math.max(0, lines[index].time - (leadIn ? LEAD_IN_SEC : 0)));
@@ -1285,12 +1727,24 @@ function onCursor({ reveal = false } = {}) {
   setLaneSelected(index);
   placeLineTools();
   const line = lines[index];
-  sync.tap.disabled = !line;
+  sync.tap.disabled = !line || !line.text?.trim();
+  sync.tap.textContent = t(sync.pendingStart === null ? "lyrics.sync.tapStart" : "lyrics.sync.tapEnd");
+  sync.playControls.hidden = sync.method !== "play";
+  sync.lineTools.hidden = sync.method !== "exact";
   sync.nextText.removeAttribute("lang");
+  if (sync.rangePanel) sync.rangePanel.hidden = sync.method !== "exact" || !line?.text?.trim();
   if (line) {
     sync.nextLabel.textContent = t("lyrics.sync.next", { n: index + 1, count: lines.length });
     sync.nextText.textContent = line.text || "♪";
     tagLang(sync.nextText, line.text);
+    const next = lines[index + 1]?.time;
+    const estimatedEnd = Math.min(totalDuration || Infinity,
+      next != null ? next : line.time + 3);
+    if (sync.rangeStart) sync.rangeStart.value = preciseStamp(line.time);
+    if (sync.rangeEnd) sync.rangeEnd.value = preciseStamp(line.end ??
+      Math.max(line.time + 0.05, estimatedEnd));
+    if (sync.rangeError) sync.rangeError.textContent = "";
+    if (sync.rangeSave) sync.rangeSave.textContent = t("lyrics.sync.saveRange");
   } else {
     sync.nextLabel.textContent = t("lyrics.sync.allSetLabel");
     sync.nextText.textContent = t("lyrics.sync.allSet");
@@ -1354,10 +1808,32 @@ function edited(options) {
   syncChanged(options);
 }
 
+function setSyncMethod(method) {
+  if (!sync || !["play", "exact"].includes(method)) return;
+  sync.method = method;
+  sync.pendingStart = null;
+  sync.byPlay.setAttribute("aria-pressed", String(method === "play"));
+  sync.byExact.setAttribute("aria-pressed", String(method === "exact"));
+  setSyncMessage();
+  onCursor();
+}
+
 function tapNow() {
-  if (!sync || sync.session.done) return;
-  sync.session.tap(snapped(now()));
-  // The tap is seen as well as heard: the button flashes.
+  if (!sync || sync.method !== "play" || sync.session.done) return;
+  // Voice snap helps identify onset, but the end must remain the actual tap.
+  const time = sync.pendingStart === null ? snapped(now()) : now();
+  if (sync.pendingStart === null) {
+    // A start is staged, not saved. The pair is committed atomically.
+    sync.pendingStart = time;
+    sync.tap.textContent = t("lyrics.sync.tapEnd");
+    sync.nextLabel.textContent = t("lyrics.sync.startMarked", { time: preciseStamp(time) });
+    return;
+  }
+  if (!sync.session.markPhraseRange(sync.pendingStart, time)) {
+    setSyncMessage(t("lyrics.sync.rangeInvalid"), "error");
+    return;
+  }
+  sync.pendingStart = null;
   sync.tap.classList.remove("tapped");
   void sync.tap.offsetWidth;
   sync.tap.classList.add("tapped");
@@ -1376,6 +1852,12 @@ function lineToPlayhead() {
 }
 
 function undoSync() {
+  if (sync?.pendingStart !== null && sync?.method === "play") {
+    sync.pendingStart = null;
+    setSyncMessage();
+    onCursor();
+    return;
+  }
   if (sync?.session.undo()) {
     setSyncMessage();
     syncChanged({ reveal: true });
@@ -1420,7 +1902,15 @@ function saveUserTiming(lrc) {
   if (!shownEntry) return;
   if (lrc == null) delete shownEntry.userSynced;
   else shownEntry.userSynced = lrc;
-  userSave = { trackId: shownTrackId, entry: shownEntry, others: shownOthers, from: shownFrom, lrc };
+  manualTimingSession?.request(lrc);
+  userSave = {
+    trackId: shownTrackId,
+    entry: shownEntry,
+    others: shownOthers,
+    from: shownFrom,
+    lrc,
+    notificationSession: manualTimingSession,
+  };
   if (sync) sync.saveState.textContent = t("lyrics.sync.saving");
   clearTimeout(userSaveTimer);
   userSaveTimer = setTimeout(flushUserSave, SAVE_DELAY_MS);
@@ -1437,7 +1927,9 @@ function flushUserSave() {
   return userSaveChain;
 }
 
-async function sendUserTiming({ trackId, entry, others, from, lrc }) {
+async function sendUserTiming({
+  trackId, entry, others, from, lrc, notificationSession
+}) {
   try {
     if (from === "server") {
       const url = `/api/jobs/${encodeURIComponent(trackId)}/lyrics/user-synced`;
@@ -1455,11 +1947,25 @@ async function sendUserTiming({ trackId, entry, others, from, lrc }) {
       const kept = { ...entry };
       if (lrc == null) delete kept.userSynced;
       else kept.userSynced = lrc;
-      await storeSet(storeKey(trackId), { entry: kept, others });
+      await storeSetConfirmed(storeKey(trackId), {
+        entry: kept, others
+      });
     }
-    if (trackId === shownTrackId && sync && !userSave) sync.saveState.textContent = t("lyrics.sync.saved");
+    notificationSession?.confirm(lrc);
+    dismissFailuresByJobId(trackId, "timing");
+
+    if (trackId === shownTrackId && sync && !userSave) {
+      sync.saveState.textContent = t("lyrics.sync.saved");
+    }
   } catch (err) {
     console.warn("lyrics timing save failed", err);
+
+    notifyFailure({
+      kind: "timing",
+      message: t("lyrics.sync.saveFailed"),
+      detail: String(err?.message || err),
+      context: { jobId: trackId },
+    });
     if (trackId === shownTrackId && sync) {
       sync.saveState.textContent = "";
       setSyncMessage(t("lyrics.sync.saveFailed"), "error");
@@ -1574,7 +2080,7 @@ function anotherEditorOpen() {
  * arrows would scroll the list. */
 function onSyncKey(e) {
   if (!sync || !visible || isTyping(e.target)) return;
-  if (karaokeVisible && (!document.getElementById("karaokeSettings")?.open || e.key === "Escape")) return;
+  if (karaokeVisible && document.getElementById("karaokeSettings")?.open) return;
   const mod = e.ctrlKey || e.metaKey;
   // The keyboard belongs to whatever else is open on top: the beat-grid
   // editor, a dialog, a menu or panel outside the Lyrics panel. Heard first
@@ -1591,12 +2097,14 @@ function onSyncKey(e) {
   } else if (mod || e.altKey) {
     handled = false;
   } else if (e.code === "KeyT") {
-    tapNow();
+    if (sync.method === "play") tapNow();
+    else handled = false;
   } else if (e.key === "Enter") {
     // Enter on another button presses that button.
     const control = e.target?.closest?.("button, a, [role='button']");
     if (control && control !== sync.tap) handled = false;
-    else tapNow();
+    else if (sync.method === "play") tapNow();
+    else handled = false;
   } else if (e.key === "Backspace") {
     undoSync();
   } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
@@ -1615,7 +2123,7 @@ function onSyncKey(e) {
   }
 }
 
-function versionList(matches, all) {
+function versionList(matches, all, onChoose = keep, comparisonDuration = 0) {
   const list = el("ul", "lyrics-version-list");
   for (const match of matches) {
     const item = el("li");
@@ -1627,10 +2135,13 @@ function versionList(matches, all) {
         match.artist,
         match.album,
         match.duration ? fmtLength(match.duration) : "",
+        comparisonDuration > 0 && match.duration > 0
+          ? t("lyrics.searchDurationDelta", { seconds: Math.round(Math.abs(match.duration - comparisonDuration)) })
+          : "",
         t(match.synced ? "lyrics.synced" : "lyrics.plain"),
       ].filter(Boolean).join(" · ")),
     );
-    pick.addEventListener("click", () => keep(match, all.filter((m) => m.id !== match.id)));
+    pick.addEventListener("click", () => void onChoose(match, all.filter((m) => (m.lrclib_id ?? m.id) !== (match.lrclib_id ?? match.id))));
     item.append(pick);
     list.append(item);
   }
@@ -1648,18 +2159,52 @@ function offer(matches) {
 /** Save `match` on the open track and show it, with `others` still offered. */
 async function keep(match, others) {
   const info = getCurrentTrackInfo();
-  if (!info) return;
-  const entry = { v: 1, source: "lrclib", ...match, savedAt: Date.now() };
+  if (!info) return false;
+  const entry = { v: 1, source: "lrclib", ...match, manualSelected: true, savedAt: Date.now() };
   // Another version, at its own timing: the offset and the timing line by
   // line were the old one's.
   delete entry.offsetSec;
   delete entry.userSynced;
   delete entry.aligned;
+  const hadLyrics = Boolean(
+    shownEntry?.plain?.trim() || shownEntry?.synced?.trim()
+  );
+
   await dropStoreSave();
-  await storeSet(storeKey(info.id), { entry, others });
-  answered.delete(info.id);
-  if (getCurrentTrackInfo()?.id !== info.id) return;
+
+  try {
+    await storeSetConfirmed(storeKey(info.id), {
+      entry, others
+    });
+  } catch (error) {
+    reportLyricsSaveError(info.id, error);
+    if (getCurrentTrackInfo()?.id === info.id) {
+      setStatus(t("lyrics.sync.saveFailed"), "error");
+    }
+    return false;
+  }
+
+  dismissFailuresByJobId(info.id, "lyrics");
+
+  if (entry.plain?.trim() || entry.synced?.trim()) {
+    notifyActivity({
+      key: match.source === "file"
+        ? `lyrics:found:file:${info.id}`
+        : `lyrics:chosen:${info.id}:${entry.savedAt}`,
+      kind: "lyrics",
+      level: "success",
+      titleKey: match.source === "file"
+        ? "notifActivity.lyricsFound"
+        : hadLyrics
+          ? "notifActivity.lyricsUpdated"
+          : "notifActivity.lyricsAdded",
+      message: info.title,
+    });
+  }
+
+  if (getCurrentTrackInfo()?.id !== info.id) return true;
   show(entry, others);
+  return true;
 }
 
 // Removing is remembered, not just a cleared entry: the lookup runs by itself,
@@ -1670,91 +2215,213 @@ async function removeLyrics() {
   if (!info) return;
   await dropStoreSave();
   await storeSet(storeKey(info.id), { dismissed: true });
-  answered.delete(info.id);
   showRemoved();
 }
 
 function showRemoved() {
   clearLyrics();
   setStatus(t("lyrics.removed"), "muted");
-  versionsEl.append(lookAgainButton());
+  // Manual lookup remains available in Karaoke settings.
 }
 
-/** "Look up again": forget what is kept for the open track and find it anew. */
-function lookAgainButton() {
-  const again = el("button", "lyrics-link", t("lyrics.lookAgain"));
-  again.type = "button";
-  again.addEventListener("click", async () => {
-    const info = getCurrentTrackInfo();
-    if (!info) return;
-    await storeSet(storeKey(info.id), null);
-    if (getCurrentTrackInfo()?.id !== info.id) return;
-    const { song } = knownSong(info);
-    if (song) void lookUp(info, { song });
-    else setStatus(t("lyrics.nothingKnown"), "muted");
-  });
-  return again;
+/** Suggestions only: do not submit artist/title without an explicit click. */
+function manualLookupNames(info) {
+  const tags = info.audioTags || {};
+  const identity = info.identity || {};
+  const band = getCurrentTrackArtist();
+  let artist = String(identity.artist || tags.artist || band?.englishName || band?.name || "").trim();
+  let title = String(identity.title || tags.title || "").trim();
+  if (!artist) {
+    // Untagged file, for example "CPM 22 - Não Sei Viver Sem Ter Você".
+    const match = String(info.title || "").match(/^(.+?)\s+[-–—]\s+(.+)$/u);
+    if (match) {
+      artist = match[1].replace(/^\d{1,2}\s*[.)]\s*/, "").trim();
+      title ||= match[2].trim();
+    }
+  }
+  title ||= songFromTitle(info.title, artist) || info.title || "";
+  return { artist, title };
 }
 
-/**
- * Ask the server to look the open track up on LRCLIB (#719).
- *
- * The tab used to search LRCLIB itself, with its own copy of the rules that
- * decide which version is this song by this artist and which length fits.
- * The two copies were kept equal by hand, and a track could get lyrics at
- * import and none here. Now there is one copy, the import's, and what it
- * finds is kept on the server like the import's answer, so the phone sees it
- * too. The band saved from the artist box goes along: it lives in this side's
- * store, and the server may not have it yet.
- *
- * What came back without lyrics is remembered for the session, so opening the
- * tab again does not ask again. A failed connection is not, so the next
- * opening tries again.
- */
-async function lookUp(info, { song }) {
+function toggleManualLyricsSearch() {
+  const info = getCurrentTrackInfo();
+  const form = document.getElementById("lyricsSearchForm");
+  const opener = document.getElementById("lyricsOpenSearchBtn");
+  if (!info || !form || !opener) return;
+  form.hidden = !form.hidden;
+  opener.setAttribute("aria-expanded", String(!form.hidden));
+  if (form.hidden) return;
+  const names = manualLookupNames(info);
+  document.getElementById("lyricsSearchArtist").value = names.artist;
+  document.getElementById("lyricsSearchTitle").value = names.title;
+  document.getElementById("lyricsSearchStatus").textContent = "";
+  const results = document.getElementById("lyricsSearchResults");
+  if (results) { results.hidden = true; results.replaceChildren(); }
+  (names.artist ? document.getElementById("lyricsSearchTitle")
+    : document.getElementById("lyricsSearchArtist")).focus();
+}
+
+/** Keep choices in the modal. A search never mutates the current lyric. */
+function showManualLookupChoices(matches) {
+  const results = document.getElementById("lyricsSearchResults");
+  if (!results) return;
+  const trackId = getCurrentTrackInfo()?.id;
+  const duration = Number(getCurrentTrackInfo()?.duration || 0);
+  const choices = versionList(matches, matches, (match, others) => {
+    if (!trackId || getCurrentTrackInfo()?.id !== trackId) return;
+    const heading = el("strong", "karaoke-lookup-results-title", match.track);
+    const meta = el("p", "lyrics-version-meta", [match.artist, match.album,
+      match.duration ? fmtLength(match.duration) : "",
+      t(match.synced ? "lyrics.synced" : "lyrics.plain")].filter(Boolean).join(" · "));
+    const hint = el("p", "", t("lyrics.searchPreviewHint"));
+    const text = el("pre", "karaoke-lookup-preview", match.plain || match.synced || "");
+    const actions = el("div", "karaoke-lookup-actions");
+    const save = el("button", "lyrics-align-btn", t("lyrics.searchSave"));
+    const back = el("button", "lyrics-align-btn", t("lyrics.searchBack"));
+    const cancel = el("button", "lyrics-align-btn", t("lyrics.searchCancel"));
+    for (const button of [save, back, cancel]) button.type = "button";
+    back.addEventListener("click", () => {
+      if (getCurrentTrackInfo()?.id === trackId) showManualLookupChoices(matches);
+    });
+    cancel.addEventListener("click", () => {
+      results.hidden = true;
+      results.replaceChildren();
+      const status = document.getElementById("lyricsSearchStatus");
+      if (status) status.textContent = t("lyrics.searchCancelled");
+    });
+    save.addEventListener("click", async () => {
+      if (save.disabled || getCurrentTrackInfo()?.id !== trackId) return;
+      for (const button of [save, back, cancel]) button.disabled = true;
+      try {
+        const saved = await keep(match, others);
+        if (getCurrentTrackInfo()?.id !== trackId) return;
+        if (!saved) throw new Error("Lyrics selection was not saved");
+        results.hidden = true;
+        results.replaceChildren();
+        document.getElementById("karaokeSettings")?.close();
+      } catch (error) {
+        if (getCurrentTrackInfo()?.id !== trackId) return;
+        console.warn("manual lyrics selection failed", error);
+        const status = document.getElementById("lyricsSearchStatus");
+        if (status) {
+          status.textContent = t("lyrics.searchSelectionFailed");
+          status.setAttribute?.("data-state", "error");
+        }
+      } finally {
+        for (const button of [save, back, cancel]) button.disabled = false;
+      }
+    });
+    actions.append(back, cancel, save);
+    results.replaceChildren(heading, meta, hint, text, actions);
+    back.focus();
+  }, duration);
+  results.replaceChildren(
+    el("strong", "karaoke-lookup-results-title", t("lyrics.searchResultCount", { count: matches.length })),
+    choices,
+  );
+  results.hidden = false;
+}
+
+async function submitManualLyricsSearch(event) {
+  event.preventDefault();
+  const info = getCurrentTrackInfo();
+  if (!info || karaokeRunning || karaokeDeleting) return;
+  const artist = document.getElementById("lyricsSearchArtist").value.trim();
+  const title = document.getElementById("lyricsSearchTitle").value.trim();
+  const status = document.getElementById("lyricsSearchStatus");
+  const submit = document.getElementById("lyricsSearchSubmitBtn");
+
+  // C27.6B.2 — unified lookup feedback.
+  // Intentionally local: standalone search tests execute this function
+  // without importing the rest of the application.
+  function paintLookupFeedback(state, message, kind = "failed") {
+    status.textContent = message;
+    status.setAttribute?.("data-state", state);
+
+    if (
+      typeof document.createElement !== "function" ||
+      typeof status.replaceChildren !== "function"
+    ) return;
+
+    const en = typeof getLanguage === "function"
+      ? String(getLanguage()).startsWith("en")
+      : false;
+
+    const titles = en
+      ? {
+          missing: "Incomplete search",
+          none: "No lyrics found",
+          failed: "Lyrics search failed",
+        }
+      : {
+          missing: "Dados incompletos",
+          none: "Nenhuma letra encontrada",
+          failed: "Falha na busca de letras",
+        };
+
+    const content = document.createElement("span");
+    content.className = "karaoke-feedback-content";
+
+    const heading = document.createElement("strong");
+    heading.className = "karaoke-feedback-title";
+    heading.textContent = titles[kind];
+
+    const detail = document.createElement("span");
+    detail.className = "karaoke-feedback-detail";
+    detail.textContent = message;
+
+    content.append(heading, detail);
+    status.replaceChildren(content);
+    status.setAttribute?.(
+      "role", state === "error" ? "alert" : "status"
+    );
+  }
+
+  if (!artist || !title) {
+    paintLookupFeedback(
+      "error", t("lyrics.nothingKnown"), "missing"
+    );
+    return;
+  }
+  const results = document.getElementById("lyricsSearchResults");
+  if (results) { results.hidden = true; results.replaceChildren(); }
   searchController?.abort();
   const controller = new AbortController();
   searchController = controller;
-  setStatus(t("lyrics.loading", { song }), "loading");
+  submit.disabled = true;
+  status.textContent = t("lyrics.searchBusy");
+  status.setAttribute?.("data-state", "loading");
   try {
-    const band = getCurrentTrackArtist();
-    const res = await fetch(`/api/jobs/${encodeURIComponent(info.id)}/lyrics/lookup`, {
+    const response = await fetch("/api/jobs/" + encodeURIComponent(info.id) + "/lyrics/lookup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(band ? { band } : {}),
+      body: JSON.stringify({ artist, title }),
       signal: controller.signal,
     });
     if (controller.signal.aborted || getCurrentTrackInfo()?.id !== info.id) return;
-    if (!res.ok && res.status !== 404) throw new Error(`lyrics lookup -> ${res.status}`);
-    const data = await res.json().catch(() => null);
-    if (res.status === 404 && data?.nothing_known) {
-      setStatus(t("lyrics.nothingKnown"), "muted");
-      nothingKnownFor = info.id;
+    if (response.status !== 404 && !response.ok) throw new Error("Lyrics lookup HTTP " + response.status);
+    const data = await response.json().catch(() => null);
+    const matches = fromServerLyrics(data)?.others || [];
+    if (!matches.length) {
+      paintLookupFeedback(
+        "empty", t("lyrics.searchNoResults"), "none"
+      );
       return;
     }
-    const found = fromServerLyrics(data);
-    if (found?.entry) {
-      show(found.entry, found.others, "server");
-      return;
+    showManualLookupChoices(matches);
+    status.textContent = t("lyrics.searchChoose");
+    status.setAttribute?.("data-state", "success");
+  } catch (error) {
+    if (!controller.signal.aborted) {
+      console.warn("manual LRCLIB lookup failed", error);
+      paintLookupFeedback(
+        "error", t("lyrics.searchFailed"), "failed"
+      );
     }
-    answered.set(info.id, { song, matches: found?.others || [] });
-    showAnswer(answered.get(info.id));
-  } catch (err) {
-    // Aborted only by another track being opened.
-    if (controller.signal.aborted) return;
-    console.warn("lyrics lookup failed", err);
-    setStatus(t("lyrics.offline"), "error");
-    // There is no search box to press again, so the retry is offered here.
-    versionsEl.replaceChildren(lookAgainButton());
   } finally {
     if (searchController === controller) searchController = null;
+    submit.disabled = false;
   }
-}
-
-/** A lookup's answer that kept nothing: versions to pick from, or none. */
-function showAnswer({ song, matches }) {
-  if (matches.length) offer(matches);
-  else setStatus(t("lyrics.notFound", { song }), "muted");
 }
 
 /**
@@ -1814,7 +2481,7 @@ function knownSong(info) {
  * a cover say, is their choice.
  */
 function keptForAnotherSong(entry, info) {
-  if (entry?.source !== "lrclib") return false;
+  if (entry?.source !== "lrclib" || entry.manualSelected === true) return false;
   const { song } = knownSong(info);
   if (!song || !entry.track) return false;
   const titles = [song, info.identity?.title, ...(info.identity?.titleAliases || [])].filter(Boolean);
@@ -1830,7 +2497,6 @@ async function loadForCurrentTrack() {
   }
   shownTrackId = info?.id ?? null;
   selectKaraokeTrack(shownTrackId);
-  nothingKnownFor = null;
   searchController?.abort();
   searchController = null;
   clearLyrics();
@@ -1937,17 +2603,8 @@ async function loadForCurrentTrack() {
     }, []);
     return;
   }
-  if (!song) {
-    setStatus(t("lyrics.nothingKnown"), "muted");
-    nothingKnownFor = info.id;
-    return;
-  }
-  if (answered.has(info.id)) {
-    showAnswer(answered.get(info.id));
-    return;
-  }
-  setStatus(t("karaoke.localMissing"), "muted");
-  versionsEl.append(lookAgainButton());
+  // Only the button in Karaoke settings can query LRCLIB.
+  setStatus(t(song ? "lyrics.searchManually" : "lyrics.nothingKnown"), "muted");
 }
 
 // While the tab is on screen: notice a different track being opened, mark the
@@ -1972,9 +2629,31 @@ function tick() {
     // back can land a hair before it, which would mark the line above.
     const time = transport()?.getCurrentTime?.() ?? 0;
     const now = time + 0.05;
-    const index = currentLineIndex(lines, now);
+    const cinema = document.fullscreenElement === stage;
+    const presentation = cinemaTiming(lines, time);
+    const index = cinema ? (presentation.displayLine ?? -1) : currentLineIndex(lines, now, { holdPrevious: true });
     if (index !== currentIndex) moveTo(index);
-    fillWords(index, now);
+    if (cinema) {
+      lineEls.forEach((line, i) => {
+        line.classList.toggle("previous", i === presentation.previousLine && i !== index);
+        line.classList.toggle("next", i === presentation.nextLine && i !== index);
+      });
+      if (presentation.state === 'instrumental' || presentation.state === 'ended') {
+        lineEls.forEach(line => line.classList.remove('previous', 'next'));
+      }
+    }
+    let message = document.getElementById('cinemaTimingMessage');
+    if (!message && stage) {
+      message = document.createElement('p');
+      message.id = 'cinemaTimingMessage';
+      message.setAttribute('role', 'status');
+      bodyEl.before(message);
+    }
+    if (message) {
+      message.hidden = !cinema || !['instrumental', 'ended'].includes(presentation.state);
+      message.textContent = presentation.state === 'ended' ? 'Fim da letra' : 'Instrumental';
+    }
+    fillWords(index, cinema ? time : now);
     // One transform, and only when playback has moved.
     if (sync) setLanePlayhead(time);
   }
@@ -1996,7 +2675,7 @@ function moveTo(index) {
   currentIndex = index;
   lineEls[index - 1]?.classList.add("previous");
   if (sync) setLaneCurrent(index);
-  lineEls[index + 1]?.classList.add("next");
+  if (index >= 0) lineEls[index + 1]?.classList.add("next");
   const line = lineEls[index];
   if (!line) return;
   line.classList.add("current");
@@ -2043,6 +2722,7 @@ export function initLyrics() {
   versionsEl = document.getElementById("lyricsVersions");
   bodyEl = document.getElementById("lyricsBody");
   if (!panel || !statusEl || !versionsEl || !bodyEl) return;
+  initKaraokeSettingsTabs();
 
   // An offset or a timing still waiting to be saved goes before the page does.
   window.addEventListener("pagehide", () => {
@@ -2055,6 +2735,8 @@ export function initLyrics() {
     setVisible(sidebarVisible || karaokeVisible);
   });
   document.getElementById("lyricsGenerateKaraokeBtn")?.addEventListener("click", () => void generateKaraoke());
+  document.getElementById("lyricsOpenSearchBtn")?.addEventListener("click", toggleManualLyricsSearch);
+  document.getElementById("lyricsSearchForm")?.addEventListener("submit", (event) => void submitManualLyricsSearch(event));
   document.getElementById("lyricsRegenerateKaraokeBtn")?.addEventListener("click", () => void generateKaraoke({ replace: true }));
   document.getElementById("lyricsDeleteKaraokeBtn")?.addEventListener("click", () => void deleteGeneratedKaraoke());
   document.getElementById("lyricsCancelKaraokeBtn")?.addEventListener("click", () => void cancelKaraoke());
@@ -2062,21 +2744,25 @@ export function initLyrics() {
   document.getElementById("lyricsKaraokeModel")?.addEventListener("change", updateKaraokeControls);
   document.getElementById("karaokeProcessingCancel")?.addEventListener("click", () => void cancelKaraoke());
   document.getElementById("karaokeSettings")?.addEventListener("close", () => {
-    if (sync?.retimeBtn?.getAttribute("aria-busy") !== "true") closeSync(false);
+    if (!sync?.manualMode && sync?.retimeBtn?.getAttribute("aria-busy") !== "true") closeSync(false);
     if (alignOpen) closeAlign(false);
   });
   document.getElementById("lyricsEditBtn")?.addEventListener("click", editLyrics);
-  document.getElementById("lyricsAutoSyncBtn")?.addEventListener("click", () => {
-    openSync();
-    retimeFromVocals();
-  });
-  document.addEventListener("tracktags", (e) => {
-    if (visible && nothingKnownFor && e.detail?.id === nothingKnownFor) loadForCurrentTrack();
-  });
+  document.getElementById("lyricsAutoSyncBtn")?.addEventListener("click", startAutoSync);
+  const syncBtn = document.getElementById("lyricsAutoSyncBtn");
+  if (syncBtn && !document.getElementById("lyricsEditPhraseBtn")) {
+    const edit = el("button", "lyrics-align-btn", t("lyrics.sync.editPhrase"));
+    edit.id = "lyricsEditPhraseBtn";
+    edit.type = "button";
+    edit.addEventListener("click", openManualPhraseEditor);
+    syncBtn.after(edit);
+  }
   onLanguageChange(() => {
     updateKaraokeControls();
     setKaraokeMessage(karaokeMessageKey, karaokeMessageKind);
     updateTimingNote();
+    const edit = document.getElementById("lyricsEditPhraseBtn");
+    if (edit) edit.textContent = t("lyrics.sync.editPhrase");
   });
 }
 
@@ -2088,19 +2774,26 @@ export function setLyricsPresentation(on) {
 
 function updateTimingNote() {
   const note = document.getElementById("lyricsTimingNote");
-  if (note) note.textContent = shownFrom === "preview" && shownEntry?.machinePreview
-    ? ""
-    : shownEntry ? t(lines.length && !provisional ? "karaoke.timed" : "karaoke.untimed")
-    : getCurrentTrackInfo() ? t("karaoke.addLyrics") : "";
+  if (note) {
+    note.textContent = shownFrom === "preview" && shownEntry?.machinePreview
+      ? "" : shownEntry ? t(lines.length && !provisional ? "karaoke.timedShort" : "karaoke.untimed")
+      : getCurrentTrackInfo() ? t("karaoke.addLyrics") : "";
+    note.title = lines.length && !provisional ? t("karaoke.timed") : "";
+  }
   const auto = document.getElementById("lyricsAutoSyncBtn");
-  if (auto) auto.disabled = !(shownEntry?.plain || shownEntry?.synced);
+  if (auto) auto.disabled = !(shownEntry?.plain || shownEntry?.synced) || autoSyncView?.state === "running";
+  const manual = document.getElementById("lyricsEditPhraseBtn");
+  if (manual) manual.disabled = !lines.length || autoSyncView?.state === "running";
   const edit = document.getElementById("lyricsEditBtn");
-  if (edit) edit.disabled = !getCurrentTrackInfo();
+  if (edit) edit.disabled = !getCurrentTrackInfo() || autoSyncView?.state === "running";
 }
 
 function editLyrics() {
   const info = getCurrentTrackInfo();
   if (!info || document.getElementById("lyricsEditor")) return;
+  const hadLyrics = Boolean(
+    shownEntry?.plain?.trim() || shownEntry?.synced?.trim()
+  );
   const original = shownEntry || { track: info.audioTags?.title || info.title, artist: info.audioTags?.artist || "", duration: info.duration };
   const dialog = el("dialog", "lyrics-editor"); dialog.id = "lyricsEditor";
   const form = el("form", "lyrics-editor-form");
@@ -2120,14 +2813,50 @@ function editLyrics() {
     e.preventDefault();
     if (getCurrentTrackInfo()?.id !== info.id) { error.textContent = t("karaoke.changedTrack"); return; }
     if (!text.value.trim()) { error.textContent = t("karaoke.emptyLyrics"); return; }
+    const normalize = value =>
+      String(value).replace(/\r\n?/g, "\n").normalize("NFC");
+
+    if (normalize(text.value) === normalize(
+      lyricsEditorText(original)
+    )) {
+      close();
+      return;
+    }
+
     save.disabled = true;
-    closeSync(false);
-    await dropStoreSave();
-    const entry = editedLyrics(original, text.value);
-    await storeSet(storeKey(info.id), { entry, others: [] });
-    answered.delete(info.id);
-    if (getCurrentTrackInfo()?.id === info.id) { syncOpen = false; show(entry, [], "store"); }
-    close();
+
+    try {
+      closeSync(false);
+      await dropStoreSave();
+
+      const entry = editedLyrics(original, text.value);
+
+      await storeSetConfirmed(storeKey(info.id), {
+        entry, others: []
+      });
+
+          dismissFailuresByJobId(info.id, "lyrics");
+
+      notifyActivity({
+        key: `lyrics:manual:${info.id}:${entry.savedAt}`,
+        kind: "lyrics",
+        level: "success",
+        titleKey: hadLyrics
+          ? "notifActivity.lyricsUpdated"
+          : "notifActivity.lyricsAdded",
+        message: info.title,
+      });
+
+      if (getCurrentTrackInfo()?.id === info.id) {
+        syncOpen = false;
+        show(entry, [], "store");
+      }
+      close();
+    } catch (saveError) {
+      reportLyricsSaveError(info.id, saveError);
+      error.textContent = t("lyrics.sync.saveFailed");
+      save.disabled = false;
+    }
   });
   actions.append(cancel, save); form.append(title, hint, text, error, actions); dialog.append(form);
   document.body.append(dialog); dialog.showModal(); text.focus();

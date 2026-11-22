@@ -28,11 +28,13 @@ const tc = (seconds) => {
 
 /** Arm the loop the way a user does: type both bounds, blur to commit. */
 async function armLoop(page, start, end) {
+  await page.locator("#song-loop-more").click();
   await page.locator("#t-loop-end").fill(tc(end));
   await page.locator("#t-loop-end").blur();
   await page.locator("#t-loop-start").fill(tc(start));
   await page.locator("#t-loop-start").blur();
   await expect(page.locator("#t-loop")).toHaveClass(/active/);
+  await page.keyboard.press("Escape");
 }
 
 async function loopState(page) {

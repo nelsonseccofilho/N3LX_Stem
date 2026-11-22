@@ -715,7 +715,7 @@
             <section class="lyrics-panel" id="lyricsPanel" aria-labelledby="lyricsTitle">
               <div class="lyrics-heading">
                 <h2 class="lyrics-title" id="lyricsTitle" data-i18n="lyrics.title">Lyrics</h2>
-                <button id="lyricsSettingsOpen" class="lyrics-align-btn" type="button" data-i18n="karaoke.settings">Ajustes do karaokê</button>
+                <button id="lyricsSettingsOpen" class="lyrics-align-btn" type="button" data-i18n="karaoke.settings">Letra e sincronização</button>
                 <button id="karaokeCinemaOpen" class="lyrics-align-btn lyrics-generate-btn" type="button" data-i18n="karaoke.cinema">Modo cinema</button>
                 <span id="lyricsGeneratorStatus" class="lyrics-note lyrics-generation-status" role="status" aria-live="polite"></span>
                 <span id="lyricsTimingNote" class="lyrics-note lyrics-generation-status" role="status"></span>
@@ -733,12 +733,12 @@
               </section>
               <dialog id="karaokeSettings" class="karaoke-settings sd-dialog" aria-labelledby="karaokeSettingsTitle">
                 <div class="karaoke-settings-head">
-                  <h2 id="karaokeSettingsTitle" data-i18n="karaoke.settings">Ajustes do karaokê</h2>
+                  <h2 id="karaokeSettingsTitle" data-i18n="karaoke.settings">Letra e sincronização</h2>
                   <button id="lyricsSettingsClose" class="lyrics-align-btn" type="button" data-i18n="karaoke.close">Fechar</button>
                 </div>
                 <div class="karaoke-settings-content">
                   <div class="karaoke-source-actions">
-                    <button id="lyricsGenerateKaraokeBtn" class="lyrics-align-btn lyrics-generate-btn" type="button" data-i18n="karaokeTiming.generateAi">Gerar karaokê com IA</button>
+                    <button id="lyricsGenerateKaraokeBtn" class="lyrics-align-btn lyrics-generate-btn" type="button" data-i18n="karaokeTiming.generateAi">Transcrever vocais</button>
                     <button id="lyricsOpenSearchBtn" class="lyrics-align-btn" type="button" aria-controls="lyricsSearchForm" aria-expanded="false" data-i18n="lyrics.manualSearch">Buscar letra</button>
                     <button id="lyricsCancelKaraokeBtn" class="lyrics-align-btn" type="button" data-i18n="karaoke.cancel" hidden>Cancelar</button>
                   </div>
@@ -757,7 +757,7 @@
               <div class="lyrics-generator-language">
                 <label for="lyricsKaraokeLanguage" data-i18n="karaokeTiming.language">Idioma da música</label>
                 <select id="lyricsKaraokeLanguage" aria-describedby="lyricsLanguageHelp">
-                  <option value="pt" data-i18n="karaokeTiming.languagePt">Português</option>
+                  <option value="pt" data-i18n="karaokeTiming.languagePt">Português (Brasil)</option>
                   <option value="en" data-i18n="karaokeTiming.languageEn">Inglês</option>
                 </select>
                 <span id="lyricsLanguageHelp" class="lyrics-note" data-i18n="karaokeTiming.languageHelp">Português usa alinhamento avançado; inglês usa os tempos do Whisper.</span>

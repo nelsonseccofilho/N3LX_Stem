@@ -832,6 +832,50 @@ def test_video_mux_happy(client, tmp_path):
     assert r.content[4:8] == b"ftyp"
 
 
+@pytest.mark.parametrize("video", [False, True], ids=["loop-wav", "video-aac"])
+def test_region_and_video_preserve_stereo_pan(client, tmp_path, video):
+    import io
+    import subprocess
+
+    import numpy as np
+    import soundfile as sf
+
+    _skip_without_ffmpeg()
+    job = _done_job_with_stems(tmp_path, "abcdef000024", ["vocals"])
+    rate = 44100
+    time = np.arange(rate) / rate
+    tone = 0.20 * np.sin(2 * np.pi * 440 * time)
+    # The intro is silent, so a trim that ignores its start also fails.
+    tone[: rate // 10] = 0
+    path = tmp_path / job.id / "stems" / "vocals.wav"
+    sf.write(path, np.column_stack((tone, tone / 2)), rate)
+    params = {"stems": "vocals", "gains": "0.5", "pans": "-1"}
+    if video:
+        _make_video_file(tmp_path, job.id)
+        endpoint = "video.mp4"
+    else:
+        params.update(start="0.15", end="0.25")
+        endpoint = "mixdown.wav"
+    response = client.get(f"/api/jobs/{job.id}/{endpoint}", params=params)
+    assert response.status_code == 200
+    if video:
+        decoded = subprocess.run(
+            ["ffmpeg", "-v", "error", "-i", "pipe:0", "-map", "0:a:0", "-f", "f32le", "pipe:1"],
+            input=response.content,
+            capture_output=True,
+            check=True,
+            timeout=30,
+        )
+        samples = np.frombuffer(decoded.stdout, dtype="<f4").reshape(-1, 2)
+        samples = samples[int(rate * 0.15) : int(rate * 0.25)]
+    else:
+        samples, export_rate = sf.read(io.BytesIO(response.content))
+        assert abs(len(samples) - export_rate / 10) <= 1
+    left, right = np.sqrt(np.mean(samples**2, axis=0))
+    assert left == pytest.approx(0.15 / np.sqrt(2), rel=0.08)
+    assert right < left / 100
+
+
 # ─── WAV/FLAC headers must be finalised (seekable output, not pipe:1) ─────
 
 

@@ -627,7 +627,15 @@ function makeLanePan(name, display) {
   slider.value = String(Math.round(clampStereoPan(mixerState[name]?.pan ?? 0) * 100));
   slider.setAttribute("aria-label", `Pan L/R: ${display}`);
   slider.setAttribute("aria-valuetext", panLabel(mixerState[name]?.pan ?? 0));
-  slider.title = "Esquerda - Centro - Direita";
+  slider.title = "Pan: ← / → ±1% · Shift + ← / → ±10%";
+  slider.addEventListener("keydown", event => {
+    if (!event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+    event.preventDefault();
+    event.stopPropagation();
+    const delta = event.key === "ArrowLeft" ? -10 : 10;
+    setLanePan(name, (Number(slider.value) + delta) / 100);
+  });
   slider.addEventListener("input", () => setLanePan(name, Number(slider.value) / 100));
   slider.addEventListener("dblclick", () => setLanePan(name, 0));
   const center = document.createElement("button");

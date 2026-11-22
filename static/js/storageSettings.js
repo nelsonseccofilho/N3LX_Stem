@@ -15,6 +15,11 @@ export function wireStorageSettings(overlay) {
   const exportsNote = pane.querySelector("#storageExportsNote");
   const status = pane.querySelector("#storageSettingsStatus");
   const desktop = () => window.n3lxStorage || null;
+  // The browser can show the library path. Folder pickers belong to Electron.
+  if (!desktop()) {
+    stemsChange?.remove();
+    exportsPath.closest("section")?.remove();
+  }
 
   let library = null;
   let updating = false;

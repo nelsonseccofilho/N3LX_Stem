@@ -19,7 +19,10 @@ By participating you agree to follow our [Code of Conduct](CODE_OF_CONDUCT.md).
 ## Project layout
 
 - `app/` - FastAPI backend (the audio pipeline, job registry, and HTTP API).
-- `static/` - the web UI: plain ES-module JavaScript, HTML, and CSS. No build step, no bundler.
+- `static/` - the web UI: plain ES-module JavaScript, HTML, and CSS, with no runtime bundler.
+  The isolated karaoke settings stylesheet is built from `styles/` with
+  `npm run build:css`; its generated CSS is committed. See
+  [the C28 pilot](docs/C28_DESIGN_SYSTEM_PILOT.md) before editing it.
 - `desktop/` - the Tauri v2 desktop shell (Rust) that wraps the backend + UI.
 - `scripts/` - packaging scripts (macOS app/dmg, Windows portable, runtime pack).
 - `tests/` - the pytest suite for the backend.

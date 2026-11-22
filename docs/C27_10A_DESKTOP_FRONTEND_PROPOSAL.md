@@ -1,5 +1,8 @@
 # C27.10A — auditoria e proposta para o front-end Desktop
 
+Continuidade em 22/11/2026: [piloto isolado C28](C28_DESIGN_SYSTEM_PILOT.md),
+com Tailwind v4 e Design System próprio. A avaliação daisyUI não foi adotada.
+
 Estado: proposta; nenhuma dependência, componente ou regra de layout foi alterada neste ciclo.
 
 ## Contrato de produto

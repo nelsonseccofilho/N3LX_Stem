@@ -27,6 +27,30 @@ from app.core.registry import _jobs
 JOB = "abcdefabcdef"
 
 
+def test_exported_wav_preserves_gain_and_stereo_pan(client, tmp_path):
+    import io
+    import shutil
+    import struct
+    import wave
+
+    import soundfile as sf
+
+    if not shutil.which("ffmpeg"):
+        pytest.skip("FFmpeg required for the rendered waveform check")
+    stems = _setup_job(tmp_path, ("vocals",))
+    with wave.open(str(stems / "vocals.wav"), "wb") as wav:
+        wav.setparams((2, 2, 44100, 0, "NONE", ""))
+        wav.writeframes(struct.pack("<hh", 4000, 2000) * 4096)
+    for pan, expected in [(0, (2000, 1000)), (1, (0, 3000)), (-1, (3000, 0))]:
+        response = client.get(
+            f"/api/jobs/{JOB}/mixdown.wav",
+            params={"stems": "vocals", "gains": "0.5", "pans": str(pan)},
+        )
+        assert response.status_code == 200
+        samples, _ = sf.read(io.BytesIO(response.content), dtype="int16")
+        assert tuple(samples[len(samples) // 2]) == pytest.approx(expected, abs=2)
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     from app.api import stems as stems_mod

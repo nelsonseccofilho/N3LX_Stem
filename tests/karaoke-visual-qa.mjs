@@ -1,9 +1,7 @@
-import {createRequire} from 'node:module';
+import {chromium} from '@playwright/test';
 import {readFile,mkdir,writeFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
-const require=createRequire(resolve('../c24-unified-qa-code/package.json'));
-const {chromium}=require('@playwright/test');
-const out=resolve('../karaoke-gap-evidence');await mkdir(out,{recursive:true});
+const out=resolve(process.env.KARAOKE_QA_EVIDENCE || 'test-results/karaoke-cinema');await mkdir(out,{recursive:true});
 const browser=await chromium.launch({channel:'msedge'});
 try {
  const page=await browser.newPage({viewport:{width:1920,height:1080}});

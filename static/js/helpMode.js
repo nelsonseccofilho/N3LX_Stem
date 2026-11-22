@@ -39,7 +39,6 @@ const HELP = [
   [".rail-trash", "help.trash"],
   [".rail-queue", "help.queue"],
   ["#notifBtn", "help.notifications"],
-  [".github-star-shortcut", "help.githubStar"],
   ["#settingsBtn", "settings"],
   ["#aboutBtn", "help.about"],
   ["#catalogSearch", "help.searchLibrary"],

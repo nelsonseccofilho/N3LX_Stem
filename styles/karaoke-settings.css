@@ -1,0 +1,99 @@
+/* Build-only Tailwind v4. No Preflight, theme import, global utilities or scan. */
+@import "tailwindcss/utilities.css" source(none);
+
+@theme inline {
+  --spacing: 4px;
+  --color-sd-surface: var(--sd-surface);
+  --color-sd-control: var(--sd-control);
+  --color-sd-text: var(--sd-text);
+  --color-sd-secondary: var(--sd-secondary);
+  --color-sd-border: var(--sd-border);
+}
+
+/* Semantic aliases stay inside this single dialog and follow both themes. */
+#karaokeSettings.sd-dialog {
+  --sd-surface: var(--bg-2);
+  --sd-control: var(--panel);
+  --sd-control-hover: var(--panel-2);
+  --sd-text: var(--fg);
+  --sd-secondary: var(--fg-2);
+  --sd-border: var(--border-strong);
+  --sd-field-border: var(--muted-2);
+  --sd-focus: var(--accent);
+  --sd-radius: var(--radius-xs);
+  --sd-font: var(--font-sans);
+  --sd-control-size: 34px;
+  --sd-dialog-width: 680px;
+  --sd-dialog-inset: 32px;
+  --sd-dialog-padding: 20px;
+  --sd-dialog-radius: 12px;
+  --sd-dialog-shadow: var(--shadow-panel);
+  @apply min-w-0 overflow-auto bg-sd-surface text-sd-text border-sd-border;
+  box-sizing: border-box;
+  width: min(var(--sd-dialog-width), calc(100vw - var(--sd-dialog-inset)));
+  max-height: min(85dvh, 760px);
+  padding: var(--sd-dialog-padding);
+  border-radius: var(--sd-dialog-radius);
+  box-shadow: var(--sd-dialog-shadow);
+}
+
+#karaokeSettings.sd-dialog .karaoke-settings-head {
+  @apply flex items-center justify-between gap-3;
+}
+
+#karaokeSettings.sd-dialog :is(.karaoke-settings-content, .karaoke-tab-panel) {
+  @apply min-w-0;
+}
+
+#karaokeSettings.sd-dialog .karaoke-tabs {
+  @apply grid gap-1;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+#karaokeSettings.sd-dialog :is(button, .lyrics-align-btn, input:not([type="hidden"]), select, textarea) {
+  @apply min-w-0;
+  box-sizing: border-box;
+  min-height: var(--sd-control-size);
+  max-width: 100%;
+  font-family: var(--sd-font);
+  border-radius: var(--sd-radius);
+}
+
+#karaokeSettings.sd-dialog :is(input:not([type="hidden"]), select, textarea) {
+  @apply bg-sd-control text-sd-text px-2 py-1;
+  border: 1px solid var(--sd-field-border);
+  font-size: 12px;
+}
+
+#karaokeSettings.sd-dialog :is(input, textarea)::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+#karaokeSettings.sd-dialog .karaoke-tab {
+  @apply text-sd-secondary;
+  min-height: 38px;
+}
+
+#karaokeSettings.sd-dialog .karaoke-tab[aria-selected="true"] {
+  @apply text-sd-text border-sd-border;
+  background: var(--sd-control-hover);
+}
+
+#karaokeSettings.sd-dialog :is(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid var(--sd-focus);
+  outline-offset: 2px;
+}
+
+#karaokeSettings.sd-dialog :is(button, input, select, textarea):disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#karaokeSettings.sd-dialog :is(.lyrics-align-btn, .karaoke-tab):enabled:hover {
+  background: var(--sd-control-hover);
+}
+
+#karaokeSettings.sd-dialog .lyrics-note {
+  overflow-wrap: anywhere;
+}

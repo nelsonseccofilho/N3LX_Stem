@@ -311,7 +311,8 @@ function syncLoopInputs() {
   ]) {
     if (!input) continue;
     input.disabled = !enabled;
-    if (document.activeElement !== input) input.value = fmtTimeMs(value);
+    const formatted = fmtTimeMs(value);
+    if (document.activeElement !== input && input.value !== formatted) input.value = formatted;
   }
 }
 
@@ -409,7 +410,13 @@ function wireLoopInputs() {
     [loopEndInput, "end"],
   ]) {
     if (!input) continue;
-    input.addEventListener("blur", () => commitLoopInput(which));
+    let edited = false;
+    input.addEventListener("focus", () => { edited = false; });
+    input.addEventListener("input", () => { edited = true; });
+    input.addEventListener("blur", () => {
+      if (edited) commitLoopInput(which);
+      syncLoopInputs();
+    });
     input.addEventListener(
       "wheel",
       (e) => {
@@ -431,6 +438,7 @@ function wireLoopInputs() {
         input.blur();
       } else if (e.key === "Escape") {
         e.preventDefault();
+        edited = false;
         input.value = fmtTimeMs(which === "start" ? loopStart : loopEnd);
         input.blur();
       }

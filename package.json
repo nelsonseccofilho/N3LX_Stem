@@ -2,14 +2,18 @@
   "name": "stemdeck-frontend-tests",
   "private": true,
   "type": "module",
-  "description": "Browser tests for static/js. The app itself has no build step and no runtime dependencies; this exists only so CI can drive a real browser (#339).",
+  "description": "Static ES-module UI; Tailwind builds only the isolated karaoke settings stylesheet. No UI runtime dependencies.",
   "scripts": {
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:acceptance": "playwright test -c tests/acceptance/playwright.acceptance.config.mjs",
-    "test:js": "for f in tests/js/*.test.mjs; do node \"$f\"; done"
+    "test:js": "node scripts/test-js.mjs",
+    "build:css": "tailwindcss -i styles/karaoke-settings.css -o static/css/karaoke-settings.css --minify",
+    "test:c28": "node tests/c28-dialog-qa.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "^1.49.0"
+    "@playwright/test": "^1.49.0",
+    "@tailwindcss/cli": "4.3.5",
+    "tailwindcss": "4.3.5"
   }
 }

@@ -95,15 +95,12 @@ export function initKaraokeSettingsTabs() {
     tools
   );
 
-  const footer = document.createElement("div");
-  footer.className = "karaoke-tab-footer";
-  footer.append(edit);
+  panels.sync.append(edit);
 
   content.replaceChildren(
     panels.generate,
     panels.search,
-    panels.sync,
-    footer
+    panels.sync
   );
 
   content.before(nav);
@@ -114,8 +111,8 @@ export function initKaraokeSettingsTabs() {
     const en = String(getLanguage()).toLowerCase().startsWith("en");
 
     const titles = en
-      ? ["Generate lyrics", "Find lyrics", "Synchronization"]
-      : ["Gerar letra", "Buscar letra", "Sincronização"];
+      ? ["Transcribe vocals", "Find lyrics online", "Adjust timing"]
+      : ["Transcrever vocais", "Buscar letra online", "Ajustar tempos"];
 
     names.forEach((name, index) => {
       tabs[name].textContent = titles[index];
@@ -187,7 +184,10 @@ export function initKaraokeSettingsTabs() {
     }
 
     event.preventDefault();
-    activate(names[next], true);
+    // Keep arrow navigation inside the tablist. Tab enters the active panel;
+    // clicking Search still focuses its fields through the existing handler.
+    activate(names[next]);
+    tabs[names[next]].focus();
   });
 
   dialog.addEventListener("close", () => {

@@ -2,7 +2,7 @@
 import { test, expect } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 const ID='e2e0cafebabe';
-const out=process.env.C278_EVIDENCE || 'test-results/c278-evidence';
+const evidenceBase=process.env.C278_EVIDENCE || 'test-results/c278-evidence';
 const choices=[
   {source:'lrclib',lrclib_id:101,track:'QA Song',artist:'QA Band',album:'Studio',duration:2,
     synced:'[00:00.20] Test first line\n[00:01.20] Test second line',plain:'Test first line\nTest second line'},
@@ -10,7 +10,9 @@ const choices=[
     synced:'',plain:'Alternate test words\nMore alternate words'},
 ];
 
-test('1920x1080 Studio and Karaoke controlled QA', async ({page,request},testInfo)=>{
+test('Studio and Karaoke controlled QA', async ({page,request},testInfo)=>{
+  const out=evidenceBase+'/'+(testInfo.project.name || 'desktop');
+  const {width,height}=page.viewportSize();
   const fixture=await request.get(`/api/jobs/${ID}`);
   expect(fixture.ok()).toBeTruthy();
   expect((await fixture.json()).title).toBe('E2E Fixture Track (again)');
@@ -31,7 +33,7 @@ test('1920x1080 Studio and Karaoke controlled QA', async ({page,request},testInf
   await page.goto('/');
   await expect(page.locator('#studioEmptyState')).toBeVisible();
   const metrics=await page.evaluate(()=>({innerWidth,innerHeight,clientWidth:document.documentElement.clientWidth,dpr:devicePixelRatio,scrollWidth:document.documentElement.scrollWidth}));
-  expect(metrics).toEqual({innerWidth:1920,innerHeight:1080,clientWidth:1920,dpr:1,scrollWidth:1920});
+  expect(metrics).toEqual({innerWidth:width,innerHeight:height,clientWidth:width,dpr:1,scrollWidth:width});
   await page.screenshot({path:out+'/01-studio-empty.png'});
   await page.locator(`.cat-item[data-id="${ID}"]`).dblclick();
   await expect(page.locator('#footer-time-total')).toHaveText('00:02');
@@ -52,7 +54,7 @@ test('1920x1080 Studio and Karaoke controlled QA', async ({page,request},testInf
     const rects=s=>[...document.querySelectorAll(s)].filter(e=>e.getBoundingClientRect().height>0).map(e=>{const r=e.getBoundingClientRect();return {top:r.top,height:r.height};});
     return {mix:rects('.mixer-column .lane-header:not(.hidden)'),wave:rects('.stem-waveform-row:not(.hidden)'),scrollWidth:document.documentElement.scrollWidth};
   });
-  expect(geometry.scrollWidth).toBe(1920);
+  expect(geometry.scrollWidth).toBe(width);
   expect(geometry.mix.length).toBeGreaterThan(0);
   expect(geometry.mix.length).toBe(geometry.wave.length);
   geometry.mix.forEach((r,i)=>expect(Math.abs(r.top-geometry.wave[i].top)).toBeLessThanOrEqual(1));

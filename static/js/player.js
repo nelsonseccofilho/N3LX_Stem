@@ -1185,8 +1185,8 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
   setLanePanAvailability(false); // until the playback engine loads
   setLaneControlsEnabled(true);
   setLoopEnabled(false);
-  setLoopStart(0);
-  setLoopEnd(0);
+  setLoopStart(totalDuration * LOOP_DEFAULT_START_FRAC);
+  setLoopEnd(totalDuration * LOOP_DEFAULT_END_FRAC);
   loopBtn.classList.remove("active");
   loopRegionEl.classList.add("hidden");
   // After the loop is cleared, never before: resetWaveZoom redraws the loop
@@ -1440,7 +1440,11 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
         { once: true });
       }
     });
-    if (!totalDuration) setTotalDuration(mt.getDuration() || 0);
+    if (!totalDuration) {
+      setTotalDuration(mt.getDuration() || 0);
+      setLoopStart(totalDuration * LOOP_DEFAULT_START_FRAC);
+      setLoopEnd(totalDuration * LOOP_DEFAULT_END_FRAC);
+    }
     timeEl.textContent = `00:00 / ${fmtTime(totalDuration)}`;
     buildRuler(totalDuration);
     buildPresenceRuler(totalDuration);
@@ -1453,8 +1457,6 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
       applyMix();
       if (!useEngine) document.dispatchEvent(new CustomEvent("playbackready", { detail: { jobId } }));
     });
-    setLoopStart(totalDuration * LOOP_DEFAULT_START_FRAC);
-    setLoopEnd(totalDuration * LOOP_DEFAULT_END_FRAC);
     // When the engine owns playback the multitrack has null URLs and no decoded
     // audio, so mini-waves are driven from the engine's buffers instead (below).
     if (!useEngine) renderAllMiniWaves(mt, stems);
@@ -1938,6 +1940,7 @@ function _effectiveMixGains() {
   const names = [];
   const gains = [];
   const pitches = [];
+  const pans = [];
   for (const s of _currentStems) {
     if (s.name === "mix") continue;
     const m = mixerState[s.name];
@@ -1945,13 +1948,14 @@ function _effectiveMixGains() {
     const g = m.muted ? 0 : (anySolo && !m.soloed ? 0 : m.volume);
     if (g <= 0) continue;
     names.push(s.name);
+    pans.push(m.pan ?? 0);
     gains.push(Math.max(0, Math.min(LANE_VOLUME_MAX, g)));
     // The lane's own key, the same number the stepper shows. The server
     // re-applies effectivePitch, so drums are refused there too rather than
     // this being the only thing standing between a snare and a resampler.
     pitches.push(effectivePitch(s.name, m.pitch ?? 0, undefined));
   }
-  return { names, gains, pitches };
+  return { names, gains, pitches, pans };
 }
 
 // Click-track export params. The click is synthesised in the browser during
@@ -2004,10 +2008,11 @@ export function setExportClickAvailable(on) {
 // when every lane is silenced; `region` appends the loop bounds.
 function _mixdownUrl(ext, region) {
   if (!currentJobId) return null;
-  const { names, gains, pitches } = _effectiveMixGains();
+  const { names, gains, pitches, pans } = _effectiveMixGains();
   if (!names.length) return null;
   const q = new URLSearchParams({
     stems: names.join(","),
+    ...(pans.some(Boolean) ? { pans: pans.join(",") } : {}),
     gains: gains.map((g) => g.toFixed(3)).join(","),
     ...(pitches.some((p) => p !== 0) ? { pitches: pitches.join(",") } : {}),
   });
@@ -2055,10 +2060,11 @@ export function downloadCurrentMix(ext = "wav", onTransferStart) {
 // there's no video track or every lane is muted.
 export function downloadCurrentVideo(onTransferStart) {
   if (!currentJobId || !_currentHasVideo) return false;
-  const { names, gains, pitches } = _effectiveMixGains();
+  const { names, gains, pitches, pans } = _effectiveMixGains();
   if (!names.length) return false;
   const q = new URLSearchParams({
     stems: names.join(","),
+    ...(pans.some(Boolean) ? { pans: pans.join(",") } : {}),
     gains: gains.map((g) => g.toFixed(3)).join(","),
     ...(pitches.some((p) => p !== 0) ? { pitches: pitches.join(",") } : {}),
   });

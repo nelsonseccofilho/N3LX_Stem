@@ -2884,7 +2884,9 @@ function wireCatalogToggle() {
   // Default for every application launch.
   // Do not restore a previously collapsed navigation state.
   catalogView = "library";
-  setSidebarCollapsed(false);
+  const drawerLayout = window.matchMedia("(max-width: 1000px)");
+  setSidebarCollapsed(drawerLayout.matches);
+  drawerLayout.addEventListener("change", event => setSidebarCollapsed(event.matches));
 
   collapseBtn?.addEventListener("click", () => {
     setSidebarCollapsed(!app.classList.contains("cat-collapsed"));

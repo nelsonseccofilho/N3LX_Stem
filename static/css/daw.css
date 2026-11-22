@@ -8391,3 +8391,40 @@ input, textarea { font-family: inherit; }
 }
 
 /* Do not hide active import or processing interfaces. */
+
+/* Below the single-row desktop layout, let complete control groups wrap.
+   The header reserves the actual height of those rows as the window changes. */
+@media (max-width: 1399px) {
+  .app.daw.header-v3 .daw-topbar,
+  .app.daw.header-v3 .daw-topbar > .daw-composer-stack,
+  .app.daw.header-v3 .daw-composer.header-compact,
+  .app.daw.header-v3 .daw-composer.header-compact > #nowPlayingPanel,
+  .app.daw.header-v3 #nowPlayingPanel :is(.song-controls,.footer-main,.footer-row-controls,.footer-clusters) {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+  }
+  .app.daw.header-v3 .daw-topbar { flex: 0 0 auto; }
+  .app.daw.header-v3 .daw-composer.header-compact > #nowPlayingPanel {
+    display: flex;
+    flex-flow: column nowrap;
+    align-items: stretch;
+    gap: 4px;
+    padding-block: 4px;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .track-panel-meta { display: none; }
+  .app.daw.header-v3 #nowPlayingPanel .song-controls {
+    width: 100%;
+    padding: 0;
+    border: 0;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .footer-clusters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 4px 6px;
+    width: 100%;
+  }
+  .app.daw.header-v3 #nowPlayingPanel .footer-clusters > * { flex: 0 0 auto; }
+}

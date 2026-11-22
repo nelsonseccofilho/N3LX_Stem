@@ -115,6 +115,8 @@
   }
 
   function handle(event) {
+    // The UI has system-font fallbacks when the optional web fonts are offline.
+    if (event.target?.matches?.('link[rel="stylesheet"][href^="https://fonts.googleapis.com/"]')) return;
     const detail = detailFrom(event);
     // Still log it. In a browser the console is the faster route, and this runs
     // before main.js installs its own logging.

@@ -187,7 +187,10 @@ export function initKaraokeSettingsTabs() {
     }
 
     event.preventDefault();
-    activate(names[next], true);
+    // Keep arrow navigation inside the tablist. Tab enters the active panel;
+    // clicking Search still focuses its fields through the existing handler.
+    activate(names[next]);
+    tabs[names[next]].focus();
   });
 
   dialog.addEventListener("close", () => {

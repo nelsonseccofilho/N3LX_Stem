@@ -1185,8 +1185,8 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
   setLanePanAvailability(false); // until the playback engine loads
   setLaneControlsEnabled(true);
   setLoopEnabled(false);
-  setLoopStart(0);
-  setLoopEnd(0);
+  setLoopStart(totalDuration * LOOP_DEFAULT_START_FRAC);
+  setLoopEnd(totalDuration * LOOP_DEFAULT_END_FRAC);
   loopBtn.classList.remove("active");
   loopRegionEl.classList.add("hidden");
   // After the loop is cleared, never before: resetWaveZoom redraws the loop
@@ -1440,7 +1440,11 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
         { once: true });
       }
     });
-    if (!totalDuration) setTotalDuration(mt.getDuration() || 0);
+    if (!totalDuration) {
+      setTotalDuration(mt.getDuration() || 0);
+      setLoopStart(totalDuration * LOOP_DEFAULT_START_FRAC);
+      setLoopEnd(totalDuration * LOOP_DEFAULT_END_FRAC);
+    }
     timeEl.textContent = `00:00 / ${fmtTime(totalDuration)}`;
     buildRuler(totalDuration);
     buildPresenceRuler(totalDuration);
@@ -1453,8 +1457,6 @@ export function wireUpAudio(jobId, stems, duration, thumbnail, mixUrl = null, ti
       applyMix();
       if (!useEngine) document.dispatchEvent(new CustomEvent("playbackready", { detail: { jobId } }));
     });
-    setLoopStart(totalDuration * LOOP_DEFAULT_START_FRAC);
-    setLoopEnd(totalDuration * LOOP_DEFAULT_END_FRAC);
     // When the engine owns playback the multitrack has null URLs and no decoded
     // audio, so mini-waves are driven from the engine's buffers instead (below).
     if (!useEngine) renderAllMiniWaves(mt, stems);

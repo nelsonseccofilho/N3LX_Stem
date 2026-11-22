@@ -15,6 +15,14 @@ import { openStudio, JOB_ID } from "./helpers.mjs";
 // seed.py writes a 6 second fixture, so every span here stays inside it.
 const FIXTURE_SEC = 6;
 
+test.beforeEach(async ({ page }) => {
+  const values = {};
+  await page.route("**/api/ui-store", async route => {
+    if (route.request().method() === "POST") Object.assign(values, route.request().postData().values);
+    await route.fulfill({ json: { values } });
+  });
+});
+
 test.afterEach(async ({ page }) => {
   await page.request.patch(`/api/jobs/${JOB_ID}/sections`, { data: { sections: [] } });
 });
@@ -29,12 +37,14 @@ const tc = (seconds) => {
 /** Arm the loop the way a user does: type both bounds, blur to commit. */
 async function armLoop(page, start, end) {
   await page.locator("#song-loop-more").click();
+  await page.locator("#t-loop-end").click();
   await page.locator("#t-loop-end").fill(tc(end));
   await page.locator("#t-loop-end").blur();
   await page.locator("#t-loop-start").fill(tc(start));
   await page.locator("#t-loop-start").blur();
   await expect(page.locator("#t-loop")).toHaveClass(/active/);
   await page.keyboard.press("Escape");
+  await expect(page.locator("#t-loop-end")).toHaveValue(tc(end));
 }
 
 async function loopState(page) {
@@ -61,6 +71,58 @@ const blockIds = (page) =>
   );
 
 test.describe("sections and the loop", () => {
+  test("inspecting the bounds leaves the loop off", async ({ page }) => {
+    await openStudio(page);
+    await page.locator("#song-loop-more").click();
+    await page.locator("#t-loop-end").focus();
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#t-loop")).not.toHaveClass(/active/);
+  });
+
+  test("three loop returns carry audio through the master output", async ({ page }) => {
+    await page.addInitScript(() => {
+      const connect = AudioNode.prototype.connect;
+      AudioNode.prototype.connect = function (target, ...args) {
+        const result = connect.call(this, target, ...args);
+        if (target === this.context.destination) {
+          const meter = this.context.createAnalyser();
+          connect.call(this, meter);
+          (window.mixMeters ??= []).push(meter);
+        }
+        return result;
+      };
+    });
+    await openStudio(page);
+    await armLoop(page, 1, 2);
+    await page.locator("#t-play").click();
+    const returns = await page.evaluate(async () => {
+      const { audioEngine } = await import("/js/state.js");
+      const samples = new Float32Array(2048);
+      let previous = 0;
+      let laps = 0;
+      let audible = false;
+      const deadline = performance.now() + 9000;
+      while (performance.now() < deadline && laps < 3) {
+        await new Promise(resolve => setTimeout(resolve, 35));
+        const time = audioEngine.getCurrentTime();
+        if (previous > 1.8 && time >= 0.95 && time < 1.3) {
+          if (!audible) break;
+          laps++;
+          audible = false;
+        }
+        if (time > 1.3 && time < 1.8) {
+          audible ||= (window.mixMeters || []).some(meter => {
+            meter.getFloatTimeDomainData(samples);
+            return samples.some(sample => Math.abs(sample) > 0.01);
+          });
+        }
+        previous = time;
+      }
+      return laps;
+    });
+    expect(returns).toBe(3);
+  });
+
   test("Add builds the section on the armed loop, not at the start of the track", async ({
     page,
   }) => {

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import math
 import logging
 import os
 import re
@@ -130,6 +131,7 @@ def _mixdown_cache_key(
     end: float | None,
     click_lane: tuple[Path, float] | None = None,
     pitches: list[int] | None = None,
+    pans: list[float] | None = None,
 ) -> str:
     """Every render input is in the key, so a different mixer state, region,
     or a Settings change (export sample rate) misses cleanly -- never a stale
@@ -156,6 +158,8 @@ def _mixdown_cache_key(
             "" if not (pitches and any(pitches)) else "p" + ",".join(str(p) for p in pitches),
         ]
     )
+    if pans and any(pans):
+        raw += "|pan:" + ",".join(map(str, pans))
     # Cache key, not a security context -- usedforsecurity=False documents
     # that for both readers and static analysis (bandit flags bare sha1()).
     return hashlib.sha1(raw.encode("utf-8"), usedforsecurity=False).hexdigest()
@@ -220,8 +224,7 @@ def _validate_stem_path(job_id: str, name: str):
         layout = read_layout(JOBS_DIR / job_id) or {}
         published = set(layout.get("active_names", []))
         if not refined <= published or not all(
-            (JOBS_DIR / job_id / "stems" / f"{lane}.wav").is_file()
-            for lane in refined
+            (JOBS_DIR / job_id / "stems" / f"{lane}.wav").is_file() for lane in refined
         ):
             raise HTTPException(status_code=404, detail="refined drum lanes not published")
     return path
@@ -479,7 +482,11 @@ def effective_pitch(name: str, semitones: int) -> int:
     refuses this too, so honouring a drums pitch here would export something the
     studio will not play.
     """
-    if name in ("drums", "residual_drums", "residual_mix", "drum_recovery", "residual_drums_refined") or name in DRUM_STEMS:
+    if (
+        name
+        in ("drums", "residual_drums", "residual_mix", "drum_recovery", "residual_drums_refined")
+        or name in DRUM_STEMS
+    ):
         return 0
     return max(PITCH_MIN, min(PITCH_MAX, int(semitones)))
 
@@ -557,12 +564,39 @@ def _parse_lane_gains(stems: str, gains: str) -> tuple[list[str], list[float]]:
     requested = set(names)
     refined = {"drum_recovery", "residual_drums_refined"}
     if "drums" in requested and requested & refined:
-        raise HTTPException(status_code=422, detail="drums cannot be combined with refined drum lanes")
+        raise HTTPException(
+            status_code=422, detail="drums cannot be combined with refined drum lanes"
+        )
     if "residual_drums" in requested and requested & refined:
         raise HTTPException(status_code=422, detail="original drum residual overlaps refined lanes")
     if "reaper_master" in names and len(names) > 1:
         raise HTTPException(status_code=422, detail="master reference must play on its own")
     return names, parsed_gains
+
+
+def _parse_pans(raw: str, size: int) -> list[float]:
+    if not raw:
+        return [0.0] * size
+    try:
+        values = [float(part) for part in raw.split(",")]
+    except ValueError as exc:
+        raise HTTPException(422, "invalid pan") from exc
+    if len(values) != size or not all(-1 <= value <= 1 for value in values):
+        raise HTTPException(422, "expected one pan between -1 and 1 per lane")
+    return values
+
+
+def _pan_filter(pan: float) -> str:
+    """StereoPannerNode folds the far channel into the near channel."""
+    if not pan:
+        return ""
+    angle = abs(pan) * math.pi / 2
+    cross, keep = math.sin(angle), math.cos(angle)
+    if pan > 0:
+        matrix = f"c0={keep:.9f}*c0|c1=c1+{cross:.9f}*c0"
+    else:
+        matrix = f"c0=c0+{cross:.9f}*c1|c1={keep:.9f}*c1"
+    return f"aformat=channel_layouts=stereo,pan=stereo|{matrix},"
 
 
 class _RenderLane(NamedTuple):
@@ -571,6 +605,7 @@ class _RenderLane(NamedTuple):
     path: Path
     gain: float
     pitch: int
+    pan: float = 0.0
 
 
 def _expand_render_lanes(
@@ -578,6 +613,7 @@ def _expand_render_lanes(
     names: list[str],
     gains: list[float],
     pitches: list[int],
+    pans: list[float] | None = None,
 ) -> tuple[list[_RenderLane], list[str]]:
     """Lanes to render, with "original" rebuilt from its parts when it is
     transposed. Returns the lanes and the names of any lane left unpitched.
@@ -610,7 +646,9 @@ def _expand_render_lanes(
     )
     if detailed_guitar:
         selected.add("guitar")
-    for name, gain, pitch in zip(names, gains, pitches, strict=True):
+    for name, gain, pitch, pan in zip(
+        names, gains, pitches, pans or [0.0] * len(names), strict=True
+    ):
         if name in percussion:
             pitch = 0
         # Validate first, always. Whether a lane exists is a property of the
@@ -620,7 +658,7 @@ def _expand_render_lanes(
         # depending on the pitch attached to it.
         path = _validate_stem_path(job_id, name)
         if name != "original" or (pitch == 0 and not detailed_guitar):
-            lanes.append(_RenderLane(path, gain, pitch))
+            lanes.append(_RenderLane(path, gain, pitch, pan))
             continue
 
         components = [n for n in STEM_NAMES if n not in selected]
@@ -638,14 +676,14 @@ def _expand_render_lanes(
             paths.append(comp_path)
 
         if not paths:
-            lanes.append(_RenderLane(path, gain, 0))
+            lanes.append(_RenderLane(path, gain, 0, pan))
             unpitched.append(name)
             continue
 
         # Each component carries the lane's own gain; amix sums them back to
         # what the single file would have been. effective_pitch keeps drums at 0.
         for comp, path in zip(components, paths, strict=True):
-            lanes.append(_RenderLane(path, gain, effective_pitch(comp, pitch)))
+            lanes.append(_RenderLane(path, gain, effective_pitch(comp, pitch), pan))
 
     return lanes, unpitched
 
@@ -1150,6 +1188,7 @@ async def get_mixdown(
     ext: str,
     stems: str = Query(..., description="Comma-separated lane names to sum"),
     gains: str = Query(..., description="Comma-separated linear gains, parallel to stems"),
+    pans: str = Query(default="", max_length=512),
     pitches: str = Query(
         default="",
         max_length=128,
@@ -1200,6 +1239,7 @@ async def get_mixdown(
 
     names, parsed_gains = _parse_lane_gains(stems, gains)
     parsed_pitches = _parse_pitches(pitches, names)
+    parsed_pans = _parse_pans(pans, len(names))
     if (start is None) != (end is None) or (start is not None and start >= end):
         raise HTTPException(
             status_code=422,
@@ -1220,7 +1260,9 @@ async def get_mixdown(
     # stem -- deliberately before the cache lookup below, so a deleted or
     # not-yet-done job 404s the same way it always has instead of serving a
     # stale cache entry from before the job was removed.
-    render_lanes, unpitched = _expand_render_lanes(job_id, names, parsed_gains, parsed_pitches)
+    render_lanes, unpitched = _expand_render_lanes(
+        job_id, names, parsed_gains, parsed_pitches, parsed_pans
+    )
     paths = [lane.path for lane in render_lanes]
 
     media_type = MIXDOWN_MEDIA_TYPES[ext]
@@ -1237,7 +1279,7 @@ async def get_mixdown(
         groups=_parse_groups(click_groups, click_accent),
     )
     cache_key = _mixdown_cache_key(
-        job_id, ext, names, parsed_gains, start, end, click_lane, parsed_pitches
+        job_id, ext, names, parsed_gains, start, end, click_lane, parsed_pitches, parsed_pans
     )
     cache_path = _MIXDOWN_CACHE_DIR / f"{cache_key}.{ext}"
     if cache_path.is_file():
@@ -1282,7 +1324,9 @@ async def get_mixdown(
         delay = f"adelay={delay_ms}:all=1," if delay_ms > 0 else ""
         # Shift before the delay: rubberband would otherwise chew through the
         # silent lead-in padding for nothing.
-        filters.append(f"[{i}:a]{_pitch_filter(lane.pitch)}{delay}volume={lane.gain:.6f}[a{i}]")
+        filters.append(
+            f"[{i}:a]{_pitch_filter(lane.pitch)}{_pan_filter(lane.pan)}{delay}volume={lane.gain:.6f}[a{i}]"
+        )
     if click_lane is not None:
         filters.append(f"[{stem_count}:a]volume={click_lane.gain:.6f}[a{stem_count}]")
     n = stem_count + (1 if click_lane is not None else 0)
@@ -1351,6 +1395,7 @@ async def get_video_mixdown(
     job_id: str,
     stems: str = Query(..., description="Comma-separated lane names to sum"),
     gains: str = Query(..., description="Comma-separated linear gains, parallel to stems"),
+    pans: str = Query(default="", max_length=512),
     pitches: str = Query(
         default="",
         max_length=128,
@@ -1382,6 +1427,7 @@ async def get_video_mixdown(
 
     names, parsed_gains = _parse_lane_gains(stems, gains)
     parsed_pitches = _parse_pitches(pitches, names)
+    parsed_pans = _parse_pans(pans, len(names))
     # Same refusal as the audio export: a video whose audio came back in the
     # original key would be the same complaint reported again (#592).
     if any(parsed_pitches) and not await asyncio.to_thread(_rubberband_available):
@@ -1391,7 +1437,9 @@ async def get_video_mixdown(
         )
     # Validates job_id (404), job done (404), and path traversal (404) per stem,
     # and rebuilds a transposed "original" lane from its parts.
-    render_lanes, _unpitched = _expand_render_lanes(job_id, names, parsed_gains, parsed_pitches)
+    render_lanes, _unpitched = _expand_render_lanes(
+        job_id, names, parsed_gains, parsed_pitches, parsed_pans
+    )
     paths = [lane.path for lane in render_lanes]
 
     # Click is one more audio input. It must be appended before the video input
@@ -1411,7 +1459,7 @@ async def get_video_mixdown(
     # Per-lane gain then amix (normalize=0 keeps levels faithful). A single audible
     # lane skips amix (a 1-input amix is a no-op), matching get_mixdown.
     filters = [
-        f"[{i}:a]{_pitch_filter(lane.pitch)}volume={lane.gain:.6f}[a{i}]"
+        f"[{i}:a]{_pitch_filter(lane.pitch)}{_pan_filter(lane.pan)}volume={lane.gain:.6f}[a{i}]"
         for i, lane in enumerate(render_lanes)
     ]
     n = len(paths)
@@ -1610,8 +1658,7 @@ async def get_all_stems_zip(
     # Old jobs and basic jobs with no complete-layout commit must not expose
     # orphaned new files through the default "all" archive.
     if not stems and not (
-        layout_for_zip.get("profile") == "complete"
-        and layout_for_zip.get("active_names")
+        layout_for_zip.get("profile") == "complete" and layout_for_zip.get("active_names")
     ):
         wanted = [name for name in wanted if name not in refined]
     if selected_for_zip & refined:

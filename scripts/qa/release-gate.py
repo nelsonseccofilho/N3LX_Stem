@@ -12,6 +12,11 @@ def git(*a):
 def within(p, parent):
     return p == parent or parent in p.parents
 
+def bash_path(path):
+    return subprocess.check_output(
+        ["cygpath", "-u", str(path)], text=True).strip()
+
+
 def step(items, name, cmd, report, env, validator=None):
     print("\n== " + name + " ==",flush=True)
     log = report / (name + ".log")
@@ -65,9 +70,9 @@ def browser(items,report,rt,env,node):
         e=dict(env)
         e.update({
             "STEMDECK_E2E_ISOLATED":"1","STEMDECK_E2E_PORT":port,
-            "STEMDECK_E2E_DIR":str(report/"browser-scratch"),
+            "STEMDECK_E2E_DIR":bash_path(report/"browser-scratch"),
             "STEMDECK_E2E_OUTPUT_DIR":str(report/"browser-results"),
-            "N3LX_RELEASE_REPORT_DIR":str(report),
+            "N3LX_RELEASE_REPORT_DIR":bash_path(report),
             "UV_NO_SYNC":"1","UV_OFFLINE":"1",
             "UV_PROJECT_ENVIRONMENT":str(rt/".venv"),
         })
@@ -150,9 +155,10 @@ def main():
             report,env,validator=lambda _: verify_local(report))
         browser(items,report,rt,env,node)
         pe=dict(env)
-        pe.update({"N3LX_C34_RUNTIME":str(rt),"N3LX_C34_OUTPUTS":str(report)})
+        pe.update({"N3LX_C34_RUNTIME":bash_path(rt),
+                   "N3LX_C34_OUTPUTS":bash_path(report)})
         step(items,"packaged-windows",
-            ["bash",str(ROOT/"scripts/qa/c35-audio.sh")],report,pe,
+            ["bash",bash_path(ROOT/"scripts/qa/c35-audio.sh")],report,pe,
             validator=lambda log:verify_package(report,rev,log))
         items.append({"step":"revision-stability",
             "status":"PASS" if git("rev-parse","HEAD")==rev else "FAIL",

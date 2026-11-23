@@ -32,38 +32,16 @@ qa_backend() {
   "$python" -B "$package/resources/stemdeck/scripts/backend_control.py" "$1" \
     --port "$port" --runtime "$runtime" --data "$report/data"
 }
+# Shared function is tested against simulated asynchronous shutdown transitions.
+source "$repo/scripts/qa/c34-teardown.sh"
 cleanup() {
   code=$?
   trap - EXIT
   echo '=== C34: cooperative teardown ==='
   if [[ -n "$package" && -f "$package/resources/stemdeck/scripts/backend_control.py" ]]; then
-    released=0
-    if qa_backend verify-free > /dev/null 2>&1; then
-      echo 'PASS: QA port already free'
-      released=1
-    else
-      for ((attempt=1; attempt<=30; attempt++)); do
-        if qa_backend check-ready > "$report/ready.log" 2>&1; then
-          if qa_backend stop > "$report/stop.log" 2>&1 &&
-             qa_backend verify-free > "$report/verify.log" 2>&1; then
-            echo 'PASS: packaged QA backend stopped cooperatively; port released'
-            released=1
-          else
-            cat "$report/stop.log" >&2 || true
-          fi
-          break
-        fi
-        if ! qa_backend status > "$report/status.json" 2> "$report/status.err"; then
-          echo 'BLOCKED: port owner cannot be verified' >&2
-          cat "$report/status.err" >&2
-          break
-        fi
-        sleep 0.5
-      done
-    fi
-    if [[ "$released" != 1 ]]; then
-      echo 'BLOCKED: QA port still occupied; no forced termination' >&2
-      [[ ! -f "$report/status.json" ]] || cat "$report/status.json" >&2
+    # A packaged backend can disappear between verify-free and status; only a
+    # verified free port counts as PASS, and only a verified idle owner may stop.
+    if ! c34_safe_teardown "$report"; then
       code=1
     fi
   fi

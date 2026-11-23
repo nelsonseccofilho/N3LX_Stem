@@ -70,3 +70,25 @@ existing Bash teardown retains the ownership checks and cooperative stop.
 
 A fresh Windows result is required. This is a targeted lifecycle regression,
 not a request to repeat C32/C33 or to touch the personal library.
+
+## C34.1 — Final teardown race on Windows (port 60548)
+
+After commit `2361731`, the user's Windows run confirmed native window sizes,
+old backend exit before reopening, new PID, health after 2.5 seconds and page
+reload. The runner still failed during final cleanup: `verify-free` observed
+the listener occupied, but `status` immediately returned `WinError 10061`
+(connection refused). This is consistent with the packaged parent watchdog
+closing the listener between queries, but the log alone did not prove that
+it ultimately became free. The runner prematurely stopped checking.
+
+The new `c34_safe_teardown` helper now tests `verify-free` on each bounded
+iteration and once more after a failed `status`. PASS requires an actually
+verified free port, or authenticated owned idle backend followed by cooperative
+`stop` and another successful `verify-free`. Busy or foreign processes
+are never stopped or adopted. The runner still fails closed if the port remains
+occupied; no forced termination is permitted.
+
+`bash tests/qa/c34-teardown.test.sh` tests six simulated transitions
+(already free, shutdown race, authenticated idle backend, stop race, foreign
+listener, busy listener) without opening ports. A fresh Windows run with the
+new commit remains mandatory before removing Draft or merging.

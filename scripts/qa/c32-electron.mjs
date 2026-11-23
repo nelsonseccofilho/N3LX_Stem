@@ -77,6 +77,10 @@ try {
     results.push({ resolution: width + 'x' + height, ...metrics, result: 'PASS' });
     console.log('PASS Electron renderer ' + width + 'x' + height);
   }
+  if (process.env.N3LX_C33_FUNCTIONAL === '1') {
+    const { runC33Functional } = await import('./c33-functional.mjs');
+    results.push(...await runC33Functional({ page, report, port }));
+  }
   assert.deepEqual(errors, []);
 } catch (error) {
   failure = String(error.stack || error);
@@ -104,6 +108,7 @@ try {
     revision: process.env.C32_REVISION,
     execution: 'Electron development renderer, not installed Windows package',
     viewport: 'emulated renderer size',
+    scenario: process.env.N3LX_C33_FUNCTIONAL === '1' ? 'C33-functional' : 'C32-smoke',
     library: 'synthetic', passed: !failure, results, errors,
     ...(failure ? { failure } : {}),
   }, null, 2));

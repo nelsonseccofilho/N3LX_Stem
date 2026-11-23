@@ -22,7 +22,13 @@ node -e "require.resolve('playwright', { paths: [process.argv[1]] })" "$runtime"
   exit 1
 }
 
-report="$(mktemp -d "$output_parent/C32-Electron-XXXXXXXX")"
+case "${N3LX_C33_FUNCTIONAL:-0}" in
+  0) report_cycle=C32 ;;
+  1) report_cycle=C33 ;;
+  *) echo 'BLOCKED: unsupported QA scenario' >&2; exit 1 ;;
+esac
+
+report="$(mktemp -d "$output_parent/${report_cycle}-Electron-XXXXXXXX")"
 mkdir -p "$report/data/jobs" "$report/shell/desktop-app" "$report/shell/desktop/src-tauri/icons"
 cp "$repo/desktop-app/main.cjs" "$repo/desktop-app/preload.cjs" \
    "$repo/desktop-app/package.json" "$report/shell/desktop-app/"
@@ -89,6 +95,15 @@ trap cleanup EXIT
 # and checks health, and BLOCKS on foreign/busy processes.
 qa_backend verify-free
 "$python" -B "$repo/tests/e2e/seed.py" "$report/data/jobs" > "$report/seed.log"
+
+if [[ "$report_cycle" == C33 ]]; then
+  # Synthetic silent video permits the REAL MP4 mux route to be exercised.
+  # Files remain entirely inside the disposable QA data directory.
+  command -v ffmpeg >/dev/null || { echo 'BLOCKED: ffmpeg required' >&2; exit 1; }
+  command -v ffprobe >/dev/null || { echo 'BLOCKED: ffprobe required' >&2; exit 1; }
+  ffmpeg -nostdin -hide_banner -loglevel error -y     -f lavfi -i 'color=c=black:s=160x90:r=10'     -t 2 -an -c:v mpeg4 -pix_fmt yuv420p     "$report/data/jobs/e2e0cafebabe/video.mp4"
+fi
+
 qa_backend restart > "$report/backend-start.log"
 qa_backend status > "$report/backend-status.json"
 
@@ -112,4 +127,4 @@ C32_RUNTIME="$(cygpath -w "$runtime")" \
 C32_REPORT="$(cygpath -w "$report")" \
 C32_PORT="$port" C32_REVISION="$revision" \
 node "$repo/scripts/qa/c32-electron.mjs" 2>&1 | tee "$report/electron.log"
-echo 'PASS: C32 Electron renderer smoke QA'
+echo "PASS: ${report_cycle} Electron renderer QA"

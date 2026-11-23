@@ -88,3 +88,23 @@ para parar apos a primeira falha, preservar seu log e evitar repeticao
 de mensagens sem informacao nova. O parametro nao faz retry e nao
 transforma falha em PASS. Em caso de falha, inspecionar
 `ReleaseGate-*/browser-e2e.log` antes de propor nova execucao.
+
+## Navegador ausente: verificação antes de executar 470 testes
+
+Em 23/11/2026 o Playwright procurou o Chromium em
+`chromium-1234/chrome-win64/chrome.exe`, mas a instalação não o continha.
+Isso explica as falhas imediatas repetidas na rodada anterior; não significa
+470 defeitos no aplicativo.
+
+O gate agora executa `scripts/qa/browser-preflight.mjs` antes de criar
+workers E2E. Ele verifica se algum browser consegue abrir e fechar uma página
+`data:` local: Chromium do Playwright, Microsoft Edge já instalado ou
+Google Chrome já instalado (nessa ordem). Se nenhum funcionar, a etapa
+fica BLOCKED, sem abrir backend, sem instalar/download de browser e sem
+repetir os testes. Caso exista Edge ou Chrome válido, define somente para
+o gate isolado a opção Playwright `channel` correspondente; E2E normal
+fora do gate mantém seu comportamento original.
+
+O browser selecionado e a versão são preservados em
+`browser-preflight.json`. A suite ainda usa `--max-failures=1` para
+parar na primeira falha real, com relatório de erro.

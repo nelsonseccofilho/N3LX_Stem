@@ -78,8 +78,9 @@ def browser(items,report,rt,env,node):
     # Resolve Playwright through the installed runtime via the ESM loader.
     # A Windows Git Bash user might not have permission to create symlinks.
     loader=ROOT/"scripts/qa/e2e-runtime-loader.mjs"
-    if not loader.is_file():
-        return blocked(items,"browser-e2e","QA Playwright module loader missing")
+    browser_preflight=ROOT/"scripts/qa/browser-preflight.mjs"
+    if not loader.is_file() or not browser_preflight.is_file():
+        return blocked(items,"browser-e2e","QA loader or browser preflight missing")
     try:
         port=subprocess.check_output(
             [node,str(ROOT/"scripts/qa/available-port.mjs")],
@@ -111,6 +112,24 @@ def browser(items,report,rt,env,node):
             return blocked(items,"browser-e2e",
                 "Playwright loader preflight failed; server not started: "+detail[-1000:])
         print("PASS: Node ESM loader and Playwright import (no server started)",flush=True)
+        # The previous 330 one-millisecond failures were caused by absent
+        # Chromium. Launch a browser once before the test workers start.
+        # Only existing local browsers are considered, without installing any.
+        browser_check=subprocess.run(
+            [node,str(browser_preflight)],cwd=ROOT,env=e,
+            capture_output=True,text=True,timeout=70)
+        if browser_check.returncode:
+            (report/"browser-preflight.log").write_text(
+                browser_check.stdout+browser_check.stderr,encoding="utf-8")
+            return blocked(items,"browser-e2e",
+                "No launchable local browser; server not started. See browser-preflight.log")
+        browser_info=json.loads(browser_check.stdout.strip())
+        if browser_info.get("status")!="PASS" or browser_info.get("channel") not in (None,"msedge","chrome"):
+            return blocked(items,"browser-e2e","Invalid browser preflight result")
+        (report/"browser-preflight.json").write_text(
+            json.dumps(browser_info,indent=2)+"\n",encoding="utf-8")
+        e["N3LX_E2E_BROWSER_CHANNEL"]=browser_info.get("channel") or ""
+        print("PASS: browser launch preflight: "+browser_info["browser"],flush=True)
         step(items,"browser-e2e",
             [node,"--experimental-loader",loader_uri,str(cli),
              "test","-c","playwright.config.mjs","--reporter=list",
@@ -145,6 +164,8 @@ RESUMABLE_QA_FILES = frozenset({
     "scripts/qa/release-gate.py",
     "scripts/qa/release-gate.sh",
     "scripts/qa/e2e-runtime-loader.mjs",
+    "scripts/qa/browser-preflight.mjs",
+    "playwright.config.mjs",
     "tests/e2e/serve.sh",
     "tests/qa/test_release_output_paths.py",
     "docs/RELEASE_GATE_ONE_SHOT.md",

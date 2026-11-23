@@ -28,7 +28,14 @@ export default defineConfig({
     screenshot: "only-on-failure",
     video: "off",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  // Only the isolated release gate may choose a verified, installed browser.
+  // Outside that gate the standard bundled Chromium contract is unchanged.
+  projects: [{ name: "chromium", use: {
+    ...devices["Desktop Chrome"],
+    ...(process.env.STEMDECK_E2E_ISOLATED === "1" &&
+        ["msedge", "chrome"].includes(process.env.N3LX_E2E_BROWSER_CHANNEL)
+        ? { channel: process.env.N3LX_E2E_BROWSER_CHANNEL } : {}),
+  } }],
   webServer: {
     command: `bash tests/e2e/serve.sh ${PORT}`,
     url: `http://127.0.0.1:${PORT}/api/health`,

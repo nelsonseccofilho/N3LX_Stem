@@ -24,7 +24,14 @@ node -e "require.resolve('playwright',{paths:[process.argv[1]]})" "$runtime" >/d
   echo 'BLOCKED: source worktree not clean' >&2; exit 1;
 }
 
-report="$(mktemp -d "$output_parent/C34-Windows-XXXXXXXX")"
+if [[ "${N3LX_C35_AUDIO:-0}" == "1" ]]; then
+  qa_script="c35-audio.mjs"
+  report_prefix="C35-Audio"
+else
+  qa_script="c34-packaged.mjs"
+  report_prefix="C34-Windows"
+fi
+report="$(mktemp -d "$output_parent/$report_prefix-XXXXXXXX")"
 mkdir -p "$report/data/jobs" "$report/profile" "$report/exports"
 port="$(node "$repo/scripts/qa/available-port.mjs")"
 package=""
@@ -85,5 +92,5 @@ C34_RUNTIME="$(cygpath -w "$runtime")" \
 C34_REPORT="$(cygpath -w "$report")" \
 C34_EXE="$(cygpath -w "$package/N3LX_Stem.exe")" \
 C34_PORT="$port" C34_REVISION="$rev" \
-node "$repo/scripts/qa/c34-packaged.mjs" 2>&1 | tee "$report/packaged-electron.log"
+node "$repo/scripts/qa/$qa_script" 2>&1 | tee "$report/packaged-electron.log"
 echo 'PASS: C34 packaged native test finished'

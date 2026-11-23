@@ -84,6 +84,11 @@ def browser(items,report,rt,env,node):
             else:
                 raise RuntimeError("QA dependency link changed; refusing deletion")
 
+def verify_local(report):
+    result = json.loads((report/"local/summary.json").read_text(encoding="utf-8"))
+    if result.get("passed") is not True:
+        raise RuntimeError("Local regression summary not PASS")
+
 def verify_package(report,rev,log):
     folders=list(report.glob("C35-Audio-*"))
     if len(folders)!=1:
@@ -142,11 +147,7 @@ def main():
         step(items,"local-regressions",
             [python,"-B",str(ROOT/"scripts/verify-local-release.py"),
              "--python",python,"--node",node,"--report-dir",str(report/"local")],
-            report,env,
-            validator=lambda _:(None if json.loads(
-                (report/"local/summary.json").read_text(encoding="utf-8")
-            ).get("passed") is True else (_ for _ in ()).throw(
-                RuntimeError("Local regression summary not PASS"))))
+            report,env,validator=lambda _: verify_local(report))
         browser(items,report,rt,env,node)
         pe=dict(env)
         pe.update({"N3LX_C34_RUNTIME":str(rt),"N3LX_C34_OUTPUTS":str(report)})

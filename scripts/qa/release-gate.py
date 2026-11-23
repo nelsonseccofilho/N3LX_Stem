@@ -167,6 +167,7 @@ RESUMABLE_QA_FILES = frozenset({
     "scripts/qa/browser-preflight.mjs",
     "playwright.config.mjs",
     "tests/e2e/serve.sh",
+    "tests/e2e/about-reach.spec.mjs",
     "tests/qa/test_release_output_paths.py",
     "docs/RELEASE_GATE_ONE_SHOT.md",
 })

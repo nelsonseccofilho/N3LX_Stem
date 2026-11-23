@@ -108,3 +108,21 @@ fora do gate mantém seu comportamento original.
 O browser selecionado e a versão são preservados em
 `browser-preflight.json`. A suite ainda usa `--max-failures=1` para
 parar na primeira falha real, com relatório de erro.
+
+## E2E after Edge preflight: current import workspace layout
+
+The previous E2E gate launched Edge correctly and passed the first four
+responsive "About this song" tests. Test 5 failed with null bounding box
+for `#autoSectionsBtn` because it lives in `#headerImportWorkspace`,
+which is intentionally collapsed while a track is open. Its old
+expectation that "Extract stems sits under Detect structure" also
+contradicted the current CSS grid: both controls occupy row 3, in
+columns 1 and 3, and the stem chips are `flex-wrap: nowrap`.
+
+Changed **only** `tests/e2e/about-reach.spec.mjs` to open the import
+workspace through its real "Nova extração" label, assert the visible
+buttons are side by side, and confirm chips stay on one line. This is
+a test alignment to the already-shipped UI, not a production layout
+change or a waiver. One-shot QA reuses prior local/packaged PASS evidence;
+browser E2E is the only stage still needing verification. The full
+suite remains fail-fast at its first genuine failure.

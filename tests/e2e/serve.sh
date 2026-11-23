@@ -13,8 +13,22 @@ PORT="${1:-8123}"
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 WORK_DIR="${STEMDECK_E2E_DIR:-${TMPDIR:-/tmp}/stemdeck-e2e}"
 
-rm -rf "$WORK_DIR"
-mkdir -p "$WORK_DIR/jobs" "$WORK_DIR/data"
+if [[ "${STEMDECK_E2E_ISOLATED:-0}" == "1" ]]; then
+  # Single-release gate uses a never-before-used scratch directory. Reject
+  # symlinks and existing directories instead of deleting any previous data.
+  [[ -n "${N3LX_RELEASE_REPORT_DIR:-}" ]] || {
+    echo 'BLOCKED: isolated browser QA requires report root' >&2; exit 1;
+  }
+  expected="$N3LX_RELEASE_REPORT_DIR/browser-scratch"
+  [[ "$WORK_DIR" == "$expected" && ! -e "$WORK_DIR" && ! -L "$WORK_DIR" ]] || {
+    echo 'BLOCKED: browser scratch must be a new exclusive release path' >&2; exit 1;
+  }
+  mkdir -p "$WORK_DIR/jobs" "$WORK_DIR/data"
+else
+  # Legacy test runner's established contract is unchanged.
+  rm -rf "$WORK_DIR"
+  mkdir -p "$WORK_DIR/jobs" "$WORK_DIR/data"
+fi
 
 uv run python "${REPO_ROOT}/tests/e2e/seed.py" "$WORK_DIR/jobs" >/dev/null
 

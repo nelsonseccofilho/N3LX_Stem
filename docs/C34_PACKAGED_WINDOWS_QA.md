@@ -50,3 +50,23 @@ instance). A busy/foreign port is still a failure; no forced termination.
 Previous observed evidence: `C34-Windows-9wIkEDSq`, port `58911` already
 free after app close, seven functional assertions PASS, no renderer errors.
 **A new end-to-end Windows pass on this exact commit is required before merge.**
+
+## Race between close/reopen and parent watchdog (C34.1)
+
+The previous Windows execution returned all seven programmatic PASS entries
+and a free port, but a user screenshot showed a real native Error dialog
+(`ERR_FAILED (-2) loading http://127.0.0.1:59449`) **on that same QA port**.
+Thus PASS in the earlier runner was insufficient to clear the release gate.
+The packaged desktop owns its backend and the backend's watchdog checks its
+parent PID every second. Immediately reopening the EXE can temporarily reuse
+the previous backend's valid identity even when it is already exiting.
+
+The strengthened C34 runner now waits, bounded to 45 seconds, until the
+previous listener is absent and stays absent for 400ms; it never stops or
+kills the server. After reopening, it requires a new backend PID, waits beyond
+the watchdog polling interval, verifies fresh health, reloads the renderer and
+checks no page errors. If any condition fails, C34 reports FAIL and the
+existing Bash teardown retains the ownership checks and cooperative stop.
+
+A fresh Windows result is required. This is a targeted lifecycle regression,
+not a request to repeat C32/C33 or to touch the personal library.

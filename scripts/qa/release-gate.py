@@ -113,7 +113,8 @@ def browser(items,report,rt,env,node):
         print("PASS: Node ESM loader and Playwright import (no server started)",flush=True)
         step(items,"browser-e2e",
             [node,"--experimental-loader",loader_uri,str(cli),
-             "test","-c","playwright.config.mjs","--reporter=list"],
+             "test","-c","playwright.config.mjs","--reporter=list",
+             "--max-failures=1"],
             report,e)
     except (OSError,subprocess.SubprocessError) as err:
         blocked(items,"browser-e2e",str(err))

@@ -79,3 +79,12 @@ orquestrador passa `loader.resolve().as_uri()` (file:///C:/...) e executa
 um teste isolado e rapido de `import('@playwright/test')` antes de abrir
 backend ou iniciar os E2E. Se o carregamento falhar, retorna BLOCKED
 com diagnostico sem repetir etapas previamente aprovadas.
+
+## Falha em cascata na suite E2E
+
+Playwright pode agendar centenas de casos mesmo quando a causa raiz de
+inicializacao e compartilhada. O gate utiliza `--max-failures=1`
+para parar apos a primeira falha, preservar seu log e evitar repeticao
+de mensagens sem informacao nova. O parametro nao faz retry e nao
+transforma falha em PASS. Em caso de falha, inspecionar
+`ReleaseGate-*/browser-e2e.log` antes de propor nova execucao.

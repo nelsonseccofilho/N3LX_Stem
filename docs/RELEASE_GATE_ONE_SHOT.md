@@ -70,3 +70,12 @@ os imports de Playwright a partir do runtime Node existente. Nao precisa
 permissao de criar symlink, nao faz copia de pacotes e nao modifica o
 runtime principal. Requer Node 20+; uma falha de resolucao permanece FAIL
 e nao e maquiada como sucesso.
+
+## Windows Node 26 — caminho absoluto de ESM loader
+
+O Node interpreta um caminho Windows C:\\\\... passado como loader ESM como
+protocolo `c:` (ERR_UNSUPPORTED_ESM_URL_SCHEME). Em modo Git Bash, o
+orquestrador passa `loader.resolve().as_uri()` (file:///C:/...) e executa
+um teste isolado e rapido de `import('@playwright/test')` antes de abrir
+backend ou iniciar os E2E. Se o carregamento falhar, retorna BLOCKED
+com diagnostico sem repetir etapas previamente aprovadas.

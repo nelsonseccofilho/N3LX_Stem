@@ -98,8 +98,21 @@ def browser(items,report,rt,env,node):
             "NODE_PATH":str(modules),
         })
         e.pop("CI",None)
+        # On Windows Node 26 the loader argument must be a file:// URI.
+        # A raw C:\\... path is parsed as an unsupported "c:" URL scheme.
+        loader_uri=loader.resolve().as_uri()
+        preflight=subprocess.run(
+            [node,"--experimental-loader",loader_uri,
+             "--input-type=module","-e",
+             "import('@playwright/test').then(m => { if (!m.test || !m.expect) process.exitCode = 3; })"],
+            cwd=ROOT,env=e,capture_output=True,text=True,timeout=30)
+        if preflight.returncode:
+            detail=(preflight.stderr or preflight.stdout).strip()
+            return blocked(items,"browser-e2e",
+                "Playwright loader preflight failed; server not started: "+detail[-1000:])
+        print("PASS: Node ESM loader and Playwright import (no server started)",flush=True)
         step(items,"browser-e2e",
-            [node,"--experimental-loader",str(loader),str(cli),
+            [node,"--experimental-loader",loader_uri,str(cli),
              "test","-c","playwright.config.mjs","--reporter=list"],
             report,e)
     except (OSError,subprocess.SubprocessError) as err:

@@ -1,0 +1,94 @@
+# C34.1 — Packaged Windows native QA
+
+The previous C32/C33 results validate the Electron development shell, renderer
+dimensions and synthetic playback/export APIs. The candidate Windows update
+is different: an EXE bundled with resources, using an existing AMD installation.
+
+Run in a CLEAN C34 branch worktree from Git Bash:
+
+    N3LX_C34_RUNTIME="$HOME/Git/N3LX_Stem" bash scripts/qa/c34-packaged.sh
+
+The script creates a new C34-Windows-XXXXXXXX evidence directory outside Git
+containing a package built from the exact worktree commit, synthetic jobs,
+a separate exports folder, a separate Electron userData profile and test logs.
+It does not install dependencies, replace an existing package or move a library.
+
+The test runs the actual packaged N3LX_Stem.exe, which starts its own
+authenticated backend using the existing packaged launcher. The terminal only
+runs Git Bash; no manual CMD/PowerShell commands are necessary.
+
+It verifies the manifest, package revision, no bundled private data, backend
+identity, exactly two synthetic jobs, native BrowserWindow resizing with
+setSize (not fake page.setViewportSize), appearance IPC, and reopen with the
+same isolated export preference. The preference is deliberately preseeded
+in the temporary profile: this is NOT a test of clicking the native folder
+picker. A successful run still does NOT prove an installed MSI/setup,
+hardware-audible playback, device switching, long exports or AMD/Vulkan
+inference. Those are separate acceptance gates.
+
+The shell identifies the packaged backend by the authenticated control file,
+waits for idle, stops cooperatively, and verifies the QA port is released.
+If a process is busy or foreign, the QA fails and does not force-stop it.
+Protect port 8159 and the real jobs, cache, playlists and settings.
+
+Require native-qa.json passed:true and teardown PASS for C34.1 acceptance.
+GitHub hosted skipped jobs never count as passed.
+
+## Shutdown race resolved in C34.1
+
+The first Windows run confirmed the package, the three **native** window sizes,
+appearance IPC, two packaged launches and persistence of the isolated export
+folder. The first run's `native-qa.json` reported `passed:false` solely
+because the QA attempted to dynamically import `/js/queue.js` when the
+packaged backend was already unavailable on the final close. That import is
+not an acceptance condition for a packaged executable: the app owns and stops
+its backend. This revision removes that late HTTP request rather than masking
+the failure; the outer Git Bash teardown remains the **mandatory** authority
+and must prove the test port is free (or stop only an authenticated, idle
+instance). A busy/foreign port is still a failure; no forced termination.
+
+Previous observed evidence: `C34-Windows-9wIkEDSq`, port `58911` already
+free after app close, seven functional assertions PASS, no renderer errors.
+**A new end-to-end Windows pass on this exact commit is required before merge.**
+
+## Race between close/reopen and parent watchdog (C34.1)
+
+The previous Windows execution returned all seven programmatic PASS entries
+and a free port, but a user screenshot showed a real native Error dialog
+(`ERR_FAILED (-2) loading http://127.0.0.1:59449`) **on that same QA port**.
+Thus PASS in the earlier runner was insufficient to clear the release gate.
+The packaged desktop owns its backend and the backend's watchdog checks its
+parent PID every second. Immediately reopening the EXE can temporarily reuse
+the previous backend's valid identity even when it is already exiting.
+
+The strengthened C34 runner now waits, bounded to 45 seconds, until the
+previous listener is absent and stays absent for 400ms; it never stops or
+kills the server. After reopening, it requires a new backend PID, waits beyond
+the watchdog polling interval, verifies fresh health, reloads the renderer and
+checks no page errors. If any condition fails, C34 reports FAIL and the
+existing Bash teardown retains the ownership checks and cooperative stop.
+
+A fresh Windows result is required. This is a targeted lifecycle regression,
+not a request to repeat C32/C33 or to touch the personal library.
+
+## C34.1 — Final teardown race on Windows (port 60548)
+
+After commit `2361731`, the user's Windows run confirmed native window sizes,
+old backend exit before reopening, new PID, health after 2.5 seconds and page
+reload. The runner still failed during final cleanup: `verify-free` observed
+the listener occupied, but `status` immediately returned `WinError 10061`
+(connection refused). This is consistent with the packaged parent watchdog
+closing the listener between queries, but the log alone did not prove that
+it ultimately became free. The runner prematurely stopped checking.
+
+The new `c34_safe_teardown` helper now tests `verify-free` on each bounded
+iteration and once more after a failed `status`. PASS requires an actually
+verified free port, or authenticated owned idle backend followed by cooperative
+`stop` and another successful `verify-free`. Busy or foreign processes
+are never stopped or adopted. The runner still fails closed if the port remains
+occupied; no forced termination is permitted.
+
+`bash tests/qa/c34-teardown.test.sh` tests six simulated transitions
+(already free, shutdown race, authenticated idle backend, stop race, foreign
+listener, busy listener) without opening ports. A fresh Windows run with the
+new commit remains mandatory before removing Draft or merging.

@@ -43,3 +43,19 @@ cover authenticated stop, busy/in-flight refusal and ordered restart.
 4. Choose a different free QA port instead of interfering with personal ports.
 5. Verify PID/identity, data directory, health and job IDs after startup.
 6. Keep logs/evidence on failure and never treat skipped CI as passing.
+
+## Teardown after Electron
+
+The Studio opens a long-lived queue SSE connection at `/api/queue/events`.
+The C32 smoke runner explicitly calls the existing
+`stopQueueStream()` function before closing Electron. After window closure,
+the Bash controller waits up to 15 seconds for verified in-flight HTTP
+requests to drain. Every attempt revalidates the controlled backend identity
+and loaded source. Only an idle, owned server is asked to stop; then
+`verify-free` must succeed. Any remaining in-flight stream or busy worker
+leaves QA **failed and the server untouched**, with a diagnostic JSON file.
+
+If an older C32 run left a backend on its isolated port, do not launch a new
+run over it or terminate its PID. Examine the printed evidence directory,
+port and `backend_control.py status`, then stop cooperatively only after
+`check-ready` succeeds.

@@ -83,6 +83,19 @@ try {
   console.error(failure);
   if (page) await page.screenshot({ path: join(report, 'failure.png') }).catch(() => {});
 } finally {
+  if (page && !page.isClosed()) {
+    try {
+      // The Studio owns a persistent /api/queue/events SSE connection.
+      // Explicitly close it before Electron exits so it cannot block
+      // backend_control.py's safe in-flight request gate during QA teardown.
+      await page.evaluate(async () => {
+        const { stopQueueStream } = await import('/js/queue.js');
+        stopQueueStream();
+      });
+    } catch (error) {
+      failure ||= 'Queue SSE could not be closed cooperatively: ' + String(error);
+    }
+  }
   if (app) {
     try { await app.close(); }
     catch (error) { failure ||= 'Electron close failed: ' + String(error); }

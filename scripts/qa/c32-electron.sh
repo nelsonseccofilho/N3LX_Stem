@@ -39,17 +39,43 @@ qa_backend() {
     --port "$port" --runtime "$runtime" --data "$report/data"
 }
 
-# Register cleanup before starting. On a failed/partial start, the controller
-# refuses to stop anything without an authenticated matching receipt.
+# Register cleanup before starting. Browser SSE streams can take a short
+# time to drain after Electron closes. Wait (bounded) for the authenticated,
+# exact runtime and library to become idle before requesting cooperative stop.
+# Never stop a foreign/active process or retry starting over an occupied port.
 cleanup() {
   result=$?
   trap - EXIT
   echo '=== C32: cooperative QA teardown ==='
-  if ! qa_backend stop; then
-    echo 'WARNING: QA backend may still be running; no forced termination' >&2
-    result=1
-  elif ! qa_backend verify-free; then
-    echo 'WARNING: QA port still occupied; no forced termination' >&2
+  released=0
+  if qa_backend verify-free > /dev/null 2>&1; then
+    echo 'PASS: QA port already free'
+    released=1
+  else
+    for ((attempt=1; attempt<=30; attempt++)); do
+      if qa_backend check-ready > "$report/teardown-ready.log" 2>&1; then
+        if qa_backend stop > "$report/teardown-stop.log" 2>&1 &&
+           qa_backend verify-free > "$report/teardown-verify.log" 2>&1; then
+          echo 'PASS: owned QA backend stopped and port released'
+          released=1
+        else
+          cat "$report/teardown-stop.log" >&2 || true
+          echo 'WARNING: cooperative stop did not release port' >&2
+        fi
+        break
+      fi
+      if ! qa_backend status > "$report/teardown-status.json" 2> "$report/teardown-status.err"; then
+        echo 'BLOCKED: QA port no longer identifies an owned backend' >&2
+        cat "$report/teardown-status.err" >&2
+        break
+      fi
+      # Even a recognized server may have workers/requests: never force stop.
+      sleep 0.5
+    done
+  fi
+  if [[ "$released" != 1 ]]; then
+    echo 'BLOCKED: QA port remains occupied; no forced termination' >&2
+    [[ ! -f "$report/teardown-status.json" ]] || cat "$report/teardown-status.json" >&2
     result=1
   fi
   echo "Evidence: $report"

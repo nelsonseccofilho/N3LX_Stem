@@ -16,7 +16,7 @@ backend with two synthetic jobs, seeds a **silent 2-second black video** in that
 QA directory, opens the real development Electron app and runs the C32
 three-viewport smoke. Then `c33-functional.mjs` runs:
 
-1. Six-second synthetic WAV playback: clock advances, Stop resets.
+1. Two-second synthetic WAV playback on the already-opened sibling: clock advances, Stop resets.
 2. Mixer mute/solo toggles through the actual Electron UI.
 3. Loop bounds edited and read back from the UI.
 4. Real API WAV PCM16 stereo mixdown, including numeric hard-left pan check.
@@ -48,3 +48,14 @@ full-length export performance, vocal separation accuracy, or GPU inference.
 
 Keep the PR draft until the actual Windows QA output is available. CI jobs may
 be skipped under the repo's billing guard; skipped is not PASS.
+
+## Fixture selection regression (C33.1)
+
+The two records from `tests/e2e/seed.py` share a source URL, deliberately
+triggering catalog deduplication. The C32 smoke runner already opens the
+2-second sibling (`e2e0cafebabe`). The C33 functional runner reuses that
+selection and validates the 00:02 duration; it must **not** try to open the
+original 6-second record by catalog DOM ID, because the deduped record may no
+longer be visible. The backend still contains both synthetic jobs. This
+prevents the earlier 30-second locator timeout without changing production
+catalog semantics.

@@ -5,8 +5,9 @@ import { spawnSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+// seed.py creates two records with the same source_url. The catalog deduplicates
+// them, leaving the sibling already selected by the C32 smoke scenario.
 const ID = 'e2e0cafebabe';
-const ROOT_ID = 'e2e0deadbeef';
 
 async function assertProbe(file, wanted) {
   const result = spawnSync('ffprobe', [
@@ -55,12 +56,14 @@ function assertStereoWavPan(buffer) {
 export async function runC33Functional({ page, report, port }) {
   const results = [];
   await page.locator('#studioWaveformsTab').click();
-  await page.locator('.cat-item[data-id="' + ROOT_ID + '"]').dblclick();
+  // C32 has already opened the 2-second sibling. Do not re-open the fixture's
+  // original ID: catalog deduplication intentionally removes it from the UI.
+  await page.locator('.cat-item[data-id="' + ID + '"]').waitFor({ state: 'visible', timeout: 10000 });
   await page.waitForFunction(() =>
-    document.querySelector('#footer-time-total')?.textContent?.trim() === '00:06',
+    document.querySelector('#footer-time-total')?.textContent?.trim() === '00:02',
     null, { timeout: 10000 });
 
-  // Actual transport and clock advance with 6s synthetic stems, not mocked audio.
+  // Actual transport and clock advance with 2s synthetic stems, not mocked audio.
   const play = page.locator('#t-play');
   await play.click();
   await page.waitForFunction(() => document.querySelector('#t-play')?.classList.contains('playing'),

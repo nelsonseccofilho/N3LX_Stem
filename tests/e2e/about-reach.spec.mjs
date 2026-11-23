@@ -25,12 +25,32 @@ for (const width of [1024, 1280, 1366, 1600]) {
   });
 }
 
-test("Extract stems sits under Detect structure and the composer keeps one line of chips", async ({ page }) => {
+test("New extraction displays Detect structure and Extract stems side by side; chips stay on one line", async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 800 });
   await openStudio(page);
-  const detect = await page.locator("#autoSectionsBtn").boundingBox();
-  const extract = await page.locator("#submit").boundingBox();
-  await expect(page.locator("#submit")).toHaveText(/Extract stems/);
-  expect(Math.abs(detect.x - extract.x)).toBeLessThan(1);
-  expect(extract.y).toBeGreaterThan(detect.y + detect.height - 1);
+
+  // The import workspace is intentionally collapsed while a song is open.
+  // The previous test measured its hidden buttons and got null bounding boxes.
+  const workspace = page.locator("#headerImportWorkspace");
+  const openImport = page.locator("#importLayoutLabel");
+  await expect(workspace).toBeHidden();
+  await expect(openImport).toBeVisible();
+  await openImport.click();
+  await expect(page.locator("#importLayoutToggle")).toBeChecked();
+  await expect(workspace).toBeVisible();
+
+  const detect = workspace.locator("#autoSectionsBtn");
+  const extract = workspace.locator("#submit");
+  await expect(detect).toBeVisible();
+  await expect(extract).toBeVisible();
+  await expect(extract).toHaveText(/Extract stems/);
+
+  const detectBox = await detect.boundingBox();
+  const extractBox = await extract.boundingBox();
+  expect(detectBox).not.toBeNull();
+  expect(extractBox).not.toBeNull();
+  // Current UI: both actions occupy row 3 of the import workspace grid.
+  expect(Math.abs(detectBox.y - extractBox.y)).toBeLessThan(1);
+  expect(extractBox.x).toBeGreaterThan(detectBox.x + detectBox.width - 1);
+  await expect(workspace.locator("#stemChips")).toHaveCSS("flex-wrap", "nowrap");
 });

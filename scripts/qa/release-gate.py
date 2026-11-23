@@ -12,6 +12,28 @@ def git(*a):
 def within(p, parent):
     return p == parent or parent in p.parents
 
+def validate_output_root(raw_output, source_root, runtime_root):
+    """Allow a QA worktree *inside* the reports parent, never reports inside source.
+
+    Typical safe layout:
+        N3LX_Stem-Releases/
+            release-gate-qa/     (separate Git worktree)
+            ReleaseGate-XXXXXXXX/ (new sibling, created with mkdtemp)
+    """
+    if raw_output.is_symlink():
+        raise ValueError("BLOCKED: report root must not be a symlink")
+    output = raw_output.resolve()
+    source = source_root.resolve()
+    runtime = runtime_root.resolve()
+    if not output.is_dir():
+        raise ValueError("BLOCKED: report root does not exist")
+    if within(output, source):
+        raise ValueError("BLOCKED: report root is inside the QA worktree")
+    if within(output, runtime) or within(runtime, output):
+        raise ValueError("BLOCKED: report root overlaps the personal runtime")
+    return output
+
+
 def bash_path(path):
     return subprocess.check_output(
         ["cygpath", "-u", str(path)], text=True).strip()
@@ -128,14 +150,14 @@ def main():
     p.add_argument("--out-root",type=Path,required=True)
     a=p.parse_args()
     rt=a.runtime.resolve()
-    out=a.out_root.resolve()
     required=[rt/".venv/Scripts/python.exe",rt/".venv-directml/Scripts/python.exe",
               rt/"desktop-app/node_modules/electron/dist/electron.exe"]
     if not all(x.is_file() for x in required):
         raise SystemExit("BLOCKED: existing AMD runtime/DirectML/Electron missing")
-    if not out.is_dir() or out.is_symlink() or any(
-        within(out,x) or within(x,out) for x in (ROOT.resolve(),rt,rt/"data")):
-        raise SystemExit("BLOCKED: report root must be separate from source and user data")
+    try:
+        out=validate_output_root(a.out_root,ROOT,rt)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
     if git("status","--porcelain"):
         raise SystemExit("BLOCKED: candidate worktree is not clean")
     node=shutil.which("node")

@@ -9,5 +9,6 @@ python="$runtime/.venv/Scripts/python.exe"
 # Parse Python before creating any QA directories or starting a backend.
 "$python" -B -c 'import ast,pathlib,sys;ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))' \
   "$repo/scripts/qa/release-gate.py"
+"$python" -B "$repo/tests/qa/test_release_output_paths.py"
 exec "$python" -B "$repo/scripts/qa/release-gate.py" \
   --runtime "$runtime" --out-root "$out"

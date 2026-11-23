@@ -33,3 +33,12 @@ Automation PASS NAO significa RELEASE READY enquanto estas lacunas
 nao tiverem evidencias. Todos os testes locais continuam separados do
 CI hospedado skipped. A suite antiga de Nvidia/Tauri nao deve ser
 executada diretamente no AMD/Electron atual.
+
+## Correcao do bloqueio de caminhos
+
+O repositorio QA pode estar dentro do diretorio N3LX_Stem-Releases;
+a pasta ReleaseGate-XXXXXXXX sera criada como **irma** desse worktree,
+jamais dentro dele. A validacao bloqueia qualquer saida dentro do codigo,
+dentro do runtime pessoal, ou um diretorio que contenha o runtime.
+Ninguem apaga ou renomeia diretorios anteriores. Um teste leve de politica
+de caminhos e executado antes dos demais gates.

@@ -42,10 +42,14 @@ try{
   await page.waitForFunction(()=>document.querySelector('#footer-time-total')
     ?.textContent?.trim()==='00:02',null,{timeout:15000});
 
-  // Gentle QA monitoring gain, not a change to the exported mix.
-  await page.locator('#t-master').evaluate(el=>{
-    el.value='0.15';
-    el.dispatchEvent(new Event('input',{bubbles:true}));
+  // The historical state.js references #t-master, but current HTML has no
+  // such DOM control. Set the *monitoring* gain through the production state
+  // and mixer APIs; this is not applied to exported mix gains.
+  await page.evaluate(async()=>{
+    const state=await import('/js/state.js');
+    const mixer=await import('/js/mixer.js');
+    state.setMasterVolume(0.15);
+    mixer.applyMix();
   });
   await page.locator('#t-play').click();
   await page.waitForFunction(()=>document.querySelector('#t-play')

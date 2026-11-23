@@ -33,3 +33,20 @@ Protect port 8159 and the real jobs, cache, playlists and settings.
 
 Require native-qa.json passed:true and teardown PASS for C34.1 acceptance.
 GitHub hosted skipped jobs never count as passed.
+
+## Shutdown race resolved in C34.1
+
+The first Windows run confirmed the package, the three **native** window sizes,
+appearance IPC, two packaged launches and persistence of the isolated export
+folder. The first run's `native-qa.json` reported `passed:false` solely
+because the QA attempted to dynamically import `/js/queue.js` when the
+packaged backend was already unavailable on the final close. That import is
+not an acceptance condition for a packaged executable: the app owns and stops
+its backend. This revision removes that late HTTP request rather than masking
+the failure; the outer Git Bash teardown remains the **mandatory** authority
+and must prove the test port is free (or stop only an authenticated, idle
+instance). A busy/foreign port is still a failure; no forced termination.
+
+Previous observed evidence: `C34-Windows-9wIkEDSq`, port `58911` already
+free after app close, seven functional assertions PASS, no renderer errors.
+**A new end-to-end Windows pass on this exact commit is required before merge.**

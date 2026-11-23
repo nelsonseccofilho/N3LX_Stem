@@ -56,14 +56,13 @@ async function launch(label){
 
 async function closeApp(){
   if(!active)return;
-  const {app,page}=active;
-  if(page&&!page.isClosed()){
-    try{
-      await page.evaluate(async()=>{
-        const mod=await import('/js/queue.js');mod.stopQueueStream();
-      });
-    }catch(e){failure ||= 'Unable to close queue SSE: '+String(e);}
-  }
+  const {app}=active;
+  // The packaged EXE owns its backend. Closing the window can trigger the
+  // parent watchdog and take HTTP offline before a late dynamic import loads.
+  // Do not depend on GET /js/queue.js during shutdown: Electron closes the
+  // renderer connections, while the outer Git Bash harness independently
+  // verifies the exact backend identity, idle state and free QA port.
+  // Unlike C32, this is NOT an independently managed dev renderer.
   try{await app.close();}catch(e){failure ||= 'Unable to close packaged app: '+String(e);}
   active=null;
 }

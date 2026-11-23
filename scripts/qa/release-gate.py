@@ -67,23 +67,20 @@ def blocked(items,name,reason):
     print(name+": BLOCKED "+reason,flush=True)
 
 def browser(items,report,rt,env,node):
-    if not shutil.which("uv"):
-        return blocked(items,"browser-e2e","uv missing; no install attempted")
+    # C34/C35 already validate this installed Python + uvicorn. The isolated
+    # E2E backend does not need the uv command or package resolution.
+    if not (rt/".venv/Scripts/python.exe").is_file():
+        return blocked(items,"browser-e2e","Existing runtime Python missing")
     modules = rt/"node_modules"
     cli = modules/"@playwright/test/cli.js"
     if not cli.is_file():
         return blocked(items,"browser-e2e","existing Playwright test runner missing")
-    link = ROOT/"node_modules"
-    created=False
+    # Resolve Playwright through the installed runtime via the ESM loader.
+    # A Windows Git Bash user might not have permission to create symlinks.
+    loader=ROOT/"scripts/qa/e2e-runtime-loader.mjs"
+    if not loader.is_file():
+        return blocked(items,"browser-e2e","QA Playwright module loader missing")
     try:
-        if not link.exists():
-            try:
-                link.symlink_to(modules,target_is_directory=True)
-                created=True
-            except OSError as e:
-                return blocked(items,"browser-e2e","existing node_modules link unavailable: "+str(e))
-        if not (link/"@playwright/test").is_dir():
-            return blocked(items,"browser-e2e","incompatible worktree node_modules")
         port=subprocess.check_output(
             [node,str(ROOT/"scripts/qa/available-port.mjs")],
             text=True,timeout=20).strip()
@@ -95,22 +92,16 @@ def browser(items,report,rt,env,node):
             "STEMDECK_E2E_DIR":bash_path(report/"browser-scratch"),
             "STEMDECK_E2E_OUTPUT_DIR":str(report/"browser-results"),
             "N3LX_RELEASE_REPORT_DIR":bash_path(report),
-            "UV_NO_SYNC":"1","UV_OFFLINE":"1",
-            "UV_PROJECT_ENVIRONMENT":str(rt/".venv"),
+            "N3LX_RELEASE_PYTHON":bash_path(rt/".venv/Scripts/python.exe"),
+            "N3LX_RELEASE_TEST_RUNTIME":str(rt),
         })
         e.pop("CI",None)
         step(items,"browser-e2e",
-            [node,str(cli),"test","-c","playwright.config.mjs","--reporter=list"],
+            [node,"--experimental-loader",str(loader),str(cli),
+             "test","-c","playwright.config.mjs","--reporter=list"],
             report,e)
     except (OSError,subprocess.SubprocessError) as err:
         blocked(items,"browser-e2e",str(err))
-    finally:
-        if created:
-            if link.is_symlink() and link.resolve()==modules.resolve():
-                link.unlink()
-            else:
-                raise RuntimeError("QA dependency link changed; refusing deletion")
-
 def verify_local(report):
     result = json.loads((report/"local/summary.json").read_text(encoding="utf-8"))
     if result.get("passed") is not True:
@@ -130,6 +121,52 @@ def verify_package(report,rev,log):
         "PASS: packaged QA backend stopped cooperatively; port released")):
         raise RuntimeError("Safe QA backend teardown not verified")
 
+
+# Only runner and test-only files may vary when carrying prior PASS evidence.
+# In particular, never carry results across a change to app, desktop,
+# static, runtime settings, dependencies or release packaging.
+RESUMABLE_QA_FILES = frozenset({
+    "scripts/qa/release-gate.py",
+    "scripts/qa/release-gate.sh",
+    "tests/e2e/serve.sh",
+    "tests/qa/test_release_output_paths.py",
+    "docs/RELEASE_GATE_ONE_SHOT.md",
+})
+
+def resume_evidence(directory, candidate, outputs):
+    """Verify a private previous gate run; never rename, copy or modify it."""
+    if directory.is_symlink():
+        raise RuntimeError("Resume report is a symlink")
+    prior = directory.resolve()
+    if not prior.is_dir() or prior.parent != outputs or not prior.name.startswith("ReleaseGate-"):
+        raise RuntimeError("Resume report is not an isolated previous ReleaseGate folder")
+    summary_file = prior/"summary.json"
+    if not summary_file.is_file():
+        raise RuntimeError("Previous release summary is missing")
+    summary = json.loads(summary_file.read_text(encoding="utf-8"))
+    old = summary.get("revision")
+    if not isinstance(old,str) or len(old)!=40 or not all(c in "0123456789abcdef" for c in old):
+        raise RuntimeError("Previous revision must be a full Git commit hash")
+    if summary.get("hosted_ci") is not False or summary.get("private_library_used") is not False:
+        raise RuntimeError("Previous evidence lacks required isolation provenance")
+    ancestor = subprocess.run(
+        ["git","-C",str(ROOT),"merge-base","--is-ancestor",old,candidate],
+        capture_output=True)
+    if ancestor.returncode:
+        raise RuntimeError("Previous QA revision is not an ancestor of this candidate")
+    changed = git("diff","--name-only",old,candidate).splitlines()
+    unsafe = [name for name in changed if name not in RESUMABLE_QA_FILES]
+    if unsafe:
+        raise RuntimeError("Production/other files changed; full gate required: "+", ".join(unsafe))
+    statuses = {x.get("step"):x.get("status") for x in summary.get("steps",[])}
+    if statuses.get("local-regressions")!="PASS" or statuses.get("packaged-windows")!="PASS":
+        raise RuntimeError("Previous gate lacks PASS in both reusable stages")
+    verify_local(prior)
+    verify_package(prior,old,prior/"packaged-windows.log")
+    return {"report":str(prior),"revision":old,
+            "carried_stages":["local-regressions","packaged-windows"],
+            "changed_qa_files":changed}
+
 def listening(rev):
     evidence={"status":"REVIEW_REQUIRED","source":"C35-ListeningBatch-X0UPCo0a"}
     if subprocess.run(["git","-C",str(ROOT),"merge-base","--is-ancestor",
@@ -148,6 +185,8 @@ def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument("--runtime",type=Path,required=True)
     p.add_argument("--out-root",type=Path,required=True)
+    p.add_argument("--resume-from",type=Path,default=None,
+                   help="Re-use already-PASS local and packaged QA from an earlier SHA when only the gate machinery changed")
     a=p.parse_args()
     rt=a.runtime.resolve()
     required=[rt/".venv/Scripts/python.exe",rt/".venv-directml/Scripts/python.exe",
@@ -164,6 +203,10 @@ def main():
     if not node or not shutil.which("bash"):
         raise SystemExit("BLOCKED: node and Git Bash required")
     rev=git("rev-parse","HEAD")
+    try:
+        carry=resume_evidence(a.resume_from,rev,out) if a.resume_from else None
+    except (RuntimeError,ValueError,OSError,json.JSONDecodeError) as exc:
+        raise SystemExit("BLOCKED: invalid resume evidence: "+str(exc)) from exc
     report=Path(tempfile.mkdtemp(prefix="ReleaseGate-",dir=out))
     env={k:v for k,v in os.environ.items() if not k.startswith(("STEMDECK_","N3LX_"))}
     env.update({"PYTHONDONTWRITEBYTECODE":"1","PYTHONIOENCODING":"utf-8"})
@@ -171,17 +214,27 @@ def main():
     items=[]
     print("Candidate:",rev,"\nPrivate report:",report,flush=True)
     try:
-        step(items,"local-regressions",
-            [python,"-B",str(ROOT/"scripts/verify-local-release.py"),
-             "--python",python,"--node",node,"--report-dir",str(report/"local")],
-            report,env,validator=lambda _: verify_local(report))
+        if carry:
+            items.append({"step":"local-regressions","status":"CARRIED",
+                          "detail":"Previously PASS at "+carry["revision"]+" (source "+carry["report"]+")"})
+            print("local-regressions: CARRIED — validated evidence, not rerun",flush=True)
+        else:
+            step(items,"local-regressions",
+                [python,"-B",str(ROOT/"scripts/verify-local-release.py"),
+                 "--python",python,"--node",node,"--report-dir",str(report/"local")],
+                report,env,validator=lambda _: verify_local(report))
         browser(items,report,rt,env,node)
-        pe=dict(env)
-        pe.update({"N3LX_C34_RUNTIME":bash_path(rt),
-                   "N3LX_C34_OUTPUTS":bash_path(report)})
-        step(items,"packaged-windows",
-            ["bash",bash_path(ROOT/"scripts/qa/c35-audio.sh")],report,pe,
-            validator=lambda log:verify_package(report,rev,log))
+        if carry:
+            items.append({"step":"packaged-windows","status":"CARRIED",
+                          "detail":"Previously PASS at "+carry["revision"]+" (source "+carry["report"]+")"})
+            print("packaged-windows: CARRIED — validated evidence, not rerun",flush=True)
+        else:
+            pe=dict(env)
+            pe.update({"N3LX_C34_RUNTIME":bash_path(rt),
+                       "N3LX_C34_OUTPUTS":bash_path(report)})
+            step(items,"packaged-windows",
+                ["bash",bash_path(ROOT/"scripts/qa/c35-audio.sh")],report,pe,
+                validator=lambda log:verify_package(report,rev,log))
         items.append({"step":"revision-stability",
             "status":"PASS" if git("rev-parse","HEAD")==rev else "FAIL",
             "detail":"Git HEAD unchanged check"})
@@ -190,6 +243,8 @@ def main():
     finally:
         statuses=[x["status"] for x in items]
         overall=("FAIL" if "FAIL" in statuses else "BLOCKED" if "BLOCKED" in statuses
+                 else "PASS_WITH_CARRIED_EVIDENCE" if statuses and "CARRIED" in statuses
+                      and all(x in ("PASS","CARRIED") for x in statuses)
                  else "PASS" if statuses and all(x=="PASS" for x in statuses) else "INCOMPLETE")
         gaps={
             "real_amd_inference":"NOT_EXECUTED: no real GPU model test run here",
@@ -199,6 +254,7 @@ def main():
         result={"revision":rev,"execution":"local Windows","hosted_ci":False,
             "private_library_used":False,"automation":overall,
             "release_ready":False,"steps":items,
+            "resumed_evidence":carry,
             "human_listening":listening(rev),"release_gaps":gaps,
             "completed_utc":dt.datetime.now(dt.timezone.utc).isoformat()}
         (report/"summary.json").write_text(
@@ -214,7 +270,7 @@ def main():
             "CI skipped never counts as passed. Logs are private."]
         (report/"RESULT.md").write_text("\n".join(lines)+"\n",encoding="utf-8")
         print("\nAUTOMATION:",overall,"\nRELEASE READY: NO","\nReport:",report)
-    return 0 if overall=="PASS" else 1
+    return 0 if overall in ("PASS","PASS_WITH_CARRIED_EVIDENCE") else 1
 
 if __name__=="__main__":
     raise SystemExit(main())

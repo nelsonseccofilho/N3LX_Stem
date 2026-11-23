@@ -42,3 +42,31 @@ jamais dentro dele. A validacao bloqueia qualquer saida dentro do codigo,
 dentro do runtime pessoal, ou um diretorio que contenha o runtime.
 Ninguem apaga ou renomeia diretorios anteriores. Um teste leve de politica
 de caminhos e executado antes dos demais gates.
+
+## Retomada direcionada: browser bloqueado por falta de uv no PATH
+
+Em modo isolado, o servidor E2E agora usa o Python/uvicorn AMD ja
+instalado (em vez de depender do comando global uv); o modo legado
+do serve.sh continua usando uv e nao foi modificado.
+
+Para nao reconstruir o pacote nem rerodar testes Python/JS ja aprovados,
+use o relatorio privado do gate anterior, como primeiro argumento:
+
+    bash scripts/qa/release-gate.sh "$HOME/Git/N3LX_Stem-Releases/ReleaseGate-n39q9wlx"
+
+O comando valida o sha completo do relatorio, a integridade dos dois
+gates PASS, o teardown/porta do EXE e exige que entre a revisao anterior
+e a nova tenham mudado SOMENTE arquivos de orquestracao/testes QA
+listados no codigo. Caso contrario, bloqueia a retomada: e necessario
+executar o gate completo para produto alterado. A nova saida identifica
+os passos reaproveitados como CARRIED, nunca como testes reexecutados.
+Um resultado PASS_WITH_CARRIED_EVIDENCE nao significa que as pendencias
+reais de AMD GPU, letra PT/EN e instalador estejam resolvidas.
+
+### Node/Playwright sem symlink no Windows
+
+A bateria usa `scripts/qa/e2e-runtime-loader.mjs` para resolver apenas
+os imports de Playwright a partir do runtime Node existente. Nao precisa
+permissao de criar symlink, nao faz copia de pacotes e nao modifica o
+runtime principal. Requer Node 20+; uma falha de resolucao permanece FAIL
+e nao e maquiada como sucesso.

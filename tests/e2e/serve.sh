@@ -30,7 +30,20 @@ else
   mkdir -p "$WORK_DIR/jobs" "$WORK_DIR/data"
 fi
 
-uv run python "${REPO_ROOT}/tests/e2e/seed.py" "$WORK_DIR/jobs" >/dev/null
+if [[ "${STEMDECK_E2E_ISOLATED:-0}" == "1" ]]; then
+  # Reuse verified installed Python and uvicorn. 'uv run' is unnecessary
+  # here and often absent from PATH on the Windows installation.
+  [[ -n "${N3LX_RELEASE_PYTHON:-}" && -f "$N3LX_RELEASE_PYTHON" ]] || {
+    echo 'BLOCKED: isolated backend needs installed Python' >&2; exit 1;
+  }
+  python_cmd=( "$N3LX_RELEASE_PYTHON" -B )
+  backend_cmd=( "$N3LX_RELEASE_PYTHON" -B -m uvicorn )
+else
+  python_cmd=( uv run python )
+  backend_cmd=( uv run uvicorn )
+fi
+
+"${python_cmd[@]}" "${REPO_ROOT}/tests/e2e/seed.py" "$WORK_DIR/jobs" >/dev/null
 
 cd "$REPO_ROOT"
 exec env \
@@ -42,7 +55,7 @@ exec env \
     STEMDECK_DOWNLOADS_DIR="$WORK_DIR/data/downloads" \
     STEMDECK_ACOUSTID_CHECK_KEY=0 \
     STEMDECK_DISCOGS_CHECK_TOKEN=0 \
-    uv run uvicorn app.main:app \
+    "${backend_cmd[@]}" app.main:app \
         --host 127.0.0.1 \
         --port "$PORT" \
         --log-level warning \

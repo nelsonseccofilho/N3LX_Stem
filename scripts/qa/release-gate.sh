@@ -10,5 +10,13 @@ python="$runtime/.venv/Scripts/python.exe"
 "$python" -B -c 'import ast,pathlib,sys;ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))' \
   "$repo/scripts/qa/release-gate.py"
 "$python" -B "$repo/tests/qa/test_release_output_paths.py"
+# Optional first argument: a previous ReleaseGate report, to resume ONLY the
+# blocked browser E2E while cryptographically/revision-checking prior results.
+[[ $# -le 1 ]] || { echo 'Usage: release-gate.sh [prior-ReleaseGate-directory]' >&2; exit 2; }
+if [[ $# -eq 1 ]]; then
+  prior="$(cygpath -w "$1")"
+  exec "$python" -B "$repo/scripts/qa/release-gate.py" \
+    --runtime "$runtime" --out-root "$out" --resume-from "$prior"
+fi
 exec "$python" -B "$repo/scripts/qa/release-gate.py" \
   --runtime "$runtime" --out-root "$out"

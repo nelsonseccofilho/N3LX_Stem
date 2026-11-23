@@ -94,6 +94,8 @@ def browser(items,report,rt,env,node):
             "N3LX_RELEASE_REPORT_DIR":bash_path(report),
             "N3LX_RELEASE_PYTHON":bash_path(rt/".venv/Scripts/python.exe"),
             "N3LX_RELEASE_TEST_RUNTIME":str(rt),
+            # Playwright also loads TS/JS configs through CJS transforms.
+            "NODE_PATH":str(modules),
         })
         e.pop("CI",None)
         step(items,"browser-e2e",
@@ -128,6 +130,7 @@ def verify_package(report,rev,log):
 RESUMABLE_QA_FILES = frozenset({
     "scripts/qa/release-gate.py",
     "scripts/qa/release-gate.sh",
+    "scripts/qa/e2e-runtime-loader.mjs",
     "tests/e2e/serve.sh",
     "tests/qa/test_release_output_paths.py",
     "docs/RELEASE_GATE_ONE_SHOT.md",
